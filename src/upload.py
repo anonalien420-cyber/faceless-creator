@@ -1,0 +1,147 @@
+"""Upload a video to YouTube. Draft-like by default, never public by accident.
+
+- Default privacyStatus: "unlisted" (draft-like; not listed, not public).
+  This is the human-review-queue flow: run.py writes data/review_queue.md
+  for every upload so a human can glance at title, thumbnail, script
+  summary, SEO, QA result, and scheduled peak time BEFORE the peak
+  window. Review the queue before the peak window.
+- --public / --auto-public publish immediately and publicly. --auto-public
+  is OFF by default for a reason: full auto-public risks factual and
+  taste mistakes that QA cannot catch — QA catches TECHNICAL mistakes
+  only (blank video, silent audio, wrong resolution, missing captions).
+  Use auto-public only if you accept that risk.
+- --publish-at-peak uploads as private with a YouTube publishAt time set
+  to the next peak window for the niche (src/scheduler.py). YouTube then
+  publishes the video at that time. This is the daily peak-time flow:
+  render in the morning, publish at peak, one video per day. Peak times
+  are general audience windows, NOT a guarantee of popularity.
+- --dry-run prints exactly what WOULD be uploaded and calls no API.
+- Real uploads are refused unless UPLOAD_ENABLED=true in the environment.
+- Requires client_secrets.json (YouTube Data API OAuth client) on first
+  run; the token is then stored in token.json (gitignored, never commit).
+
+Never run this in CI without explicitly setting UPLOAD_ENABLED=true.
+"""
+
+import argparse
+import json
+import os
+import sys
+from datetime import timezone
+
+try:
+    from src.config import load_config
+    from src.scheduler import next_peak_window
+except ImportError:
+    from config import load_config
+    from scheduler import next_peak_window
+
+
+def plan(video, title, description, privacy, publish_at=None):
+    out = {"video": video, "title": title, "description": description,
+           "privacyStatus": privacy, "categoryId": "27"}
+    if publish_at:
+        out["publishAt"] = publish_at
+    return out
+
+
+def upload(video, title, description, privacy, publish_at=None, tags=None):
+    try:
+        from google_auth_oauthlib.flow import InstalledAppFlow
+        from google.auth.transport.requests import Request
+        from google.oauth2.credentials import Credentials
+        from googleapiclient.discovery import build
+        from googleapiclient.http import MediaFileUpload
+    except ImportError as exc:
+        print(f"ERROR: Google API libraries missing ({exc}). "
+              "pip install google-api-python-client google-auth-oauthlib", file=sys.stderr)
+        raise SystemExit(1)
+    scopes = ["https://www.googleapis.com/auth/youtube.upload"]
+    creds = None
+    if os.path.exists("token.json"):
+        creds = Credentials.from_authorized_user_file("token.json", scopes)
+    if not creds or not creds.valid:
+        if creds and creds.expired and creds.refresh_token:
+            creds.refresh(Request())
+        else:
+            flow = InstalledAppFlow.from_client_secrets_file("client_secrets.json", scopes)
+            creds = flow.run_local_server(port=0)
+        with open("token.json", "w", encoding="utf-8") as fh:
+            fh.write(creds.to_json())
+    youtube = build("youtube", "v3", credentials=creds)
+    status = {"privacyStatus": privacy}
+    if publish_at:
+        # Scheduled publishing requires private + publishAt; YouTube
+        # flips it public at publishAt. Never combine publishAt with
+        # an immediate public status — the API rejects that.
+        status["privacyStatus"] = "private"
+        status["publishAt"] = publish_at
+    snippet = {"title": title, "description": description, "categoryId": "27"}
+    if tags:
+        snippet["tags"] = tags
+    body = {"snippet": snippet, "status": status}
+    request = youtube.videos().insert(
+        part="snippet,status", body=body,
+        media_body=MediaFileUpload(video, chunksize=-1, resumable=True))
+    response = request.execute()
+    video_id = response.get("id")
+    print(f"Uploaded video id: {video_id}")
+    print(f"https://www.youtube.com/watch?v={video_id}")
+    return video_id
+
+
+def main(argv=None):
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--video", required=True)
+    parser.add_argument("--title", required=True)
+    parser.add_argument("--description", default="")
+    parser.add_argument("--tags", default="",
+                        help="Comma-separated tags for the video snippet.")
+    parser.add_argument("--public", action="store_true")
+    parser.add_argument("--auto-public", action="store_true",
+                        help="Publish publicly immediately (OFF by default). "
+                             "WARNING: full auto-public risks factual/taste "
+                             "mistakes QA cannot catch — QA catches technical "
+                             "mistakes only. Review data/review_queue.md first.")
+    parser.add_argument("--dry-run", action="store_true")
+    parser.add_argument("--publish-at-peak", action="store_true",
+                        help="Upload private with publishAt = next peak window for --niche.")
+    parser.add_argument("--publish-at", default="",
+                        help="Explicit ISO publishAt timestamp (overrides --publish-at-peak).")
+    parser.add_argument("--niche", default="")
+    parser.add_argument("--format", default="", choices=["", "short", "long"],
+                        help="Use this format's peak window for --publish-at-peak.")
+    parser.add_argument("--config", default="config.yaml")
+    args = parser.parse_args(argv)
+    privacy = "public" if (args.public or args.auto_public) else "unlisted"
+    publish_at = args.publish_at or None
+    if args.publish_at_peak and not publish_at:
+        config = load_config(args.config)
+        niche = args.niche or (config.get("niches") or [config.get("niche", "")])[0]
+        start, _end = next_peak_window(niche, config, fmt=args.format or None)
+        if start is None:
+            print("ERROR: --publish-at-peak requested but no peak window found "
+                  "in the next 14 days. Refusing to upload without a schedule.",
+                  file=sys.stderr)
+            return 1
+        publish_at = start.astimezone(timezone.utc).isoformat()
+        privacy = "private"  # required for scheduled publishing
+        print(f"Scheduled publishing: private now, publishAt {publish_at} "
+              f"(next peak window for niche '{niche}')")
+    if args.dry_run:
+        print("DRY RUN — nothing uploaded:")
+        print(json.dumps(plan(args.video, args.title, args.description, privacy,
+                              publish_at=publish_at), indent=2))
+        return 0
+    if os.environ.get("UPLOAD_ENABLED", "") != "true":
+        print("ERROR: Refusing to upload: UPLOAD_ENABLED is not 'true'. "
+              "Use --dry-run, or set UPLOAD_ENABLED=true explicitly.", file=sys.stderr)
+        return 1
+    tags = [t.strip() for t in args.tags.split(",") if t.strip()] or None
+    upload(args.video, args.title, args.description, privacy,
+           publish_at=publish_at, tags=tags)
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
