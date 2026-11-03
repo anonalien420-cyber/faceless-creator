@@ -74,7 +74,7 @@ long_videos_per_day: 1
 shorts_per_day: 2
 short_or_long: "short"
 upload_mode: "draft"
-channel_name: "YOUR_CHANNEL_NAME_HERE"
+channel_name: "The Deep Scan"
 
 # --- Narration: human-sounding voice tiers ---
 # narrator_tier: "free" (default, Edge TTS neural voices + SSML prosody),
