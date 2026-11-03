@@ -1,0 +1,43 @@
+name: Weekly self-review
+
+# Weekly run (Sunday) that looks over the channel's own last 7 days and
+# corrects the pipeline within SAFE bounds only (see README "Weekly
+# self-review"). It never deletes videos, changes a video's privacy,
+# changes channel settings, or spends money. Bigger changes are written
+# to data/weekly_review.md as recommendations for a human, not applied.
+# Stats come from the YouTube Data API when token/client secrets exist,
+# otherwise from data/video_stats.json pasted from YouTube Studio.
+# Videos with no stats are "no data yet" and are never scored or invented.
+on:
+  schedule:
+    - cron: "0 14 * * 0"  # Sundays 14:00 UTC = 08:00 CST / 09:00 CDT Chicago
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  review:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install Python deps
+        run: pip install -r requirements.txt
+      - name: Weekly review (auto-corrects within safe bounds only)
+        run: |
+          python -m src.review --stats data/video_stats.json \
+            --config config.yaml \
+            --output data/weekly_review.md \
+            --json-output data/weekly_review.json \
+            --history data/review_history.json
+          cat data/weekly_review.md
+      - name: Commit review output + any safe config adjustments
+        run: |
+          git config user.name "faceless-creator-bot"
+          git config user.email "faceless-creator-bot@users.noreply.github.com"
+          git add data/weekly_review.md data/weekly_review.json data/review_history.json config.yaml || true
+          git diff --cached --quiet || git commit -m "Weekly self-review: safe-bounded adjustments (see data/review_history.json)"
+          git push || echo "Push skipped (no changes or no write access)."
