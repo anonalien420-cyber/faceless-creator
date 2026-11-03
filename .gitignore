@@ -1,0 +1,14 @@
+__pycache__/
+*.pyc
+.env
+client_secrets.json
+token.json
+*.pickle
+data/*.mp3
+data/*.mp4
+data/*.ass
+data/audio/
+data/audio_mixed/
+data/videos/
+data/music_bed.mp3
+!data/trends_input.example.json

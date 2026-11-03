@@ -1,0 +1,7 @@
+# System dependency (not pip): ffmpeg + ffprobe must be installed separately.
+edge-tts
+requests
+google-api-python-client
+google-auth-oauthlib
+# Optional, for Google Trends interest data (RSS fallback works without it):
+# pytrends

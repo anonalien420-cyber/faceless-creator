@@ -1,0 +1,154 @@
+# Faceless YouTube creator — niche-configurable, $0 budget.
+# LOCKED NICHE (user choice, 2026-11-03): the first entry below is the
+# channel's chosen niche, and niche_lock_days: 90 keeps the daily run
+# on it for 90 days unless he overrides a single run with --niche.
+# The rest of the list is alternatives only — they do NOT run unless
+# named with --niche (or after the lock expires and one re-ranks top).
+# One niche runs per day, never all niches in one day.
+niche: "history mysteries investigated with modern tech"
+niches:
+  - history mysteries investigated with modern tech
+  - personal finance
+  - AI/tech tutorials
+  - education/science
+  - health
+  - career
+  - true crime
+  - tech reviews
+  - gaming
+# Keywords for the FIRST niche only (used by Reddit/YouTube search).
+# Other niches are searched by their name.
+niche_keywords:
+  - unsolved history
+  - lost cities
+  - historical mysteries
+  - ancient artifacts
+  - unexplained events
+  - forensic history
+  - satellite archaeology
+  - AI reconstruction
+
+# --- Peak publishing windows (general YouTube windows, NOT a guarantee) ---
+# Weekdays 17:00-20:00, weekends 11:00-13:00, in channel_timezone.
+# Override per niche once you have your own analytics, e.g.:
+#   - "cooking:weekday:18:00-21:00"
+# Format windows are checked after the niche window, before default:
+#   Shorts: midday + evening (weekday 12:00-14:00 and 17:00-20:00 —
+#     scheduler picks the first window still ahead, so a morning render
+#     lands the midday slot; an afternoon render lands the evening one).
+#   Long-form: evening peak only (weekday 17:00-20:00, weekend 11:00-13:00).
+channel_timezone: "America/Chicago"
+peak_windows:
+  - "default:weekday:17:00-20:00"
+  - "default:weekend:11:00-13:00"
+  - "shorts:weekday:12:00-14:00"
+  - "shorts:weekday:17:00-20:00"
+  - "shorts:weekend:11:00-13:00"
+  - "long:weekday:17:00-20:00"
+  - "long:weekend:11:00-13:00"
+language: en
+videos_per_run: 3
+# --- Series + funnel ---
+# series_name: the series every daily output belongs to (e.g. "The 7-Day Fix").
+# series_enabled: false by default — turn it on once you have a series name.
+# Episode numbering (EP N) is auto-incremented in data/series_state.json
+# ONLY after a successful render + QA pass, never before.
+series_name: ""
+series_enabled: false
+# --- Niche lock (recommendation lock, not a prison) ---
+# Stay in one chosen niche for 90 days for subscriber growth, even if
+# another niche ranks higher on a given day (see README "Series + funnel").
+# The lock is recorded in data/niche_lock.json on the first run and
+# honoured until it expires; --niche overrides it for a single run.
+niche_lock_days: 90
+# --- Channel promise (one line, used in descriptions) ---
+# Locked with the niche (user wording, 2026-11-03). run.py appends it
+# to descriptions via seo.py (a placeholder would be skipped instead).
+channel_promise: "Unsolved history and mysteries from around the world, investigated with modern tech — lost cities, events nobody can fully explain, and artifacts that shouldn't exist, reconstructed and tested with today's tools."
+# --- Daily cadence: BOTH formats, every day, by default ---
+# 1 long-form video + 2 Shorts per day. Do NOT raise the defaults above
+# this without a reason: more than 1 long + 2 Shorts a day risks spam
+# and a quality drop (see README "Daily cadence"). Both formats go
+# through the same narrator/music pipeline, QA gate, and peak scheduling.
+long_videos_per_day: 1
+shorts_per_day: 2
+short_or_long: "short"
+upload_mode: "draft"
+channel_name: "YOUR_CHANNEL_NAME_HERE"
+
+# --- Narration: human-sounding voice tiers ---
+# narrator_tier: "free" (default, Edge TTS neural voices + SSML prosody),
+#   "local" (Kokoro open-weight if installed, else Edge TTS fallback),
+#   "paid" (ElevenLabs, requires ELEVENLABS_API_KEY — never default).
+narrator_voice: "en-US-ChristopherNeural"
+narrator_tier: "free"
+narrator_speed: 1.0
+narrator_pause_ms: 350
+
+# --- Music: trending-STYLE matching, royalty-free only ---
+# NEVER put a copyrighted trending song here. music.py matches the
+# trending audio profile (genre/tempo/mood from trends.py) against this
+# library and picks the closest ROYALTY-FREE track. If no track matches,
+# it fails loudly naming the wanted profile instead of using a random one.
+# EXAMPLE entries below are placeholders (example: true) and are skipped
+# by the matcher — replace them with tracks you have rights to use.
+music_library:
+  - file: "music/example-fast-upbeat-pop.mp3"
+    genre: "pop"
+    tempo_bpm: 125
+    mood: "upbeat"
+    license: "royalty-free (EXAMPLE placeholder — replace with a real track)"
+    example: true
+  - file: "music/example-chill-lofi.mp3"
+    genre: "lofi"
+    tempo_bpm: 75
+    mood: "chill"
+    license: "royalty-free (EXAMPLE placeholder — replace with a real track)"
+    example: true
+  - file: "music/example-energetic-electronic.mp3"
+    genre: "electronic"
+    tempo_bpm: 128
+    mood: "energetic"
+    license: "royalty-free (EXAMPLE placeholder — replace with a real track)"
+    example: true
+# If you hold a licence for one specific track, put it here instead:
+# it is used as-is and logged with its licence note (never claimed
+# royalty-free). Leave empty to use music_library matching.
+licensed_track: ""
+license_note: ""
+# Legacy single-file fallback (only used when music_library is empty):
+music_file: ""
+music_urls:
+  - ""
+
+# --- Visuals: HD stock video first, HD stills second ---
+# visual_source order is stock_video, then stock_image (video.py).
+# min_resolution: assets whose largest side is below this are REJECTED,
+# not upscaled and called HD. video_bitrate: 8M–12M is the Shorts range.
+visual_quality: "hd"
+visual_source: "stock_video"
+min_resolution: 1080
+video_bitrate: "10M"
+# Long-form (1920x1080) bitrate — 12M is the top of the Shorts range and
+# a sensible ceiling for 1080p long-form here; keep it <= 16M for YouTube.
+long_video_bitrate: "12M"
+# Free stock video clip URLs (Pexels/Pixabay direct file URLs) go here.
+# With PEXELS_API_KEY / PIXABAY_API_KEY set, --fetch-stock searches instead.
+stock_video_urls:
+  - ""
+# Free stock images (Pexels/Pixabay URLs) for video backgrounds.
+# If empty, video.py falls back to an animated gradient background.
+stock_image_urls:
+  - ""
+# Optional: Reddit subreddits to check (public JSON, no key needed).
+# History/mystery subreddits for the locked niche — only subreddits
+# confidently known to exist as public communities are listed here:
+# r/history, r/UnresolvedMysteries, r/AncientHistory, r/AskHistorians.
+reddit_subreddits:
+  - history
+  - UnresolvedMysteries
+  - AncientHistory
+  - AskHistorians
+# Optional: set API keys/tokens as environment variables, never in this file.
+# YT_API_KEY, TIKTOK_RESEARCH_TOKEN, FACEBOOK_GRAPH_TOKEN,
+# PEXELS_API_KEY, PIXABAY_API_KEY, ELEVENLABS_API_KEY.
