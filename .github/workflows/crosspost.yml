@@ -1,0 +1,67 @@
+# Automated Social Crossposter — The Deep Scan
+# ---------------------------------------------------------------------------
+# Origin: extracted verbatim from the Chrono-Studio AI Universal v4.0 Gemini
+# Canvas app (shared 2026-11-06). The app's version was a STUB: it only ran
+# `python auto_crosspost.py`, a script that did not exist in the export, with
+# no video source, no secrets, and a daily 14:00 UTC schedule.
+#
+# Adapted 2026-11-06 for the faceless-creator repo:
+#   * Trigger is MANUAL ONLY (workflow_dispatch). The daily schedule is
+#     commented out on purpose: nothing auto-posts to Facebook/Reddit until
+#     Kristian explicitly enables it AND the tokens exist. The Deep Scan
+#     posts Unlisted + human review by default — auto-posting must never
+#     bypass that.
+#   * The runner is scripts/auto_crosspost.py (draft). It reads
+#     data/crosspost_queue.json — a video only gets crossposted if a human
+#     put it in the queue.
+#
+# Still missing before this can run for real (all outstanding, Nov 6):
+#   * Facebook: the channel Pages don't exist yet (Page creation failed
+#     Nov 3). Needs FB_PAGE_ID + a Page access token (FB_PAGE_TOKEN).
+#   * Reddit: no Reddit app/credentials yet. Needs REDDIT_CLIENT_ID,
+#     REDDIT_CLIENT_SECRET, REDDIT_USERNAME, REDDIT_PASSWORD.
+#   * Set all of the above as GitHub repo secrets. The script fails loudly
+#     (non-zero exit, clear message) if any are missing — it never posts
+#     half a job.
+#
+# To enable the schedule later (only on his explicit go-ahead), uncomment:
+#   schedule:
+#     - cron: '0 14 * * *'   # daily 14:00 UTC
+# ---------------------------------------------------------------------------
+name: Automated Social Crossposter
+
+on:
+  workflow_dispatch:
+    inputs:
+      video_id:
+        description: 'YouTube video ID to crosspost (must already be in data/crosspost_queue.json)'
+        required: true
+        type: string
+      note:
+        description: 'Optional extra line appended to the teaser'
+        required: false
+        type: string
+  # schedule:
+  #   - cron: '0 14 * * *'  # DISABLED — see header. Manual trigger only.
+
+jobs:
+  crosspost:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Post video teaser to Facebook & Reddit
+        env:
+          FB_PAGE_TOKEN: ${{ secrets.FB_PAGE_TOKEN }}
+          FB_PAGE_ID: ${{ secrets.FB_PAGE_ID }}
+          REDDIT_CLIENT_ID: ${{ secrets.REDDIT_CLIENT_ID }}
+          REDDIT_CLIENT_SECRET: ${{ secrets.REDDIT_CLIENT_SECRET }}
+          REDDIT_USERNAME: ${{ secrets.REDDIT_USERNAME }}
+          REDDIT_PASSWORD: ${{ secrets.REDDIT_PASSWORD }}
+          CROSSPOST_NOTE: ${{ inputs.note }}
+        run: python scripts/auto_crosspost.py --video-id "${{ inputs.video_id }}"
