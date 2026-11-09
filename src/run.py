@@ -46,7 +46,7 @@ def log_step(log, name, status, detail=""):
 def run_cmd(cmd, step, log):
     result = subprocess.run(cmd, capture_output=True, text=True)
     if result.returncode != 0:
-        log_step(log, step, "FAILED", (result.stderr or result.stdout)[-500:])
+        log_step(log, step, "FAILED", (result.stderr or result.stdout)[-4000:])
         raise SystemExit(f"Step failed: {step} (exit {result.returncode})")
     log_step(log, step, "ok", (result.stdout or "").strip().splitlines()[-1]
              if result.stdout.strip() else "")
