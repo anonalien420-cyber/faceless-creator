@@ -268,6 +268,22 @@ def check_accuracy(script):
         add("accuracy_applies", True,
             "not a history_mystery script; accuracy checklist not applicable")
         return checks
+    # Claim-level evidence gate: every referenced claim must exist in the
+    # validated ledger and every claim/source must have human review.
+    try:
+        from src.evidence import load_ledger, validate_ledger
+    except ImportError:
+        from evidence import load_ledger, validate_ledger
+    ledger = load_ledger("data/evidence_ledger.json")
+    ledger_errors = validate_ledger(ledger)
+    script_claim_ids = set(script.get("claim_ids") or [])
+    ledger_claim_ids = {c.get("claim_id") for c in ledger.get("claims", [])}
+    missing_claims = sorted(script_claim_ids - ledger_claim_ids)
+    add("accuracy_evidence_ledger_valid", not ledger_errors,
+        "ledger validates" if not ledger_errors else "; ".join(ledger_errors[:8]))
+    add("accuracy_claim_ids_in_ledger", bool(script_claim_ids) and not missing_claims,
+        "all script claim IDs exist in the ledger" if script_claim_ids and not missing_claims
+        else "missing or absent claim IDs: " + ", ".join(missing_claims or ["none supplied"]))
     filled, sources = sources_filled(script)
     add("accuracy_sources_filled", filled,
         f"{len(sources)} source(s) listed"
