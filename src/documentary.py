@@ -6,7 +6,6 @@ to a reviewed claim ID. The visual directions are labelled reconstructions.
 import argparse
 import json
 import os
-import re
 
 from src.evidence import load_ledger, reviewed_claims
 
@@ -42,6 +41,9 @@ def build_documentary(topic, fmt, ledger):
     if not selected:
         raise ValueError("No reviewed claims are available for documentary generation.")
     selected.sort(key=lambda c: (c.get("sequence", 9999), c["claim_id"]))
+    hook_claim = next((c for c in selected if c.get("status") == "KNOWN" and c.get("shock_hook")), None)
+    if not hook_claim:
+        raise ValueError("A reviewed KNOWN claim marked shock_hook=true is required; no hook will be invented.")
     sections, scenes, sources, lines = [], [], {}, []
     for i, claim in enumerate(selected, 1):
         evidence_text = claim["text"].strip()
@@ -55,7 +57,8 @@ def build_documentary(topic, fmt, ledger):
                    "tier": tier, "text": narration, "claim_ids": [claim["claim_id"]],
                    "source_ids": claim.get("source_ids", [])}
         sections.append(section)
-        lines.append(narration)
+        if claim["claim_id"] != hook_claim["claim_id"]:
+            lines.append(narration)
         scenes.append(build_visual_prompts(claim, i))
         for sid in claim.get("source_ids", []):
             source = next(s for s in ledger["sources"] if s.get("source_id") == sid)
@@ -63,9 +66,6 @@ def build_documentary(topic, fmt, ledger):
                             "publication": source.get("publication", ""),
                             "publication_year": source.get("publication_year"),
                             "notes": source.get("notes", "")}
-    hook_claim = next((c for c in selected if c.get("status") == "KNOWN" and c.get("shock_hook")), None)
-    if not hook_claim:
-        raise ValueError("A reviewed KNOWN claim marked shock_hook=true is required; no hook will be invented.")
     hook = hook_claim["text"].strip()
     body = " ".join(lines)
     if fmt == "short":
@@ -77,7 +77,7 @@ def build_documentary(topic, fmt, ledger):
                 "The record supports what is documented, not every explanation proposed for it. "
                 "The unresolved questions remain unresolved until new evidence changes that.")
     return {
-        "rank": 1, "topic": topic, "format": fmt, "style": "history_mystery",
+        "topic": topic, "format": fmt, "style": "history_mystery",
         "hook": hook, "shock_hook": {"text": hook, "tier": "KNOWN",
             "source": next((sources[sid] for sid in hook_claim.get("source_ids", []) if sid in sources), {})},
         "sections": sections, "chapters": [s["title"] for s in sections],
