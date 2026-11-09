@@ -343,7 +343,7 @@ def build_video(script, audio_path, output, visuals=None, duration=None,
             "-t", str(duration), "-c:v", "libx264", "-pix_fmt", "yuv420p",
             "-b:v", bitrate, "-maxrate", "12M", "-bufsize", "20M",
             "-c:a", "aac", "-shortest", output])
-    subprocess.run(cmd, check=True)
+    _run_ffmpeg(cmd)
     kinds = ",".join(v["type"] for v in accepted)
     print(f"Video -> {output} ({duration:.1f}s, {width}x{height}, "
           f"{len(accepted)} visual(s) in {n} chunk(s): {kinds}, {bitrate})")
