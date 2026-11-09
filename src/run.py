@@ -405,6 +405,10 @@ def main(argv=None):
             run_cmd([sys.executable, "-m", "src.research", "--query", niche,
                      "--output", "data/research_sources.json"],
                     "historical_research", log)
+            run_cmd([sys.executable, "-m", "src.source_archive", "--input",
+                     "data/research_sources.json", "--output",
+                     "data/research_sources_archived.json"],
+                    "historical_source_archive", log)
             # Metadata verification is a separate report, never an automatic
             # source approval or truth score. The evidence ledger remains the gate.
             if os.path.exists("data/evidence_ledger.json"):
