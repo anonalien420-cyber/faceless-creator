@@ -284,6 +284,18 @@ def check_accuracy(script):
     add("accuracy_claim_ids_in_ledger", bool(script_claim_ids) and not missing_claims,
         "all script claim IDs exist in the ledger" if script_claim_ids and not missing_claims
         else "missing or absent claim IDs: " + ", ".join(missing_claims or ["none supplied"]))
+    # Rebuild the expected narration from the ledger and compare it byte-for-byte.
+    # This catches unsupported edits made after script generation.
+    try:
+        from src.documentary import build_documentary
+        expected_script = build_documentary(script.get("topic", ""), script.get("format", "short"), ledger)
+        script_matches = (script.get("text") == expected_script.get("text")
+                          and script_claim_ids == set(expected_script.get("claim_ids") or []))
+        match_detail = "script text and claim references match the reviewed ledger"
+    except Exception as exc:
+        script_matches = False
+        match_detail = "could not rebuild from reviewed evidence: " + str(exc)
+    add("accuracy_script_matches_ledger", script_matches, match_detail)
     filled, sources = sources_filled(script)
     add("accuracy_sources_filled", filled,
         f"{len(sources)} source(s) listed"
