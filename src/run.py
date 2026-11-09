@@ -286,6 +286,12 @@ def write_review_queue(outputs, niche, config, args, seo_entries, thumb_map):
                          f"sources: {script.get('sources', [])}; "
                          f"dropped_unverified: {script.get('dropped_unverified', [])} "
                          "— VERIFY sources against the real record before publishing.")
+            lines.append(f"- Evidence claim IDs: {script.get('claim_ids', [])}")
+            lines.append("- Visual disclosure: " + script.get("visual_disclaimer", "AI visuals must be labelled as reconstructions."))
+            for scene in script.get("scenes", []):
+                lines.append(f"  - Scene {scene.get('scene')}: {scene.get('visual_type')}")
+                lines.append(f"    Image prompt: {scene.get('image_prompt')}")
+                lines.append(f"    Animation prompt: {scene.get('animation_prompt')}")
         lines.append(f"- SEO titles: {', '.join(seo.get('titles', []))}")
         lines.append(f"- Tags: {', '.join(seo.get('tags', []))}")
         lines.append(f"- Pinned-comment question: {seo.get('pinned_comment', '')}")
@@ -357,6 +363,13 @@ def main(argv=None):
                 "trends", log)
         with open("data/top5.json", encoding="utf-8") as fh:
             top5 = json.load(fh)["candidates"]
+        # Research is discovery only. Results are added to the evidence ledger
+        # as UNREVIEWED; no discovered source can become a factual claim
+        # without an explicit human review in the ledger.
+        if "history" in niche.lower():
+            run_cmd([sys.executable, "-m", "src.research", "--query", niche,
+                     "--output", "data/research_sources.json"],
+                    "historical_research", log)
         # Long-form uses #1 in depth; Shorts use #2 and #3 (or fewer if
         # the top 5 is short). One trends run feeds both formats.
         long_cands = top5[:long_count]
