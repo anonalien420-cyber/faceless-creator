@@ -691,6 +691,11 @@ def main(argv=None):
                        if (config.get("niches") or config.get("niche")) else "")
         lowered = (first_niche or "").lower()
         style = "history_mystery" if ("history" in lowered and "myster" in lowered) else "general"
+    first_niche = ((config.get("niches") or [config.get("niche", "")])[0]
+                   if (config.get("niches") or config.get("niche")) else "")
+    lowered_niche = (first_niche or "").lower()
+    if "history" in lowered_niche and "myster" in lowered_niche and style != "history_mystery":
+        parser.error("History-mystery channel content must use the evidence-led history_mystery style; generic script mode is disabled.")
     if style == "history_mystery":
         hook_style = args.hook_style or "question"
     if args.format == "long":
