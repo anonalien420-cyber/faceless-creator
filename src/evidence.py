@@ -41,6 +41,8 @@ def validate_claim(claim, sources):
     errors = []
     claim_id = claim.get("claim_id") or "unknown"
     text = (claim.get("text") or "").strip()
+    if not (claim.get("topic") or "").strip():
+        errors.append(claim_id + ": exact documentary topic is required")
     if not text:
         errors.append(claim_id + ": claim text is empty")
     status = claim.get("status")
