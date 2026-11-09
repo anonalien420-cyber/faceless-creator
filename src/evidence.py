@@ -61,7 +61,7 @@ def validate_claim(claim, sources):
     if status in ("KNOWN", "DEBATED") and not ids:
         errors.append(claim_id + ": KNOWN/DEBATED claims require linked sources")
     if status == "DEBATED" and len(set(ids)) < 2:
-        errors.append(claim_id + ": DEBATED claims require at least two independently reviewed sources")
+        errors.append(claim_id + ": DEBATED claims require at least two distinct source records")
     for source_id in ids:
         source = sources.get(source_id)
         if not source:
