@@ -42,7 +42,7 @@ class EvidenceTests(unittest.TestCase):
 
     def test_documentary_requires_reviewed_shock_hook(self):
         ledger = {"schema_version": 1, "sources": [self.source], "claims": [{
-            "claim_id": "c1", "topic": "Test topic", "text": ("A verified historical statement. " * 24), "status": "KNOWN",
+            "claim_id": "c1", "topic": "Test topic", "text": ("A verified historical statement. " * 25), "status": "KNOWN",
             "source_ids": ["s1"], "reviewed_by": "editor",
             "reviewed_at": "2026-11-09T00:00:00Z", "shock_hook": True}]}
         package = build_documentary("Test topic", "short", ledger)
