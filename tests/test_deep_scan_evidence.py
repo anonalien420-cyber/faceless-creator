@@ -7,7 +7,7 @@ class EvidenceTests(unittest.TestCase):
     def setUp(self):
         self.source = {"source_id": "s1", "title": "Museum catalogue",
                        "url": "https://museum.example.org/catalogue",
-                       "review_status": "APPROVED", "notes": "Reviewed record"}
+                       "review_status": "APPROVED", "publication": "Museum collection catalogue", "publication_year": 2020, "notes": "Reviewed record"}
         self.sources = {"s1": self.source}
 
     def test_known_requires_human_review_and_approved_source(self):
