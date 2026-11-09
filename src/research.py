@@ -15,7 +15,7 @@ CROSSREF = "https://api.crossref.org/works"
 
 
 def _get_json(url, timeout=20):
-    request = urllib.request.Request(url, headers={"User-Agent": "DeepScanResearch/1.0 (mailto:research@example.org)"})
+    request = urllib.request.Request(url, headers={"User-Agent": "DeepScanResearch/1.0"})
     with urllib.request.urlopen(request, timeout=timeout) as response:
         return json.loads(response.read().decode("utf-8"))
 
@@ -104,6 +104,11 @@ def discover(query, limit=10):
             item["notes"] = ""
             item["review_status"] = "UNREVIEWED"
             deduped.append(item)
+    priority_order = {"institutional_or_primary": 0, "academic_publication": 1,
+                      "scholarly_candidate": 2}
+    deduped.sort(key=lambda item: priority_order.get(item.get("source_priority"), 3))
+    for index, item in enumerate(deduped, 1):
+        item["source_id"] = "src_" + str(index).zfill(4)
     return {"query": query, "discovered_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
             "sources": deduped, "errors": errors,
             "warning": "Discovery results are leads, not verified evidence. Human review is required."}
