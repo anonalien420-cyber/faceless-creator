@@ -499,6 +499,17 @@ def main(argv=None):
         if os.path.exists("data/seo.json"):
             with open("data/seo.json", encoding="utf-8") as fh:
                 seo_entries = json.load(fh)
+            try:
+                from src.growth import lint_metadata
+            except ImportError:
+                from growth import lint_metadata
+            metadata_reports = [{"topic": e.get("topic"), **lint_metadata(e)} for e in seo_entries]
+            with open("data/metadata_qa.json", "w", encoding="utf-8") as fh:
+                json.dump(metadata_reports, fh, indent=2)
+            metadata_errors = [r for r in metadata_reports if not r["passed"]]
+            if metadata_errors:
+                raise SystemExit("Metadata QA blocked publishing: {}".format(metadata_errors))
+            log_step(log, "metadata_qa", "ok", "{} metadata package(s) passed".format(len(metadata_reports)))
         long_title = ""
         for entry in seo_entries:
             if entry["format"] == "long":
