@@ -36,7 +36,8 @@ must expose image, video, or GIF outputs in ComfyUI history. The workflow JSON
 is user-supplied and should not be committed if it contains private server
 details or model paths.
 
-When configured, the daily runner generates per-scene assets and passes the
+When configured, the daily runner generates per-scene assets, validates
+scene-to-claim/source links with `src/visual_qa.py`, and passes the
 topic-specific manifest to the renderer. Without ComfyUI configuration, the
 existing stock/fallback path is unchanged. Generation needs a reachable
 ComfyUI host and suitable installed models; CI does not pretend to have either.
