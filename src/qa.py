@@ -281,6 +281,16 @@ def check_accuracy(script):
     missing_claims = sorted(script_claim_ids - ledger_claim_ids)
     add("accuracy_evidence_ledger_valid", not ledger_errors,
         "ledger validates" if not ledger_errors else "; ".join(ledger_errors[:8]))
+    try:
+        from src.verification import verify_ledger
+    except ImportError:
+        from verification import verify_ledger
+    verification = verify_ledger(ledger)
+    verification_errors = ["{}: {}".format(c["claim_id"], e)
+                           for c in verification.get("claims", []) for e in c.get("errors", [])]
+    add("accuracy_historical_metadata_verification", not verification_errors,
+        "date/source-diversity metadata checks passed" if not verification_errors
+        else "; ".join(verification_errors[:8]))
     add("accuracy_claim_ids_in_ledger", bool(script_claim_ids) and not missing_claims,
         "all script claim IDs exist in the ledger" if script_claim_ids and not missing_claims
         else "missing or absent claim IDs: " + ", ".join(missing_claims or ["none supplied"]))
