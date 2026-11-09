@@ -23,7 +23,7 @@ class ResearchTests(unittest.TestCase):
     @patch("src.research.search_openalex", return_value=[{
         "title": "Same record", "url": "https://example.org/a", "doi": None
     }])
-    def test_discovery_deduplicates_and_never_approves(self, openalex, crossref):
+    def test_discovery_deduplicates_and_never_approves(self, openalex, crossref, loc):
         result = research.discover("history", 5)
         self.assertEqual(len(result["sources"]), 1)
         self.assertEqual(result["sources"][0]["review_status"], "UNREVIEWED")
