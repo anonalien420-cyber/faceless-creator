@@ -23,10 +23,10 @@ the run must NOT upload that video. A broken video never goes out.
 Report: data/qa_report.json per run (pass/fail per check, fixes applied).
 
 Accuracy checklist (history-mystery scripts only; appended to the
-same report, same fail-loudly rule): the script must have a real
-`sources` field (not the placeholder), every section must carry a
-KNOWN/DEBATED/UNKNOWN tier, no KNOWN section may ship without
-sources, and the ending must contain an open viewer question.
+same report, same fail-loudly rule): the complete claim ledger must
+validate, every script claim ID must exist, and the narration must
+match a deterministic rebuild from the reviewed ledger. Sections
+carry KNOWN/DEBATED/UNKNOWN tiers and sources remain visible to viewers.
 Shock/source checks added for the "Shock, honestly" principle: the
 shock hook must be present with tier KNOWN and a filled source, and
 every description source entry must either carry a valid URL
