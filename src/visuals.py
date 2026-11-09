@@ -73,13 +73,15 @@ def generate_scene(scene, workflow, base_url, outdir, media_type="image",
     else:
         raise TimeoutError("ComfyUI generation timed out for {}".format(prompt_id))
     outputs = history[prompt_id].get("outputs", {})
-    candidates = []
+    images, videos = [], []
     for node in outputs.values():
-        candidates.extend(node.get("images", []))
-        candidates.extend(node.get("videos", []))
-        candidates.extend(node.get("gifs", []))
+        images.extend(node.get("images", []))
+        videos.extend(node.get("videos", []))
+        videos.extend(node.get("gifs", []))
+    candidates = images if media_type == "image" else videos
     if not candidates:
-        raise RuntimeError("ComfyUI completed without image/video outputs")
+        expected = "image" if media_type == "image" else "video/GIF"
+        raise RuntimeError("ComfyUI completed without requested {} output".format(expected))
     item = candidates[0]
     ext = os.path.splitext(item.get("filename", ""))[1] or (".png" if media_type == "image" else ".mp4")
     filename = "scene-{:03d}-{}{}".format(int(scene.get("scene", 0)),
