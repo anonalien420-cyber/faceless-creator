@@ -11,14 +11,10 @@ name: Daily faceless videos (1 long + 2 Shorts)
 #   without a reason (config: long_videos_per_day, shorts_per_day).
 # - Every output passes the QA gate (src/qa.py) before upload; a QA
 #   failure fails the run and uploads NOTHING.
-# - Upload (opt-in only, UPLOAD_ENABLED secret) uses --publish-at-peak:
-#   each video uploads as private, then YouTube publishes it at its own
-#   next peak window — Shorts midday + evening, long-form evening peak
-#   (config peak_windows, per-format windows). One niche per run, never
-#   every niche in one day. Every run also writes data/review_queue.md
-#   (unlisted by default + human review before the peak window) and
-#   data/seo.json; --auto-public stays OFF unless explicitly enabled.
-# - Peak times are general audience windows, NOT a guarantee of popularity.
+# - This workflow NEVER uploads to YouTube. It renders, runs QA, and
+#   writes the human review queue only. Public publication is manual.
+# - Peak-time scheduling is disabled for this workflow; no unattended
+#   publication can occur after a workflow run.
 on:
   schedule:
     - cron: "0 12 * * *"  # 12:00 UTC daily — morning render, before peak
@@ -28,10 +24,6 @@ on:
         description: "Niche to create videos for (empty = top-ranked niche with data)"
         required: false
         default: ""
-      publish_at_peak:
-        description: "Publish at the next peak window instead of staying unlisted"
-        type: boolean
-        default: true
 
 jobs:
   build:
@@ -48,15 +40,10 @@ jobs:
       - name: Run pipeline (dry-run upload unless UPLOAD_ENABLED)
         env:
           YT_API_KEY: ${{ secrets.YT_API_KEY }}
-          UPLOAD_ENABLED: ${{ secrets.UPLOAD_ENABLED }}
         run: |
           NICHE_ARG=""
           if [ -n "${{ inputs.niche }}" ]; then
             NICHE_ARG="--niche ${{ inputs.niche }}"
-          fi
-          PEAK_ARG=""
-          if [ "${{ inputs.publish_at_peak }}" = "true" ]; then
-            PEAK_ARG="--publish-at-peak"
           fi
           # Production workflow is render/review only. Publishing is a
           # separate human action after evidence and review-queue approval.
