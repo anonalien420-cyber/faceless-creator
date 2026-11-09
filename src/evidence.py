@@ -83,6 +83,9 @@ def validate_claim(claim, sources):
 def validate_ledger(ledger):
     sources = _source_map(ledger)
     errors = []
+    source_ids = [s.get("source_id") for s in ledger.get("sources", [])]
+    if len(source_ids) != len(set(source_ids)):
+        errors.append("source_id is missing or duplicated in the source catalogue")
     seen = set()
     for claim in ledger.get("claims", []):
         cid = claim.get("claim_id")
