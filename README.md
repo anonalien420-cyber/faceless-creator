@@ -588,7 +588,7 @@ Run a scholarly search:
 python -m src.research --query "Pompeii eruption archaeological evidence"
 ```
 
-OpenAlex and Crossref are queried without paid API keys. Candidate records are
+OpenAlex, Crossref, and the Library of Congress public catalogue API are queried without paid API keys. Candidate records are
 written to `data/research_sources.json` and appended to
 `data/evidence_ledger.json` with `review_status: UNREVIEWED`. Metadata includes
 title, URL/DOI, authors, publication, year, provider, notes, and a discovery
@@ -631,6 +631,12 @@ Generated visuals are labelled as interpretive AI reconstructions, never
 authentic historical footage. The prompts are production metadata; this
 repository does not yet call a generative image/video provider to render those
 prompts automatically.
+
+Short scripts are accepted only when the reviewed narration material supports
+120-180 words. Long-form scripts require 1200-1800 words of reviewed material.
+The generator refuses to pad a thin evidence file with generic historical
+filler. Every claim must carry an exact topic, and claims from one topic are
+never reused for another episode.
 
 ### QA and publication safety
 
