@@ -379,9 +379,14 @@ def main(argv=None):
         scripts = json.load(fh)
     os.makedirs(args.outdir, exist_ok=True)
     visuals = list(args.visuals) + list(args.images)
+    topic_visuals = {}
     if args.visuals_file and os.path.exists(args.visuals_file):
         with open(args.visuals_file, encoding="utf-8") as fh:
-            visuals.extend(json.load(fh))
+            loaded_visuals = json.load(fh)
+        if isinstance(loaded_visuals, dict) and isinstance(loaded_visuals.get("by_topic"), dict):
+            topic_visuals = loaded_visuals["by_topic"]
+        elif isinstance(loaded_visuals, list):
+            visuals.extend(loaded_visuals)
     if args.fetch_stock:
         # Stock video first, then stock images — per visual_source order.
         stock = fetch_stock_videos(config, config.get("niche_keywords") or [])
@@ -395,7 +400,8 @@ def main(argv=None):
         if not os.path.exists(audio):
             audio = os.path.join("data/audio", f"{script['rank']:02d}-{slug}.mp3")
         output = os.path.join(args.outdir, f"{script['rank']:02d}-{slug}.mp4")
-        build_video(script, audio, output, visuals=visuals or None,
+        selected_visuals = topic_visuals.get(script.get("topic"), visuals)
+        build_video(script, audio, output, visuals=selected_visuals or None,
                     bitrate=bitrate, min_resolution=min_resolution,
                     width=width, height=height,
                     end_card_text=args.end_card_text)
