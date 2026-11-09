@@ -1,7 +1,14 @@
 """Exercise the real FFmpeg filter-graph renderer without network or API keys."""
 import os
 import subprocess
+import sys
 import tempfile
+from pathlib import Path
+
+# Running a file inside scripts/ puts that folder, not the repository root,
+# at sys.path[0]. Add the project root so the production module is importable.
+ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT))
 
 from src.video import build_video
 
