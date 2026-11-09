@@ -1,0 +1,34 @@
+{
+  "schema_version": 1,
+  "sources": [
+    {
+      "source_id": "museum_catalogue_001",
+      "title": "Example museum collection record",
+      "url": "https://example.org/collection-record",
+      "publication": "Museum collection catalogue",
+      "publication_year": 2020,
+      "notes": "Replace with a real source; verify the exact record and its relevance.",
+      "review_status": "UNREVIEWED"
+    }
+  ],
+  "claims": [
+    {
+      "claim_id": "claim_001",
+      "text": "Replace with one precise, checkable historical statement.",
+      "status": "UNKNOWN",
+      "source_ids": [],
+      "reviewed_by": "",
+      "reviewed_at": "",
+      "debate_summary": "",
+      "sequence": 1,
+      "section_title": "What remains unknown",
+      "include_in_script": true,
+      "shock_hook": false,
+      "period": "",
+      "location": "",
+      "clothing": "",
+      "architecture": "",
+      "objects": ""
+    }
+  ]
+}
