@@ -79,8 +79,11 @@ def validate_claim(claim, sources):
             errors.append(claim_id + ": source " + str(source_id) + " requires human review notes")
         if any(p in (source.get("title", "") + " " + source.get("notes", "")).lower() for p in PLACEHOLDERS):
             errors.append(claim_id + ": placeholder source text is not acceptable")
-    if status == "DEBATED" and not (claim.get("debate_summary") or "").strip():
-        errors.append(claim_id + ": DEBATED claims require a neutral summary of the disagreement")
+    if status == "DEBATED":
+        if not (claim.get("debate_summary") or "").strip():
+            errors.append(claim_id + ": DEBATED claims require a neutral summary of the disagreement")
+        if not (claim.get("position_a") or "").strip() or not (claim.get("position_b") or "").strip():
+            errors.append(claim_id + ": DEBATED claims require both competing positions")
     return errors
 
 
