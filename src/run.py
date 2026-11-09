@@ -8,9 +8,9 @@ Daily cadence (config: long_videos_per_day: 1, shorts_per_day: 2):
 - Each output goes through the same narrator/music pipeline, the same
   QA gate (src/qa.py — a failed QA means NO upload for that video),
   and its own peak-time schedule (Shorts window vs long-form window).
-- Default is dry-run for the upload step (nothing is posted). Pass
-  --upload AND set UPLOAD_ENABLED=true to actually upload (privacy
-  unlisted unless --public, or private + publishAt with --publish-at-peak).
+- The scheduled workflow is render/review only. Manual unlisted upload
+  requires UPLOAD_ENABLED=true and HUMAN_REVIEW_APPROVED=true.
+  Public and scheduled-public publishing are disabled in code.
 - Any step failure is logged and exits non-zero — never a silent green
   run that did not post. More than 1 long + 2 Shorts per day by default
   is deliberately NOT done: it risks spam and a quality drop (README).
