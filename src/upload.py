@@ -11,14 +11,6 @@ import argparse
 import json
 import os
 import sys
-from datetime import timezone
-
-try:
-    from src.config import load_config
-    from src.scheduler import next_peak_window
-except ImportError:
-    from config import load_config
-    from scheduler import next_peak_window
 
 
 def plan(video, title, description, privacy, publish_at=None):
@@ -95,7 +87,6 @@ def main(argv=None):
     parser.add_argument("--niche", default="")
     parser.add_argument("--format", default="", choices=["", "short", "long"],
                         help="Use this format's peak window for --publish-at-peak.")
-    parser.add_argument("--config", default="config.yaml")
     args = parser.parse_args(argv)
     # Deep Scan safety policy: no direct-public or scheduled-public publishing.
     if args.public or args.auto_public or args.publish_at_peak or args.publish_at:
@@ -109,20 +100,6 @@ def main(argv=None):
         print("ERROR: Refusing upload: HUMAN_REVIEW_APPROVED must be set to true after reviewing the evidence ledger and review queue.", file=sys.stderr)
         return 1
     privacy = "unlisted"
-    publish_at = args.publish_at or None
-    if args.publish_at_peak and not publish_at:
-        config = load_config(args.config)
-        niche = args.niche or (config.get("niches") or [config.get("niche", "")])[0]
-        start, _end = next_peak_window(niche, config, fmt=args.format or None)
-        if start is None:
-            print("ERROR: --publish-at-peak requested but no peak window found "
-                  "in the next 14 days. Refusing to upload without a schedule.",
-                  file=sys.stderr)
-            return 1
-        publish_at = start.astimezone(timezone.utc).isoformat()
-        privacy = "private"  # required for scheduled publishing
-        print(f"Scheduled publishing: private now, publishAt {publish_at} "
-              f"(next peak window for niche '{niche}')")
     if os.environ.get("UPLOAD_ENABLED", "") != "true":
         print("ERROR: Refusing to upload: UPLOAD_ENABLED is not 'true'. "
               "Use --dry-run, or set UPLOAD_ENABLED=true explicitly.", file=sys.stderr)
