@@ -58,11 +58,6 @@ jobs:
           if [ "${{ inputs.publish_at_peak }}" = "true" ]; then
             PEAK_ARG="--publish-at-peak"
           fi
-          # With UPLOAD_ENABLED unset/false, src.upload dry-runs and
-          # nothing is posted. Verify a local run end to end before
-          # setting secrets.UPLOAD_ENABLED=true in the repo.
-          if [ "$UPLOAD_ENABLED" = "true" ]; then
-            python -m src.run $NICHE_ARG --upload $PEAK_ARG
-          else
-            python -m src.run $NICHE_ARG
-          fi
+          # Production workflow is render/review only. Publishing is a
+          # separate human action after evidence and review-queue approval.
+          python -m src.run $NICHE_ARG
