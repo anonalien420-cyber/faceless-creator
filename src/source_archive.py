@@ -24,7 +24,7 @@ def lookup_snapshot(url, timeout=15):
 def snapshot_sources(source_file, output_file, timeout=15, pause=1.0):
     with open(source_file, encoding="utf-8") as fh:
         data = json.load(fh)
-    sources = data.get("sources", data if isinstance(data, list) else [])
+    sources = data if isinstance(data, list) else data.get("sources", [])
     results, errors = [], []
     for source in sources:
         url = source.get("url", "")
@@ -38,7 +38,7 @@ def snapshot_sources(source_file, output_file, timeout=15, pause=1.0):
             source["archive_error"] = str(exc)[:500]
             errors.append({"source_id": source.get("source_id"), "error": str(exc)[:500]})
         time.sleep(max(0, pause))
-    output = {"source_count": len(results), "sources": sources, "errors": errors,
+    output = {"source_count": len(sources), "sources": sources, "errors": errors,
               "disclaimer": "Archive availability preserves a historical copy link; it does not validate source authenticity or claim truth."}
     os.makedirs(os.path.dirname(output_file) or ".", exist_ok=True)
     with open(output_file, "w", encoding="utf-8") as fh:
