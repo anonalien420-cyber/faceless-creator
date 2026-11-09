@@ -37,7 +37,10 @@ def build_visual_prompts(claim, scene_number):
 
 def build_documentary(topic, fmt, ledger):
     claims = reviewed_claims(ledger)
-    selected = [c for c in claims if c.get("include_in_script", True)]
+    selected = [c for c in claims
+                if c.get("include_in_script", True)
+                and (topic.strip().casefold() == (c.get("topic") or "").strip().casefold()
+                     or topic.strip().casefold() in [t.strip().casefold() for t in c.get("topics", [])])]
     if not selected:
         raise ValueError("No reviewed claims are available for documentary generation.")
     selected.sort(key=lambda c: (c.get("sequence", 9999), c["claim_id"]))
