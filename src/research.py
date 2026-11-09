@@ -60,11 +60,29 @@ def search_crossref(query, rows=10):
     return results
 
 
+def search_library_of_congress(query, limit=10):
+    """Search Library of Congress public catalogue API for primary-source leads."""
+    params = urllib.parse.urlencode({"fo": "json", "q": query, "c": min(max(int(limit), 1), 50)})
+    payload = _get_json("https://www.loc.gov/search/?" + params)
+    results = []
+    for item in payload.get("results", []):
+        results.append({
+            "provider": "Library of Congress", "title": item.get("title") or "",
+            "url": item.get("url") or "", "doi": None,
+            "publication_year": item.get("date") or None,
+            "publication": "Library of Congress catalogue",
+            "authors": item.get("contributor") or [],
+            "work_type": item.get("original_format") or "primary-source catalogue record",
+            "discovery_only": True,
+        })
+    return results
+
+
 def discover(query, limit=10):
     """Return deduplicated scholarly candidates; no candidate is auto-approved."""
     found = []
     errors = []
-    for provider in (search_openalex, search_crossref):
+    for provider in (search_openalex, search_crossref, search_library_of_congress):
         try:
             found.extend(provider(query, limit))
         except Exception as exc:
