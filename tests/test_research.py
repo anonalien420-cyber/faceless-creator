@@ -18,6 +18,7 @@ class ResearchTests(unittest.TestCase):
         self.assertEqual(rows[0]["publication"], "History Journal")
         self.assertTrue(rows[0]["discovery_only"])
 
+    @patch("src.research.search_library_of_congress", return_value=[])
     @patch("src.research.search_crossref", return_value=[])
     @patch("src.research.search_openalex", return_value=[{
         "title": "Same record", "url": "https://example.org/a", "doi": None
