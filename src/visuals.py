@@ -5,6 +5,7 @@ Requires a user-supplied ComfyUI API workflow JSON. The workflow must contain
 inputs. No provider is called unless COMFYUI_BASE_URL is configured.
 """
 import argparse
+import hashlib
 import json
 import os
 import random
@@ -99,15 +100,43 @@ def generate_script_assets(script, workflow_path, base_url, outdir,
                            media_type="image", timeout=600):
     with open(workflow_path, encoding="utf-8") as fh:
         workflow = json.load(fh)
+    workflow_hash = hashlib.sha256(json.dumps(workflow, sort_keys=True).encode("utf-8")).hexdigest()
+    manifest_path = os.path.join(outdir, "visual_manifest.json")
+    os.makedirs(outdir, exist_ok=True)
+    previous = {}
+    if os.path.exists(manifest_path):
+        try:
+            with open(manifest_path, encoding="utf-8") as fh:
+                previous = {str(a.get("scene")): a for a in json.load(fh).get("assets", [])}
+        except (OSError, ValueError, AttributeError):
+            previous = {}
     manifest = []
     for scene in script.get("scenes", []):
-        manifest.append(generate_scene(scene, workflow, base_url, outdir,
-                                       media_type=media_type, timeout=timeout))
+        prompt = scene.get("image_prompt" if media_type == "image" else "animation_prompt", "")
+        fingerprint = hashlib.sha256((prompt + workflow_hash + media_type).encode("utf-8")).hexdigest()
+        cached = previous.get(str(scene.get("scene")))
+        if (cached and cached.get("fingerprint") == fingerprint
+                and os.path.exists(cached.get("path", ""))
+                and os.path.getsize(cached.get("path", "")) > 0):
+            manifest.append(cached)
+            continue
+        asset = generate_scene(scene, workflow, base_url, outdir,
+                               media_type=media_type, timeout=timeout)
+        asset["fingerprint"] = fingerprint
+        manifest.append(asset)
+        # Persist after every completed scene so an interrupted job can resume.
+        partial = {"topic": script.get("topic"), "format": script.get("format"),
+                   "assets": manifest,
+                   "disclaimer": "AI-generated interpretive reconstructions; never archival footage."}
+        with open(manifest_path + ".tmp", "w", encoding="utf-8") as fh:
+            json.dump(partial, fh, indent=2, ensure_ascii=False)
+            fh.flush()
+            os.fsync(fh.fileno())
+        os.replace(manifest_path + ".tmp", manifest_path)
     result = {"topic": script.get("topic"), "format": script.get("format"),
               "assets": manifest,
               "disclaimer": "AI-generated interpretive reconstructions; never archival footage."}
-    os.makedirs(outdir, exist_ok=True)
-    with open(os.path.join(outdir, "visual_manifest.json"), "w", encoding="utf-8") as fh:
+    with open(manifest_path, "w", encoding="utf-8") as fh:
         json.dump(result, fh, indent=2, ensure_ascii=False)
     return result
 
