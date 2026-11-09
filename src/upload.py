@@ -22,6 +22,13 @@ def plan(video, title, description, privacy, publish_at=None):
 
 
 def upload(video, title, description, privacy, publish_at=None, tags=None):
+    # Defense in depth: callers cannot bypass the CLI publishing policy.
+    if privacy != "unlisted" or publish_at:
+        raise ValueError("Only unlisted, unscheduled uploads are permitted.")
+    if os.environ.get("HUMAN_REVIEW_APPROVED", "") != "true":
+        raise PermissionError("Human review approval is required before upload.")
+    if os.environ.get("UPLOAD_ENABLED", "") != "true":
+        raise PermissionError("UPLOAD_ENABLED must be true before upload.")
     try:
         from google_auth_oauthlib.flow import InstalledAppFlow
         from google.auth.transport.requests import Request
