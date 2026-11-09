@@ -78,11 +78,34 @@ def search_library_of_congress(query, limit=10):
     return results
 
 
+def search_internet_archive(query, limit=10):
+    """Search Internet Archive metadata for archival and primary-source leads."""
+    params = urllib.parse.urlencode({
+        "q": query, "fl[]": ["identifier", "title", "date", "creator", "mediatype"],
+        "rows": min(max(int(limit), 1), 50), "output": "json"
+    }, doseq=True)
+    payload = _get_json("https://archive.org/advancedsearch.php?" + params)
+    docs = payload.get("response", {}).get("docs", [])
+    results = []
+    for item in docs:
+        identifier = item.get("identifier")
+        results.append({
+            "provider": "Internet Archive", "title": item.get("title") or "",
+            "url": ("https://archive.org/details/" + identifier) if identifier else "",
+            "doi": None, "publication_year": item.get("date") or None,
+            "publication": "Internet Archive digital collection",
+            "authors": item.get("creator") or [],
+            "work_type": item.get("mediatype") or "archival catalogue record",
+            "discovery_only": True,
+        })
+    return results
+
+
 def discover(query, limit=10):
     """Return deduplicated scholarly candidates; no candidate is auto-approved."""
     found = []
     errors = []
-    for provider in (search_openalex, search_crossref, search_library_of_congress):
+    for provider in (search_openalex, search_crossref, search_library_of_congress, search_internet_archive):
         try:
             found.extend(provider(query, limit))
         except Exception as exc:
