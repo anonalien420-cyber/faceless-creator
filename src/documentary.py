@@ -81,7 +81,7 @@ def build_documentary(topic, fmt, ledger):
         "hook": hook, "shock_hook": {"text": hook, "tier": "KNOWN",
             "source": next((sources[sid] for sid in hook_claim.get("source_ids", []) if sid in sources), {})},
         "sections": sections, "chapters": [s["title"] for s in sections],
-        "text": body, "cta": "The evidence is what we have. The unanswered questions are what remain. What do you think the record supports?",
+        "text": body, "cta": "The evidence is what we have. The unanswered questions are what remain. What do you think happened? What does the record actually support?",
         "word_count": len(body.split()), "claim_ids": [c["claim_id"] for c in selected],
         "sources": list(sources.values()), "evidence_ledger_version": ledger.get("schema_version", 1),
         "scenes": scenes, "visual_disclaimer": "All generated visuals are interpretive AI reconstructions, never authentic historical footage."
