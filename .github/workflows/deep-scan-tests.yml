@@ -23,7 +23,7 @@ jobs:
       - name: Audit Python dependencies
         run: pip-audit -r requirements.txt
       - name: Static security scan
-        run: bandit -q -r src -x tests || test $? -eq 1
+        run: bandit -q -r src -x tests --severity-level high
       - name: Compile Python modules
         run: python -m compileall -q src tests
       - name: Run complete test suite
