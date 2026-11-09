@@ -32,7 +32,10 @@ jobs:
         run: python scripts/ffmpeg_render_smoke.py
       - name: Verify no accidental credential files are tracked
         run: |
-          if git ls-files | grep -E '(^|/)(token\.json|client_secrets\.json|\.env)
+          if git ls-files | grep -E '(^|/)(token\\.json|client_secrets\\.json|\\.env)
+            echo 'Credential file is tracked' >&2
+            exit 1
+          fi
 ; then
             echo 'Credential file is tracked' >&2
             exit 1
