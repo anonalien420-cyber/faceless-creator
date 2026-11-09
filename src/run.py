@@ -25,6 +25,11 @@ import sys
 from datetime import datetime, timezone
 
 try:
+    from src.job_state import JobState, run_with_retries
+except ImportError:
+    from job_state import JobState, run_with_retries
+
+try:
     from src.config import load_config
 except ImportError:
     from config import load_config
@@ -44,10 +49,13 @@ def log_step(log, name, status, detail=""):
 
 
 def run_cmd(cmd, step, log):
-    result = subprocess.run(cmd, capture_output=True, text=True)
-    if result.returncode != 0:
-        log_step(log, step, "FAILED", (result.stderr or result.stdout)[-4000:])
-        raise SystemExit(f"Step failed: {step} (exit {result.returncode})")
+    state = JobState("data/job_state.json", run_id=log.get("started_at"))
+    attempts = int(os.environ.get("DEEP_SCAN_STEP_ATTEMPTS", "3") or 3)
+    try:
+        result = run_with_retries(cmd, step, state=state, attempts=attempts)
+    except RuntimeError as exc:
+        log_step(log, step, "FAILED", str(exc)[-4000:])
+        raise SystemExit("Step failed: {}".format(step))
     log_step(log, step, "ok", (result.stdout or "").strip().splitlines()[-1]
              if result.stdout.strip() else "")
     return result
@@ -176,13 +184,40 @@ def build_format(log, fmt, scripts, config, niche, args):
                  os.path.join(audio_dir, f"{name}.mp3"), "--output", mixed,
                  "--top5", "data/top5.json"], f"music:{fmt}:{name}", log)
     if not args.skip_video:
+        visual_manifest = ""
+        comfy_url = os.environ.get("COMFYUI_BASE_URL", "").strip()
+        workflow_path = os.environ.get("COMFYUI_IMAGE_WORKFLOW", "").strip()
+        if comfy_url and workflow_path:
+            by_topic = {}
+            media_type = os.environ.get("COMFYUI_MEDIA_TYPE", "image").strip() or "image"
+            for script in items:
+                asset_dir = os.path.join("data/generated_visuals", fmt, slug(script["topic"]))
+                single_script = os.path.join(asset_dir, "script.json")
+                os.makedirs(asset_dir, exist_ok=True)
+                with open(single_script, "w", encoding="utf-8") as sfh:
+                    json.dump(script, sfh, indent=2)
+                run_cmd([sys.executable, "-m", "src.visuals", "--script", single_script,
+                         "--workflow", workflow_path, "--outdir", asset_dir,
+                         "--media-type", media_type, "--base-url", comfy_url],
+                        "visual_generation:{}:{}".format(fmt, slug(script["topic"])), log)
+                manifest_path = os.path.join(asset_dir, "visual_manifest.json")
+                with open(manifest_path, encoding="utf-8") as fh:
+                    # The generator accepts a single script file. Extract the
+                    # current topic's matching scene manifest from the full list.
+                    generated = json.load(fh)
+                by_topic[script["topic"]] = generated.get("assets", [])
+            visual_manifest = os.path.join("data", "generated_visuals", fmt, "visuals_by_topic.json")
+            os.makedirs(os.path.dirname(visual_manifest), exist_ok=True)
+            with open(visual_manifest, "w", encoding="utf-8") as fh:
+                json.dump({"by_topic": by_topic}, fh, indent=2)
         # Funnel end card: Shorts push to the same-day long video;
         # longs tease the next episode.
         end_card = ("Watch the full video today" if fmt == "short"
                     else "Next episode tomorrow")
         run_cmd([sys.executable, "-m", "src.video", "--input", scripts,
                  "--audio-dir", mixed_dir, "--outdir", video_dir,
-                 "--format", fmt, "--end-card-text", end_card],
+                 "--format", fmt, "--end-card-text", end_card]
+                + (["--visuals-file", visual_manifest] if visual_manifest else []),
                 f"video:{fmt}", log)
     qa_reports = []
     for script in items:
@@ -370,6 +405,13 @@ def main(argv=None):
             run_cmd([sys.executable, "-m", "src.research", "--query", niche,
                      "--output", "data/research_sources.json"],
                     "historical_research", log)
+            # Metadata verification is a separate report, never an automatic
+            # source approval or truth score. The evidence ledger remains the gate.
+            if os.path.exists("data/evidence_ledger.json"):
+                run_cmd([sys.executable, "-m", "src.verification", "--ledger",
+                         "data/evidence_ledger.json", "--output",
+                         "data/verification_report.json"],
+                        "historical_verification", log)
         # Long-form uses #1 in depth; Shorts use #2 and #3 (or fewer if
         # the top 5 is short). One trends run feeds both formats.
         long_cands = top5[:long_count]
