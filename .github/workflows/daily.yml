@@ -9,8 +9,8 @@ name: Daily faceless videos (1 long + 2 Shorts)
 #   output: "1 long + 2 Shorts". Defaults are capped at 1 + 2 — more
 #   than that risks spam and a quality drop, so do not raise them here
 #   without a reason (config: long_videos_per_day, shorts_per_day).
-# - Every output passes the QA gate (src/qa.py) before upload; a QA
-#   failure fails the run and uploads NOTHING.
+# - Every output passes the QA gate (src/qa.py) before review; a QA
+#   failure fails the run and prevents the output entering the queue.
 # - This workflow NEVER uploads to YouTube. It renders, runs QA, and
 #   writes the human review queue only. Public publication is manual.
 # - Peak-time scheduling is disabled for this workflow; no unattended
@@ -37,7 +37,7 @@ jobs:
         run: sudo apt-get update && sudo apt-get install -y ffmpeg
       - name: Install Python deps
         run: pip install -r requirements.txt
-      - name: Run pipeline (dry-run upload unless UPLOAD_ENABLED)
+      - name: Run pipeline (render and review only)
         env:
           YT_API_KEY: ${{ secrets.YT_API_KEY }}
         run: |
