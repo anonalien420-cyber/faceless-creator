@@ -34,6 +34,10 @@ class EvidenceTests(unittest.TestCase):
                  "reviewed_at": "2026-11-09T00:00:00Z"}
         self.assertTrue(validate_claim(claim, {"s1": source}))
 
+    def test_ledger_duplicate_source_ids_block(self):
+        source = dict(self.source)
+        self.assertTrue(validate_ledger({"sources": [self.source, source], "claims": []}))
+
     def test_ledger_duplicate_claim_ids_block(self):
         claim = {"claim_id": "c1", "topic": "Test topic", "text": "Claim.", "status": "UNKNOWN",
                  "source_ids": [], "reviewed_by": "editor",
