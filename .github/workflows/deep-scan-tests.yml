@@ -18,9 +18,22 @@ jobs:
         run: sudo apt-get update && sudo apt-get install -y ffmpeg
       - name: Install Python dependencies
         run: pip install -r requirements.txt
+      - name: Install security and static-analysis tools
+        run: pip install pip-audit bandit
+      - name: Audit Python dependencies
+        run: pip-audit -r requirements.txt
+      - name: Static security scan
+        run: bandit -q -r src -x tests || test $? -eq 1
       - name: Compile Python modules
         run: python -m compileall -q src tests
       - name: Run complete test suite
         run: python -m unittest discover -s tests -v
       - name: Render portrait and landscape FFmpeg smoke tests
         run: python scripts/ffmpeg_render_smoke.py
+      - name: Verify no accidental credential files are tracked
+        run: |
+          if git ls-files | grep -E '(^|/)(token\.json|client_secrets\.json|\.env)
+; then
+            echo 'Credential file is tracked' >&2
+            exit 1
+          fi
