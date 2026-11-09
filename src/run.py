@@ -205,6 +205,10 @@ def build_format(log, fmt, scripts, config, niche, args):
                     # The generator accepts a single script file. Extract the
                     # current topic's matching scene manifest from the full list.
                     generated = json.load(fh)
+                run_cmd([sys.executable, "-m", "src.visual_qa", "--script",
+                         single_script, "--manifest", manifest_path, "--output",
+                         os.path.join(asset_dir, "visual_qa.json")],
+                        "visual_qa:{}:{}".format(fmt, slug(script["topic"])), log)
                 by_topic[script["topic"]] = generated.get("assets", [])
             visual_manifest = os.path.join("data", "generated_visuals", fmt, "visuals_by_topic.json")
             os.makedirs(os.path.dirname(visual_manifest), exist_ok=True)
