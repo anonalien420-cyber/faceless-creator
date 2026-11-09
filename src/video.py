@@ -41,6 +41,16 @@ WIDTH, HEIGHT, FPS = 1080, 1920, 30
 FADE = 0.5  # seconds of crossfade between visual segments
 
 
+def _run_ffmpeg(cmd):
+    """Run FFmpeg and preserve its diagnostic output on failure."""
+    result = subprocess.run(cmd, capture_output=True, text=True)
+    if result.returncode != 0:
+        details = (result.stderr or result.stdout or "FFmpeg returned no diagnostic output").strip()
+        raise RuntimeError(
+            f"FFmpeg failed with exit code {result.returncode}:\n{details[-12000:]}")
+    return result
+
+
 def _require(tool):
     if not shutil.which(tool):
         print(f"ERROR: {tool} is required but not found on PATH.", file=sys.stderr)
@@ -285,7 +295,7 @@ def build_video(script, audio_path, output, visuals=None, duration=None,
                "-t", str(duration), "-c:v", "libx264", "-pix_fmt", "yuv420p",
                "-b:v", bitrate, "-maxrate", "12M", "-bufsize", "20M",
                "-c:a", "aac", "-shortest", output]
-        subprocess.run(cmd, check=True)
+        _run_ffmpeg(cmd)
         print(f"Video -> {output} ({duration:.1f}s, {width}x{height}, gradient fallback)")
         return output
 
@@ -328,7 +338,7 @@ def build_video(script, audio_path, output, visuals=None, duration=None,
     filters.append("[vx]eq=contrast=1.05:saturation=1.10:brightness=0.02[vgrade]")
     filters.append(f"[vgrade]{','.join(overlay)}[vout]")
     cmd = (["ffmpeg", "-y"] + inputs +
-           ["-filter_complex", ";".join(filters),
+           ["-filter_complex_threads", "1", "-filter_complex", ";".join(filters),
             "-map", "[vout]", "-map", f"{audio_idx}:a",
             "-t", str(duration), "-c:v", "libx264", "-pix_fmt", "yuv420p",
             "-b:v", bitrate, "-maxrate", "12M", "-bufsize", "20M",
