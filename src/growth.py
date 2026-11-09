@@ -80,7 +80,7 @@ def compare_thumbnail_experiment(variants):
             "warning": "Observational comparison only; audience, traffic source, and timing can confound results."}
 
 
-def build_growth_report(analytics, metadata_entries=None):
+def build_growth_report(analytics, metadata_entries=None, experiments=None):
     reports = []
     for entry in metadata_entries or []:
         reports.append({"topic": entry.get("topic"),
@@ -96,6 +96,7 @@ def build_growth_report(analytics, metadata_entries=None):
                             len([r for r in analytics if isinstance(r.get("impressions_ctr_pct"), (int, float))]))
                            if any(isinstance(r.get("impressions_ctr_pct"), (int, float)) for r in analytics) else None,
         "metadata": reports,
+        "experiments": [compare_thumbnail_experiment(e) for e in (experiments or [])],
         "limitations": ["CSV metrics are only as complete as the export.",
                         "CTR and retention vary by traffic source and video age.",
                         "No automatic changes to channel settings or published videos are made."],
@@ -106,6 +107,7 @@ def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--analytics-csv", required=True)
     parser.add_argument("--metadata-json", default="")
+    parser.add_argument("--experiments-json", default="")
     parser.add_argument("--output", default="data/growth_report.json")
     args = parser.parse_args(argv)
     analytics = import_analytics_csv(args.analytics_csv)
@@ -113,7 +115,11 @@ def main(argv=None):
     if args.metadata_json and os.path.exists(args.metadata_json):
         with open(args.metadata_json, encoding="utf-8") as fh:
             metadata = json.load(fh)
-    report = build_growth_report(analytics, metadata)
+    experiments = []
+    if args.experiments_json and os.path.exists(args.experiments_json):
+        with open(args.experiments_json, encoding="utf-8") as fh:
+            experiments = json.load(fh)
+    report = build_growth_report(analytics, metadata, experiments)
     os.makedirs(os.path.dirname(args.output) or ".", exist_ok=True)
     with open(args.output, "w", encoding="utf-8") as fh:
         json.dump(report, fh, indent=2)
