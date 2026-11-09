@@ -90,7 +90,7 @@ class PhaseExpansionTests(unittest.TestCase):
              "source_type": "secondary"},
         ]
         base = ("A documented historical record describes the event with a precise date, "
-                "named location, and surviving material evidence that researchers can examine.")
+                "named location, and surviving material evidence that researchers can examine, rather than relying on later legends or unsupported retellings.")
         claims = []
         for i in range(4):
             claims.append({"claim_id": "c{}".format(i + 1), "topic": "Test mystery",
