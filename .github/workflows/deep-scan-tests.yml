@@ -3,9 +3,6 @@ name: Deep Scan tests
 on:
   pull_request:
     branches: [main]
-  push:
-    branches: [feature/deep-scan-evidence-engine]
-
 jobs:
   tests:
     runs-on: ubuntu-latest
