@@ -105,8 +105,7 @@ def main(argv=None):
               "Use --dry-run, or set UPLOAD_ENABLED=true explicitly.", file=sys.stderr)
         return 1
     tags = [t.strip() for t in args.tags.split(",") if t.strip()] or None
-    upload(args.video, args.title, args.description, privacy,
-           publish_at=publish_at, tags=tags)
+    upload(args.video, args.title, args.description, privacy, tags=tags)
     return 0
 
 
