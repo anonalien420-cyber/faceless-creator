@@ -588,7 +588,7 @@ Run a scholarly search:
 python -m src.research --query "Pompeii eruption archaeological evidence"
 ```
 
-OpenAlex, Crossref, and the Library of Congress public catalogue API are queried without paid API keys. Candidate records are
+OpenAlex, Crossref, the Library of Congress public catalogue, and Internet Archive advanced search are queried without paid API keys. Candidate records are
 written to `data/research_sources.json` and appended to
 `data/evidence_ledger.json` with `review_status: UNREVIEWED`. Metadata includes
 title, URL/DOI, authors, publication, year, provider, notes, and a discovery
