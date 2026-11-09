@@ -21,16 +21,11 @@ unless --hook-style is passed explicitly):
 - shock:     "Most people get X completely backwards."
 - story:     "I used to get X wrong every single week."
 
-History-mystery style (--style history_mystery, auto-detected when the
-locked/first niche in config.yaml mentions history + mystery):
-every script presents EVIDENCE first, then COMPETING THEORIES (each
-labelled as a theory, never as proven fact), then WHAT IS STILL
-UNEXPLAINED. It never presents a theory as proven fact, and it never
-invents historical "facts": dates, names, and findings in the template
-are structural ("researchers found...", "one theory says..."), and the
-script's `notes` field carries the rule that every concrete claim
-must be checked against a real source before publishing, with sources
-cited in `sources`. The generator itself cites no invented source.
+History-mystery style (auto-detected for the Deep Scan niche):
+historical scripts are built only from the reviewed claim-level
+evidence ledger via src/documentary.py. Generic history filler is
+disabled for this channel. KNOWN and DEBATED claims require approved
+source records; every claim is topic-scoped and linked to its evidence.
 
 Shock, honestly (see README "Shock, honestly"): a history video
 opens with a verified SHOCK HOOK — a genuinely surprising but TRUE
