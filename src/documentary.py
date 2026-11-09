@@ -19,6 +19,7 @@ def build_visual_prompts(claim, scene_number):
     return {
         "scene": scene_number,
         "claim_ids": [claim["claim_id"]],
+        "source_ids": claim.get("source_ids", []),
         "visual_type": "AI-generated interpretive reconstruction, NOT historical footage",
         "image_prompt": (
             "Historically grounded interpretive reconstruction, clearly illustrative and not archival. "
@@ -55,7 +56,9 @@ def build_documentary(topic, fmt, ledger):
                   "UNKNOWN": "What remains unknown: "}[tier]
         narration = prefix + evidence_text
         if tier == "DEBATED":
-            narration += " " + claim["debate_summary"].strip()
+            narration = ("One interpretation argues: " + claim["position_a"].strip()
+                         + " Another interpretation argues: " + claim["position_b"].strip()
+                         + " The disagreement remains unresolved: " + claim["debate_summary"].strip())
         section = {"title": claim.get("section_title") or "Evidence {}".format(i),
                    "tier": tier, "text": narration, "claim_ids": [claim["claim_id"]],
                    "source_ids": claim.get("source_ids", [])}
