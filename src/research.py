@@ -177,6 +177,17 @@ def main(argv=None):
             known.add(key)
             used_ids.add(source_id)
     save_ledger(ledger, "data/evidence_ledger.json")
+    # Keep discovery export IDs aligned with the canonical ledger IDs,
+    # including when a prior source already occupied the generated ID.
+    ledger_by_key = {(item.get("url") or item.get("doi")): item
+                     for item in ledger.get("sources", [])}
+    for item in result["sources"]:
+        canonical = ledger_by_key.get(item.get("url") or item.get("doi"))
+        if canonical:
+            item["source_id"] = canonical.get("source_id")
+            item["review_status"] = canonical.get("review_status", "UNREVIEWED")
+    with open(args.output, "w", encoding="utf-8") as fh:
+        json.dump(result, fh, indent=2, ensure_ascii=False)
     print("Discovered {} candidate source(s); none were auto-approved.".format(len(result["sources"])))
     if not result["sources"] and result["errors"]:
         print(json.dumps(result["errors"], indent=2))
