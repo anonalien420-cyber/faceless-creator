@@ -18,12 +18,13 @@ class ResearchTests(unittest.TestCase):
         self.assertEqual(rows[0]["publication"], "History Journal")
         self.assertTrue(rows[0]["discovery_only"])
 
+    @patch("src.research.search_internet_archive", return_value=[])
     @patch("src.research.search_library_of_congress", return_value=[])
     @patch("src.research.search_crossref", return_value=[])
     @patch("src.research.search_openalex", return_value=[{
         "title": "Same record", "url": "https://example.org/a", "doi": None
     }])
-    def test_discovery_deduplicates_and_never_approves(self, openalex, crossref, loc):
+    def test_discovery_deduplicates_and_never_approves(self, openalex, crossref, loc, archive):
         result = research.discover("history", 5)
         self.assertEqual(len(result["sources"]), 1)
         self.assertEqual(result["sources"][0]["review_status"], "UNREVIEWED")
