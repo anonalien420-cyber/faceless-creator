@@ -75,6 +75,14 @@ def discover(query, limit=10):
         if key and key not in seen:
             seen.add(key)
             item["source_id"] = "src_" + str(len(deduped) + 1).zfill(4)
+            host = (urllib.parse.urlparse(item.get("url") or "").hostname or "").lower()
+            publication = (item.get("publication") or "").lower()
+            if any(token in host for token in (".gov", ".edu", "museum", "archive", "library")):
+                item["source_priority"] = "institutional_or_primary"
+            elif any(token in publication for token in ("journal", "review", "proceedings", "transactions")):
+                item["source_priority"] = "academic_publication"
+            else:
+                item["source_priority"] = "scholarly_candidate"
             item["notes"] = ""
             item["review_status"] = "UNREVIEWED"
             deduped.append(item)
@@ -101,18 +109,27 @@ def main(argv=None):
         from evidence import load_ledger, save_ledger
     ledger = load_ledger("data/evidence_ledger.json")
     known = {s.get("url") or s.get("doi") for s in ledger.get("sources", [])}
+    used_ids = {s.get("source_id") for s in ledger.get("sources", [])}
     for source in result["sources"]:
         key = source.get("url") or source.get("doi")
         if key and key not in known:
+            base_id = source["source_id"]
+            source_id = base_id
+            suffix = 2
+            while source_id in used_ids:
+                source_id = base_id + "_" + str(suffix)
+                suffix += 1
             ledger["sources"].append({
-                "source_id": source["source_id"], "title": source["title"],
+                "source_id": source_id, "title": source["title"],
                 "url": source["url"], "doi": source.get("doi"),
                 "publication": source.get("publication", ""),
                 "publication_year": source.get("publication_year"),
                 "authors": source.get("authors", []), "provider": source.get("provider"),
-                "notes": "", "review_status": "UNREVIEWED"
+                "notes": "", "source_priority": source.get("source_priority"),
+                "review_status": "UNREVIEWED"
             })
             known.add(key)
+            used_ids.add(source_id)
     save_ledger(ledger, "data/evidence_ledger.json")
     print("Discovered {} candidate source(s); none were auto-approved.".format(len(result["sources"])))
     if not result["sources"] and result["errors"]:
