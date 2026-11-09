@@ -34,10 +34,19 @@ jobs:
             --json-output data/weekly_review.json \
             --history data/review_history.json
           cat data/weekly_review.md
+      - name: Import optional YouTube Studio analytics and thumbnail experiments
+        run: |
+          if [ -f data/youtube_studio_export.csv ]; then
+            python -m src.growth --analytics-csv data/youtube_studio_export.csv \
+              --experiments-json data/thumbnail_experiments.json \
+              --output data/growth_report.json
+          else
+            echo "No YouTube Studio CSV export present; growth report skipped."
+          fi
       - name: Commit review output + any safe config adjustments
         run: |
           git config user.name "faceless-creator-bot"
           git config user.email "faceless-creator-bot@users.noreply.github.com"
-          git add data/weekly_review.md data/weekly_review.json data/review_history.json config.yaml || true
+          git add data/weekly_review.md data/weekly_review.json data/review_history.json data/growth_report.json config.yaml || true
           git diff --cached --quiet || git commit -m "Weekly self-review: safe-bounded adjustments (see data/review_history.json)"
           git push || echo "Push skipped (no changes or no write access)."
