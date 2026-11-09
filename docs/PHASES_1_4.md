@@ -81,7 +81,7 @@ renders, dependency vulnerability auditing, high-severity Bandit checks, and
 a credential-file tracking check. Dependabot checks pip and GitHub Actions
 dependencies weekly.
 
-A passing CI run proves the tested modules and synthetic renderer work. It
+A passing CI run also executes `scripts/deep_scan_integration_smoke.py`, which builds a synthetic reviewed ledger, documentary script, SEO package, full-resolution render, and historical/technical QA report without external credentials. A passing CI run proves the tested modules and synthetic renderer work. It
 does not prove a live ComfyUI server, real provider credentials, historical
 source truth, YouTube upload permissions, or a full external daily production
 run. Human review remains required before any upload.
