@@ -674,6 +674,7 @@ def main(argv=None):
                              "Empty = auto-detect from config's first niche "
                              "(history + mystery -> history_mystery).")
     parser.add_argument("--config", default="config.yaml")
+    parser.add_argument("--ledger", default="data/evidence_ledger.json", help="Reviewed claim-level evidence ledger for history_mystery scripts.")
     args = parser.parse_args(argv)
 
     config = {}
@@ -702,6 +703,17 @@ def main(argv=None):
         builder = build_history_short_script if style == "history_mystery" else build_script
     candidates = load_candidates(args.input)
     scripts = []
+    documentary_builder = None
+    evidence_ledger = None
+    if style == "history_mystery":
+        try:
+            from src.documentary import build_documentary
+            from src.evidence import load_ledger
+        except ImportError:
+            from documentary import build_documentary
+            from evidence import load_ledger
+        documentary_builder = build_documentary
+        evidence_ledger = load_ledger(args.ledger)
     for rank, cand in enumerate(candidates[: args.count], start=1):
         topic = topic_from_candidate(cand)
         # History shock hook + next-episode tease come from the
@@ -712,8 +724,9 @@ def main(argv=None):
             extra = {"shock_fact": cand.get("shock_fact"),
                      "shock_source": cand.get("shock_source"),
                      "next_topic": cand.get("next_topic")}
-        if args.format == "long":
-            script = builder(topic, hook_style=hook_style, target_words=target, **extra)
+        if style == "history_mystery":
+            # Evidence-driven mode: no generic historical filler or invented hooks.
+            script = documentary_builder(topic, args.format, evidence_ledger)
         else:
             script = builder(topic, hook_style=hook_style, target_words=target, **extra)
         script.setdefault("dropped_unverified", [])
