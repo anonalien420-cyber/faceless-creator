@@ -1,26 +1,10 @@
-"""Upload a video to YouTube. Draft-like by default, never public by accident.
+"""Upload only an unlisted draft after explicit human review.
 
-- Default privacyStatus: "unlisted" (draft-like; not listed, not public).
-  This is the human-review-queue flow: run.py writes data/review_queue.md
-  for every upload so a human can glance at title, thumbnail, script
-  summary, SEO, QA result, and scheduled peak time BEFORE the peak
-  window. Review the queue before the peak window.
-- --public / --auto-public publish immediately and publicly. --auto-public
-  is OFF by default for a reason: full auto-public risks factual and
-  taste mistakes that QA cannot catch — QA catches TECHNICAL mistakes
-  only (blank video, silent audio, wrong resolution, missing captions).
-  Use auto-public only if you accept that risk.
-- --publish-at-peak uploads as private with a YouTube publishAt time set
-  to the next peak window for the niche (src/scheduler.py). YouTube then
-  publishes the video at that time. This is the daily peak-time flow:
-  render in the morning, publish at peak, one video per day. Peak times
-  are general audience windows, NOT a guarantee of popularity.
-- --dry-run prints exactly what WOULD be uploaded and calls no API.
-- Real uploads are refused unless UPLOAD_ENABLED=true in the environment.
-- Requires client_secrets.json (YouTube Data API OAuth client) on first
-  run; the token is then stored in token.json (gitignored, never commit).
-
-Never run this in CI without explicitly setting UPLOAD_ENABLED=true.
+Deep Scan intentionally disables public and scheduled-public uploads.
+Manual unlisted uploads require HUMAN_REVIEW_APPROVED=true and
+UPLOAD_ENABLED=true. Final public publication must happen manually in
+YouTube Studio after the reviewer checks the evidence ledger and queue.
+--dry-run performs no network operation.
 """
 
 import argparse
