@@ -42,12 +42,20 @@ class EvidenceTests(unittest.TestCase):
 
     def test_documentary_requires_reviewed_shock_hook(self):
         ledger = {"schema_version": 1, "sources": [self.source], "claims": [{
-            "claim_id": "c1", "topic": "Test topic", "text": "A verified historical statement.", "status": "KNOWN",
+            "claim_id": "c1", "topic": "Test topic", "text": ("A verified historical statement. " * 35), "status": "KNOWN",
             "source_ids": ["s1"], "reviewed_by": "editor",
             "reviewed_at": "2026-11-09T00:00:00Z", "shock_hook": True}]}
         package = build_documentary("Test topic", "short", ledger)
         self.assertEqual(package["claim_ids"], ["c1"])
         self.assertIn("AI reconstruction", package["scenes"][0]["visual_type"])
+
+    def test_long_form_requires_sufficient_reviewed_evidence(self):
+        ledger = {"schema_version": 1, "sources": [self.source], "claims": [{
+            "claim_id": "c1", "topic": "Test topic", "text": "A short statement.",
+            "status": "KNOWN", "source_ids": ["s1"], "reviewed_by": "editor",
+            "reviewed_at": "2026-11-09T00:00:00Z", "shock_hook": True}]}
+        with self.assertRaisesRegex(ValueError, "1200-1800 words"):
+            build_documentary("Test topic", "long", ledger)
 
     def test_documentary_does_not_invent_hook(self):
         ledger = {"schema_version": 1, "sources": [self.source], "claims": [{
