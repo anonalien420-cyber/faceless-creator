@@ -75,7 +75,7 @@ python -m src.growth --analytics-csv data/youtube_studio_export.csv
 
 ## CI and maintenance
 
-The Deep Scan CI workflow runs Python tests, FFmpeg portrait/landscape smoke
+The weekly review optionally imports `data/youtube_studio_export.csv` and `data/thumbnail_experiments.json` when supplied. The Deep Scan CI workflow runs Python tests, FFmpeg portrait/landscape smoke
 renders, dependency vulnerability auditing, high-severity Bandit checks, and
 a credential-file tracking check. Dependabot checks pip and GitHub Actions
 dependencies weekly.
