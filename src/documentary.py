@@ -70,22 +70,21 @@ def build_documentary(topic, fmt, ledger):
                             "publication_year": source.get("publication_year"),
                             "notes": source.get("notes", "")}
     hook = hook_claim["text"].strip()
-    body = " ".join(lines)
-    if fmt == "short":
-        body = (hook + " " + body + " " +
-                "The evidence establishes some things. Other questions remain open. "
-                "Which conclusion is best supported by the record?")
-    else:
-        body = (hook + " " + body + " " +
-                "The record supports what is documented, not every explanation proposed for it. "
-                "The unresolved questions remain unresolved until new evidence changes that.")
+    cta = ("The evidence is what we have. The unanswered questions are what remain. "
+           "What do you think happened? What does the record actually support?")
+    body = " ".join([hook] + lines + [cta])
+    word_count = len(body.split())
+    if fmt == "short" and not 120 <= word_count <= 180:
+        raise ValueError("Short documentary needs 120-180 words of reviewed evidence; current package has {}. Add reviewed, topic-matched claims instead of padding.".format(word_count))
+    if fmt == "long" and not 1200 <= word_count <= 1800:
+        raise ValueError("Long-form documentary needs 1200-1800 words of reviewed evidence; current package has {}. Add reviewed, topic-matched claims instead of generic filler.".format(word_count))
     return {
         "topic": topic, "format": fmt, "style": "history_mystery",
         "hook": hook, "shock_hook": {"text": hook, "tier": "KNOWN",
             "source": next((sources[sid] for sid in hook_claim.get("source_ids", []) if sid in sources), {})},
         "sections": sections, "chapters": [s["title"] for s in sections],
-        "text": body, "cta": "The evidence is what we have. The unanswered questions are what remain. What do you think happened? What does the record actually support?",
-        "word_count": len(body.split()), "claim_ids": [c["claim_id"] for c in selected],
+        "text": body, "cta": cta,
+        "word_count": word_count, "claim_ids": [c["claim_id"] for c in selected],
         "sources": list(sources.values()), "evidence_ledger_version": ledger.get("schema_version", 1),
         "scenes": scenes, "visual_disclaimer": "All generated visuals are interpretive AI reconstructions, never authentic historical footage."
     }
