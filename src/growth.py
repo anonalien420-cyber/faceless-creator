@@ -19,8 +19,9 @@ def lint_metadata(entry):
         warnings.append("title is long; check mobile truncation")
     if not description:
         errors.append("missing description")
-    if len(tags) > 500:
-        errors.append("too many tags")
+    tag_chars = sum(len(str(tag)) for tag in tags)
+    if tag_chars > 500:
+        errors.append("combined tag text exceeds YouTube's 500-character limit")
     if entry.get("format") == "long" and not entry.get("chapters"):
         warnings.append("long-form entry has no chapter list")
     if entry.get("format") == "long" and "00:00" not in description:
