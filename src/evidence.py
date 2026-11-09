@@ -73,6 +73,10 @@ def validate_claim(claim, sources):
             errors.append(claim_id + ": source " + str(source_id) + " has no title")
         if not _valid_url(source.get("url", "")):
             errors.append(claim_id + ": source " + str(source_id) + " has no valid public URL")
+        if not (source.get("publication") or source.get("publication_year") or source.get("provider")):
+            errors.append(claim_id + ": source " + str(source_id) + " is missing publication details")
+        if not (source.get("notes") or "").strip():
+            errors.append(claim_id + ": source " + str(source_id) + " requires human review notes")
         if any(p in (source.get("title", "") + " " + source.get("notes", "")).lower() for p in PLACEHOLDERS):
             errors.append(claim_id + ": placeholder source text is not acceptable")
     if status == "DEBATED" and not (claim.get("debate_summary") or "").strip():
