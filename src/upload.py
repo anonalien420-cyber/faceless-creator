@@ -75,15 +75,15 @@ def main(argv=None):
                         help="Comma-separated tags for the video snippet.")
     parser.add_argument("--public", action="store_true")
     parser.add_argument("--auto-public", action="store_true",
-                        help="Publish publicly immediately (OFF by default). "
+                        help="Rejected: public publishing is disabled; publish manually in YouTube Studio. "
                              "WARNING: full auto-public risks factual/taste "
                              "mistakes QA cannot catch — QA catches technical "
                              "mistakes only. Review data/review_queue.md first.")
     parser.add_argument("--dry-run", action="store_true")
     parser.add_argument("--publish-at-peak", action="store_true",
-                        help="Upload private with publishAt = next peak window for --niche.")
+                        help="Rejected: scheduled public publishing is disabled.")
     parser.add_argument("--publish-at", default="",
-                        help="Explicit ISO publishAt timestamp (overrides --publish-at-peak).")
+                        help="Rejected: scheduled public publishing is disabled.")
     parser.add_argument("--niche", default="")
     parser.add_argument("--format", default="", choices=["", "short", "long"],
                         help="Use this format's peak window for --publish-at-peak.")
