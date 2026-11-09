@@ -570,3 +570,90 @@ data/
   were not available; not tested live).
 - Full end-to-end `src.run` render (needs narration audio + ffmpeg at
   runtime; `src.video` itself was compile-checked only).
+
+
+---
+
+## Deep Scan: evidence-led historical documentary production
+
+The history-mystery path now uses a claim-level evidence ledger. It is intentionally
+fail-closed: research discovery is not fact verification, and a generated script
+cannot turn an unreviewed search result into a KNOWN fact.
+
+### Research discovery
+
+Run a scholarly search:
+
+```bash
+python -m src.research --query "Pompeii eruption archaeological evidence"
+```
+
+OpenAlex and Crossref are queried without paid API keys. Candidate records are
+written to `data/research_sources.json` and appended to
+`data/evidence_ledger.json` with `review_status: UNREVIEWED`. Metadata includes
+title, URL/DOI, authors, publication, year, provider, notes, and a discovery
+priority hint. Institutional domains and primary-source repositories should be
+prioritized during human review. Search results are leads, not proof.
+
+### Claim-level review
+
+Start from the example:
+
+```bash
+cp data/evidence_ledger.example.json data/evidence_ledger.json
+python -m src.evidence --ledger data/evidence_ledger.json --validate
+```
+
+Each claim must have a unique `claim_id`, exact claim text, a status
+(`KNOWN`, `DEBATED`, or `UNKNOWN`), reviewer identity, and ISO-8601
+`reviewed_at`. KNOWN and DEBATED claims must cite one or more ledger sources
+whose `review_status` is `APPROVED`, with a title and valid URL. DEBATED
+claims additionally require a neutral summary of the disagreement. UNKNOWN
+claims still require human review, but must not be dressed up as established
+facts. Research discovery never sets source approval or claim status.
+
+A source is approved only after a person checks that the cited record exists
+and actually supports the exact claim. Record the reasoning in its `notes`.
+Do not mark a source APPROVED merely because it is returned by OpenAlex or
+Crossref.
+
+### Evidence-driven scripts and scene prompts
+
+History-mystery script generation now calls `src.documentary` and refuses to
+write a script unless the ledger validates and includes a reviewed KNOWN
+claim explicitly marked `shock_hook: true`. Each script section carries claim
+IDs and source IDs. The documentary package includes scene-by-scene image and
+animation prompts with period, location, clothing, architecture, objects,
+lighting, camera movement, and atmosphere fields. Missing historical details
+are called out rather than guessed.
+
+Generated visuals are labelled as interpretive AI reconstructions, never
+authentic historical footage. The prompts are production metadata; this
+repository does not yet call a generative image/video provider to render those
+prompts automatically.
+
+### QA and publication safety
+
+Historical QA now validates the full evidence ledger and confirms that script
+claim IDs exist in it. Missing reviews, unapproved sources, missing claim
+links, and invalid source records block the video before upload. The existing
+FFmpeg, narration, captions, thumbnail, SEO, and review-queue steps remain in
+place. The review queue now includes claim IDs and scene prompts.
+
+The daily GitHub workflow is render/review only. `src.upload` refuses public
+or scheduled-public flags and requires both `UPLOAD_ENABLED=true` and
+`HUMAN_REVIEW_APPROVED=true` for a manual unlisted upload. Final public
+publication must be performed by a person in YouTube Studio after reviewing
+the evidence and video. Do not add automatic public publishing back to CI.
+
+### Tests
+
+Run the test suite with:
+
+```bash
+python -m unittest discover -s tests -v
+```
+
+The tests cover scholarly metadata mapping, research discovery remaining
+unapproved, evidence review requirements, source approval, claim-ID integrity,
+documentary hook safeguards, and publishing restrictions.
