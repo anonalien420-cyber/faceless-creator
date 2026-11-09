@@ -16,7 +16,8 @@ class JobState:
             try:
                 with open(path, encoding="utf-8") as fh:
                     old = json.load(fh)
-                if old.get("schema_version") == 1 and isinstance(old.get("steps"), dict):
+                if (old.get("schema_version") == 1 and isinstance(old.get("steps"), dict)
+                        and (run_id is None or old.get("run_id") == run_id)):
                     self.data = old
             except (OSError, ValueError):
                 pass
