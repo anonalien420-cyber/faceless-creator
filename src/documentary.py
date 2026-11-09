@@ -20,7 +20,7 @@ def build_visual_prompts(claim, scene_number):
         "scene": scene_number,
         "claim_ids": [claim["claim_id"]],
         "source_ids": claim.get("source_ids", []),
-        "visual_type": "AI-generated interpretive reconstruction, NOT historical footage",
+        "visual_type": "AI reconstruction: interpretive reconstruction, NOT historical footage",
         "image_prompt": (
             "Historically grounded interpretive reconstruction, clearly illustrative and not archival. "
             "Period: {}. Location: {}. Clothing: {}. Architecture: {}. Objects: {}. "
