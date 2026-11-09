@@ -604,9 +604,9 @@ cp data/evidence_ledger.example.json data/evidence_ledger.json
 python -m src.evidence --ledger data/evidence_ledger.json --validate
 ```
 
-Each claim must have a unique `claim_id`, exact claim text, a status
+Each claim must have a unique `claim_id`, an exact documentary `topic` (or matching `topics` list), exact claim text, a status
 (`KNOWN`, `DEBATED`, or `UNKNOWN`), reviewer identity, and ISO-8601
-`reviewed_at`. KNOWN and DEBATED claims must cite one or more ledger sources
+`reviewed_at`. Claims are scoped to their topic so one episode cannot accidentally inherit evidence from another episode. KNOWN and DEBATED claims must cite one or more ledger sources
 whose `review_status` is `APPROVED`, with a title and valid URL. DEBATED
 claims additionally require a neutral summary of the disagreement. UNKNOWN
 claims still require human review, but must not be dressed up as established
