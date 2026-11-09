@@ -608,7 +608,7 @@ Each claim must have a unique `claim_id`, an exact documentary `topic` (or match
 (`KNOWN`, `DEBATED`, or `UNKNOWN`), reviewer identity, and ISO-8601
 `reviewed_at`. Claims are scoped to their topic so one episode cannot accidentally inherit evidence from another episode. KNOWN and DEBATED claims must cite one or more ledger sources
 whose `review_status` is `APPROVED`, with a title and valid URL. DEBATED
-claims additionally require a neutral summary of the disagreement. UNKNOWN
+claims additionally require two competing positions, a neutral summary of the disagreement, and at least two distinct approved source records. UNKNOWN
 claims still require human review, but must not be dressed up as established
 facts. Research discovery never sets source approval or claim status.
 
