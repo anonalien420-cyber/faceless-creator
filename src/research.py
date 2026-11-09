@@ -93,6 +93,27 @@ def main(argv=None):
     os.makedirs(os.path.dirname(args.output) or ".", exist_ok=True)
     with open(args.output, "w", encoding="utf-8") as fh:
         json.dump(result, fh, indent=2, ensure_ascii=False)
+    # Add discovered records to the working ledger as UNREVIEWED leads.
+    # Existing human decisions are preserved and never overwritten.
+    try:
+        from src.evidence import load_ledger, save_ledger
+    except ImportError:
+        from evidence import load_ledger, save_ledger
+    ledger = load_ledger("data/evidence_ledger.json")
+    known = {s.get("url") or s.get("doi") for s in ledger.get("sources", [])}
+    for source in result["sources"]:
+        key = source.get("url") or source.get("doi")
+        if key and key not in known:
+            ledger["sources"].append({
+                "source_id": source["source_id"], "title": source["title"],
+                "url": source["url"], "doi": source.get("doi"),
+                "publication": source.get("publication", ""),
+                "publication_year": source.get("publication_year"),
+                "authors": source.get("authors", []), "provider": source.get("provider"),
+                "notes": "", "review_status": "UNREVIEWED"
+            })
+            known.add(key)
+    save_ledger(ledger, "data/evidence_ledger.json")
     print("Discovered {} candidate source(s); none were auto-approved.".format(len(result["sources"])))
     if not result["sources"] and result["errors"]:
         print(json.dumps(result["errors"], indent=2))
