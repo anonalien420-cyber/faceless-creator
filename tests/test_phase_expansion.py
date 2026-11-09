@@ -9,6 +9,7 @@ from src.job_state import JobState, run_with_retries
 from src.growth import lint_metadata, compare_thumbnail_experiment, import_analytics_csv
 from src.documentary import build_documentary
 from src.visuals import generate_script_assets
+from src.visual_qa import check_visual_manifest
 
 
 class PhaseExpansionTests(unittest.TestCase):
@@ -65,6 +66,19 @@ class PhaseExpansionTests(unittest.TestCase):
             {"variant": "A", "impressions": 50, "impressions_ctr_pct": 4.0},
             {"variant": "B", "impressions": 60, "impressions_ctr_pct": 5.0}])
         self.assertEqual(result["status"], "insufficient_data")
+
+    def test_visual_qa_rejects_unlinked_or_undisclosed_asset(self):
+        with tempfile.TemporaryDirectory() as td:
+            path = os.path.join(td, "scene.png")
+            with open(path, "wb") as fh:
+                fh.write(b"image")
+            script = {"scenes": [{"scene": 1, "claim_ids": ["c1"], "source_ids": ["s1"]}]}
+            manifest = {"assets": [{"scene": 1, "path": path, "type": "image",
+                "claim_ids": ["wrong"], "source_ids": ["s1"],
+                "visual_type": "archival photograph", "prompt": "prompt"}]}
+            report = check_visual_manifest(script, manifest)
+            self.assertFalse(report["passed"])
+            self.assertGreaterEqual(len(report["errors"]), 2)
 
     def test_analytics_csv_import(self):
         with tempfile.TemporaryDirectory() as td:
