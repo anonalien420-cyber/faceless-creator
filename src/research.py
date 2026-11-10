@@ -10,7 +10,10 @@ import time
 import urllib.parse
 import urllib.request
 
-from src.source_types import classify_source
+try:
+    from src.source_types import classify_source
+except ImportError:
+    from source_types import classify_source
 
 OPENALEX = "https://api.openalex.org/works"
 CROSSREF = "https://api.crossref.org/works"
