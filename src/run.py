@@ -415,6 +415,18 @@ def main(argv=None):
                     "historical_source_archive", log)
             # Metadata verification is a separate report, never an automatic
             # source approval or truth score. The evidence ledger remains the gate.
+            # Create a human-readable review packet for the lead episode.
+            # It contains discovery candidates only; it never approves a
+            # source or invents a factual claim.
+            research_topic = (top5[0].get("title") or top5[0].get("topic")
+                              or niche) if top5 else niche
+            run_cmd([sys.executable, "-m", "src.review_packet",
+                     "--input", "data/research_sources.json",
+                     "--ledger", "data/evidence_ledger.json",
+                     "--topic", research_topic,
+                     "--output", "data/review_packet.md",
+                     "--json-output", "data/review_packet.json"],
+                    "historical_review_packet", log)
             if os.path.exists("data/evidence_ledger.json"):
                 run_cmd([sys.executable, "-m", "src.verification", "--ledger",
                          "data/evidence_ledger.json", "--output",
