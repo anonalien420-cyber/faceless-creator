@@ -5,7 +5,10 @@ import os
 import re
 from datetime import datetime, timezone
 
-from src.source_types import SOURCE_TYPES, classify_source
+try:
+    from src.source_types import SOURCE_TYPES, classify_source
+except ImportError:
+    from source_types import SOURCE_TYPES, classify_source
 
 SCHEMA_VERSION = 2
 STATUSES = {"KNOWN", "DEBATED", "UNKNOWN"}
@@ -132,7 +135,7 @@ def validate_ledger(ledger):
 def reviewed_claims(ledger):
     errors = validate_ledger(ledger)
     if errors:
-        raise ValueError("Evidence ledger is not publishable:\\n- " + "\\n- ".join(errors))
+        raise ValueError("Evidence ledger is not publishable:\n- " + "\n- ".join(errors))
     return ledger.get("claims", [])
 
 
@@ -148,7 +151,7 @@ def main(argv=None):
     errors = validate_ledger(ledger)
     print("Evidence ledger: {} claim(s), {} source(s).".format(len(ledger["claims"]), len(ledger["sources"])))
     if errors:
-        print("BLOCKED:\\n- " + "\\n- ".join(errors))
+        print("BLOCKED:\n- " + "\n- ".join(errors))
         return 1
     print("PASS: every claim has required human review and supporting source records.")
     return 0
