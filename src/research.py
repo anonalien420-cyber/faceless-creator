@@ -10,6 +10,8 @@ import time
 import urllib.parse
 import urllib.request
 
+from src.source_types import classify_source
+
 OPENALEX = "https://api.openalex.org/works"
 CROSSREF = "https://api.crossref.org/works"
 
@@ -124,6 +126,7 @@ def discover(query, limit=10):
                 item["source_priority"] = "academic_publication"
             else:
                 item["source_priority"] = "scholarly_candidate"
+            item["source_type"] = classify_source(item)
             item["notes"] = ""
             item["review_status"] = "UNREVIEWED"
             deduped.append(item)
@@ -172,6 +175,7 @@ def main(argv=None):
                 "publication_year": source.get("publication_year"),
                 "authors": source.get("authors", []), "provider": source.get("provider"),
                 "notes": "", "source_priority": source.get("source_priority"),
+                "source_type": source.get("source_type", classify_source(source)),
                 "review_status": "UNREVIEWED"
             })
             known.add(key)
