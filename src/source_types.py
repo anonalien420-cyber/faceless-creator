@@ -28,7 +28,10 @@ def classify_source(source):
     work_type = str(source.get("work_type") or "").strip().lower()
     publication = str(source.get("publication") or "").strip().lower()
     url = str(source.get("url") or "")
-    try:\n        host = (urlparse(url).hostname or "").lower()\n    except ValueError:\n        host = ""
+    try:
+        host = (urlparse(url).hostname or "").lower()
+    except ValueError:
+        host = ""
 
     if provider in {"library of congress", "internet archive"}:
         return "archival"
