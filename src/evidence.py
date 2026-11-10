@@ -5,12 +5,31 @@ import os
 import re
 from datetime import datetime, timezone
 
+from src.source_types import SOURCE_TYPES, classify_source
+
+SCHEMA_VERSION = 2
 STATUSES = {"KNOWN", "DEBATED", "UNKNOWN"}
 PLACEHOLDERS = ("placeholder", "do not publish", "to cite before publishing")
 
 
 def empty_ledger():
-    return {"schema_version": 1, "claims": [], "sources": []}
+    return {"schema_version": SCHEMA_VERSION, "claims": [], "sources": []}
+
+
+def migrate_ledger(ledger):
+    """Upgrade a v1 ledger in memory without changing human review decisions."""
+    migrated = dict(ledger or {})
+    version = migrated.get("schema_version", 1)
+    if version == SCHEMA_VERSION:
+        return migrated
+    if version != 1:
+        raise ValueError("Unsupported evidence ledger schema_version: {}".format(version))
+    migrated["claims"] = list(migrated.get("claims", []))
+    migrated["sources"] = [dict(source) for source in migrated.get("sources", [])]
+    for source in migrated["sources"]:
+        source["source_type"] = classify_source(source)
+    migrated["schema_version"] = SCHEMA_VERSION
+    return migrated
 
 
 def load_ledger(path="data/evidence_ledger.json"):
@@ -18,9 +37,7 @@ def load_ledger(path="data/evidence_ledger.json"):
         return empty_ledger()
     with open(path, encoding="utf-8") as fh:
         data = json.load(fh)
-    data.setdefault("claims", [])
-    data.setdefault("sources", [])
-    return data
+    return migrate_ledger(data)
 
 
 def save_ledger(ledger, path="data/evidence_ledger.json"):
@@ -90,9 +107,18 @@ def validate_claim(claim, sources):
 def validate_ledger(ledger):
     sources = _source_map(ledger)
     errors = []
+    version = ledger.get("schema_version", 1)
+    if version != SCHEMA_VERSION:
+        errors.append("evidence ledger schema_version must be {}".format(SCHEMA_VERSION))
     source_ids = [s.get("source_id") for s in ledger.get("sources", [])]
     if len(source_ids) != len(set(source_ids)):
         errors.append("source_id is missing or duplicated in the source catalogue")
+    if version == SCHEMA_VERSION:
+        for source in ledger.get("sources", []):
+            source_type = source.get("source_type")
+            if source_type not in SOURCE_TYPES:
+                errors.append("{}: source_type must be one of {}".format(
+                    source.get("source_id") or "source", ", ".join(sorted(SOURCE_TYPES))))
     seen = set()
     for claim in ledger.get("claims", []):
         cid = claim.get("claim_id")
@@ -106,7 +132,7 @@ def validate_ledger(ledger):
 def reviewed_claims(ledger):
     errors = validate_ledger(ledger)
     if errors:
-        raise ValueError("Evidence ledger is not publishable:\n- " + "\n- ".join(errors))
+        raise ValueError("Evidence ledger is not publishable:\\n- " + "\\n- ".join(errors))
     return ledger.get("claims", [])
 
 
@@ -122,7 +148,7 @@ def main(argv=None):
     errors = validate_ledger(ledger)
     print("Evidence ledger: {} claim(s), {} source(s).".format(len(ledger["claims"]), len(ledger["sources"])))
     if errors:
-        print("BLOCKED:\n- " + "\n- ".join(errors))
+        print("BLOCKED:\\n- " + "\\n- ".join(errors))
         return 1
     print("PASS: every claim has required human review and supporting source records.")
     return 0
