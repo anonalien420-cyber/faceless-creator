@@ -48,3 +48,19 @@ jobs:
           # Production workflow is render/review only. Publishing is a
           # separate human action after evidence and review-queue approval.
           python -m src.run $NICHE_ARG
+      - name: Preserve evidence review and run diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: deep-scan-review-${{ github.run_id }}
+          if-no-files-found: warn
+          retention-days: 14
+          path: |
+            data/review_packet.md
+            data/review_packet.json
+            data/research_sources.json
+            data/research_sources_archived.json
+            data/evidence_ledger.json
+            data/verification_report.json
+            data/run_log.json
+            data/job_state.json
