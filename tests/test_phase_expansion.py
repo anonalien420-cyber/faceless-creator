@@ -19,7 +19,7 @@ class PhaseExpansionTests(unittest.TestCase):
                 {"source_id": "a", "url": "https://archive.example.org/item",
                  "source_type": "primary", "review_status": "APPROVED", "notes": "Original record"},
                 {"source_id": "b", "url": "https://journal.example.com/paper",
-                 "source_type": "secondary", "review_status": "APPROVED", "notes": "Peer reviewed"},
+                 "source_type": "academic", "review_status": "APPROVED", "notes": "Peer reviewed"},
             ],
             "claims": [{"claim_id": "c1", "status": "KNOWN", "source_ids": ["a", "b"],
                         "date_start": "1900-02-30"}],
@@ -101,7 +101,7 @@ class PhaseExpansionTests(unittest.TestCase):
             {"source_id": "s", "title": "Research paper", "url": "https://journal.example.com/paper",
              "publication": "History Journal", "publication_year": 2020,
              "review_status": "APPROVED", "notes": "Peer-reviewed analysis",
-             "source_type": "secondary"},
+             "source_type": "academic"},
         ]
         base = ("A documented historical record describes the event with a precise date, "
                 "named location, and surviving material evidence that researchers can examine, rather than relying on later legends or unsupported retellings preserved in the original surviving archive.")
@@ -112,7 +112,7 @@ class PhaseExpansionTests(unittest.TestCase):
                 "reviewed_by": "human-reviewer", "reviewed_at": "2026-11-09T00:00:00Z",
                 "shock_hook": i == 0, "sequence": i + 1})
         package = build_documentary("Test mystery", "short",
-                                    {"schema_version": 1, "claims": claims, "sources": sources})
+                                    {"schema_version": 2, "claims": claims, "sources": sources})
         self.assertEqual(package["style"], "history_mystery")
         self.assertEqual(len(package["scenes"]), 4)
         self.assertIn("AI reconstruction", package["scenes"][0]["visual_type"])
