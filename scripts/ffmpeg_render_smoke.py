@@ -34,24 +34,24 @@ def main():
         run(["ffmpeg", "-y", "-f", "lavfi", "-i",
              "color=c=0x24324a:s=640x640:d=1", "-frames:v", "1", image])
         run(["ffmpeg", "-y", "-f", "lavfi", "-i",
-             "sine=frequency=440:duration=27", "-c:a", "pcm_s16le", audio])
+             "sine=frequency=440:duration=53", "-c:a", "pcm_s16le", audio])
 
         cases = [
-            # Portrait crosses the 10-second pattern-interrupt boundary.
-            ("short", 320, 568, 12),
-            # Landscape crosses the 25-second long-form boundary.
-            ("long", 568, 320, 26),
+            ("short-visual", 320, 568, 21, True),
+            ("short-gradient", 320, 568, 21, False),
+            ("long-visual", 568, 320, 51, True),
+            ("long-gradient", 568, 320, 51, False),
         ]
-        for name, width, height, duration in cases:
+        for name, width, height, duration, use_visual in cases:
             output = os.path.join(work, f"{name}.mp4")
             build_video(
-                {"topic": "Render smoke test", "hook": "A verified test hook.",
+                {"topic": "The historian's 100% test: a safe title", "hook": "Here's a 100% verified test hook.",
                  "text": "This is a synthetic render test, not a historical claim."},
                 audio, output,
-                visuals=[{"file": image, "type": "image"}],
+                visuals=([{"file": image, "type": "image"}] if use_visual else []),
                 duration=duration, bitrate="500k", min_resolution=100,
                 width=width, height=height,
-                end_card_text="Smoke test complete",
+                end_card_text="Don't miss this: 100% safe",
             )
             streams = probe(output)
             video_stream = next(s for s in streams if s["codec_type"] == "video")
