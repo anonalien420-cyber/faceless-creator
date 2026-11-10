@@ -1,5 +1,5 @@
 {
-  "schema_version": 1,
+  "schema_version": 2,
   "sources": [
     {
       "source_id": "museum_catalogue_001",
@@ -7,6 +7,7 @@
       "url": "https://example.org/collection-record",
       "publication": "Museum collection catalogue",
       "publication_year": 2020,
+      "source_type": "archival",
       "notes": "Replace with a real source; verify the exact record and its relevance.",
       "review_status": "UNREVIEWED"
     }
