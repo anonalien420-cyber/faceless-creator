@@ -14,7 +14,7 @@ class DrawtextFileTests(unittest.TestCase):
 
     def test_generated_textfile_path_is_filter_escaped(self):
         self.assertEqual(_drawtext_path(r"C:\\temp\\file.txt"),
-                         r"C\\:\\\\temp\\\\file.txt")
+                         r"C\:\\temp\\file.txt")
         self.assertEqual(_drawtext_path("/tmp/a:b.txt"), "/tmp/a\\:b.txt")
 
 
