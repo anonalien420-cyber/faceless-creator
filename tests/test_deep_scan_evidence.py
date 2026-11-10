@@ -7,7 +7,7 @@ class EvidenceTests(unittest.TestCase):
     def setUp(self):
         self.source = {"source_id": "s1", "title": "Museum catalogue",
                        "url": "https://museum.example.org/catalogue",
-                       "review_status": "APPROVED", "publication": "Museum collection catalogue", "publication_year": 2020, "notes": "Reviewed record"}
+                       "review_status": "APPROVED", "publication": "Museum collection catalogue", "publication_year": 2020, "source_type": "archival", "notes": "Reviewed record"}
         self.sources = {"s1": self.source}
 
     def test_known_requires_human_review_and_approved_source(self):
@@ -45,7 +45,7 @@ class EvidenceTests(unittest.TestCase):
         self.assertTrue(validate_ledger({"sources": [], "claims": [claim, claim]}))
 
     def test_documentary_requires_reviewed_shock_hook(self):
-        ledger = {"schema_version": 1, "sources": [self.source], "claims": [{
+        ledger = {"schema_version": 2, "sources": [self.source], "claims": [{
             "claim_id": "c1", "topic": "Test topic", "text": ("A verified historical statement. " * 25), "status": "KNOWN",
             "source_ids": ["s1"], "reviewed_by": "editor",
             "reviewed_at": "2026-11-09T00:00:00Z", "shock_hook": True}]}
@@ -54,7 +54,7 @@ class EvidenceTests(unittest.TestCase):
         self.assertIn("AI reconstruction", package["scenes"][0]["visual_type"])
 
     def test_long_form_requires_sufficient_reviewed_evidence(self):
-        ledger = {"schema_version": 1, "sources": [self.source], "claims": [{
+        ledger = {"schema_version": 2, "sources": [self.source], "claims": [{
             "claim_id": "c1", "topic": "Test topic", "text": "A short statement.",
             "status": "KNOWN", "source_ids": ["s1"], "reviewed_by": "editor",
             "reviewed_at": "2026-11-09T00:00:00Z", "shock_hook": True}]}
@@ -62,7 +62,7 @@ class EvidenceTests(unittest.TestCase):
             build_documentary("Test topic", "long", ledger)
 
     def test_documentary_does_not_invent_hook(self):
-        ledger = {"schema_version": 1, "sources": [self.source], "claims": [{
+        ledger = {"schema_version": 2, "sources": [self.source], "claims": [{
             "claim_id": "c1", "topic": "Test topic", "text": "A statement.", "status": "KNOWN",
             "source_ids": ["s1"], "reviewed_by": "editor",
             "reviewed_at": "2026-11-09T00:00:00Z"}]}
