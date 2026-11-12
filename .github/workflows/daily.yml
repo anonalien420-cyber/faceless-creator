@@ -72,8 +72,11 @@ jobs:
             data/scripts_shorts.json
             data/seo.json
             data/qa_report*.json
+            data/metadata_qa.json
             data/compare.md
             data/run_log.json
             data/job_state.json
+            data/series_state.json
             data/generated_visuals/**
             data/thumbnails/**
+            data/thumbnails.json
