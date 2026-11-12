@@ -264,9 +264,9 @@ def check_accuracy(script):
         checks.append({"check": name, "status": "pass" if passed else "fail",
                        "detail": detail})
 
-    if not script or script.get("style") != "history_mystery":
+    if not isinstance(script, dict) or script.get("style") != "history_mystery":
         add("accuracy_applies", True,
-            "not a history_mystery script; accuracy checklist not applicable")
+            "not a history_mystery script dict; accuracy checklist not applicable")
         return checks
     # Claim-level evidence gate: every referenced claim must exist in the
     # validated ledger and every claim/source must have human review.
@@ -440,7 +440,24 @@ def main(argv=None):
     script = None
     if args.script_json and os.path.exists(args.script_json):
         with open(args.script_json, encoding="utf-8") as fh:
-            script = json.load(fh)
+            loaded = json.load(fh)
+        # Pipeline script files are lists (scripts_long/shorts.json and
+        # documentary packages are both JSON lists). Unwrap to the single
+        # script dict this QA run is about: the one matching --title, or
+        # the only/first entry. A list must never crash check_accuracy.
+        if isinstance(loaded, list):
+            if not loaded:
+                script = None
+            elif len(loaded) == 1:
+                script = loaded[0]
+            else:
+                script = next(
+                    (e for e in loaded
+                     if isinstance(e, dict) and (e.get("topic") == args.title
+                                                 or e.get("title") == args.title)),
+                    loaded[0])
+        else:
+            script = loaded
     ok = run_qa(args.video, narration=args.narration,
                 script_text=args.script_text or "", title=args.title,
                 report_path=args.report, fmt=args.format, script=script)
