@@ -80,9 +80,9 @@ channel_name: "The Deep Scan"
 # narrator_tier: "free" (default, Edge TTS neural voices + SSML prosody),
 #   "local" (Kokoro open-weight if installed, else Edge TTS fallback),
 #   "paid" (ElevenLabs, requires ELEVENLABS_API_KEY — never default).
-narrator_voice: "en-US-ChristopherNeural"
-narrator_tier: "free"
-narrator_speed: 1.0
+narrator_voice: "bm_george"
+narrator_tier: "local"
+narrator_speed: 0.9
 narrator_pause_ms: 350
 
 # --- Music: trending-STYLE matching, royalty-free only ---
@@ -93,6 +93,12 @@ narrator_pause_ms: 350
 # EXAMPLE entries below are placeholders (example: true) and are skipped
 # by the matcher — replace them with tracks you have rights to use.
 music_library:
+  - file: "music/mellow_history_bed.mp3"
+    genre: "ambient"
+    tempo_bpm: 60
+    mood: "mellow"
+    license: "synthesized in-house, royalty-free"
+    example: false
   - file: "music/example-fast-upbeat-pop.mp3"
     genre: "pop"
     tempo_bpm: 125
