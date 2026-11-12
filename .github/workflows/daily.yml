@@ -40,14 +40,17 @@ jobs:
       - name: Run pipeline (render and review only)
         env:
           YT_API_KEY: ${{ secrets.YT_API_KEY }}
+          NICHE_INPUT: ${{ inputs.niche }}
         run: |
-          NICHE_ARG=""
-          if [ -n "${{ inputs.niche }}" ]; then
-            NICHE_ARG="--niche ${{ inputs.niche }}"
+          # Pass the workflow input through the environment, not by
+          # interpolating untrusted text into shell source.
+          NICHE_ARGS=()
+          if [[ -n "$NICHE_INPUT" ]]; then
+            NICHE_ARGS+=(--niche "$NICHE_INPUT")
           fi
           # Production workflow is render/review only. Publishing is a
           # separate human action after evidence and review-queue approval.
-          python -m src.run $NICHE_ARG
+          python -m src.run "${NICHE_ARGS[@]}"
       - name: Preserve evidence review and run diagnostics
         if: always()
         uses: actions/upload-artifact@v4
