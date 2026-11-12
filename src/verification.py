@@ -69,6 +69,16 @@ def verify_ledger(ledger):
         score += 15 if all(s.get("review_status") == "APPROVED" for s in linked) and linked else 0
         score += 10 if all(s.get("notes") for s in linked) and linked else 0
         score += 10 if start or end or claim.get("date_precision") == "not_applicable" else 0
+        # A high metadata score with zero primary/archival/official
+        # sources is NOT a clean pass: completeness without a primary
+        # source still needs human review. Flag it explicitly instead
+        # of letting the score speak for the claim.
+        needs_review = score >= 80 and not primary
+        if needs_review:
+            warnings.append(
+                "Score {} with no primary/archival/official source: high metadata "
+                "completeness is not evidence of truth; human review required "
+                "before this claim is treated as verified.".format(score))
         results.append({
             "claim_id": cid, "status": claim.get("status"),
             "metadata_completeness_score": score,
@@ -77,11 +87,13 @@ def verify_ledger(ledger):
             "primary_source_count": len(primary), "errors": errors, "warnings": warnings,
             "conflicts_with": claim.get("conflicts_with", []),
             "passed": not errors,
+            "needs_review": needs_review,
         })
     return {
         "schema_version": 1,
         "claim_count": len(results),
-        "passed": all(r["passed"] for r in results),
+        "passed": all(r["passed"] and not r["needs_review"] for r in results),
+        "needs_review": any(r["needs_review"] for r in results),
         "claims": results,
         "policy": "No automated score approves a source or changes KNOWN/DEBATED/UNKNOWN status.",
     }
