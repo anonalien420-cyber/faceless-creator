@@ -51,19 +51,29 @@ jobs:
           # Production workflow is render/review only. Publishing is a
           # separate human action after evidence and review-queue approval.
           python -m src.run "${NICHE_ARGS[@]}"
-      - name: Preserve evidence review and run diagnostics
+      - name: Preserve rendered videos and review package
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: deep-scan-review-${{ github.run_id }}
+          name: deep-scan-production-${{ github.run_id }}
           if-no-files-found: warn
           retention-days: 14
           path: |
+            data/videos_long/**
+            data/videos_short/**
+            data/review_queue.md
             data/review_packet.md
             data/review_packet.json
             data/research_sources.json
             data/research_sources_archived.json
             data/evidence_ledger.json
             data/verification_report.json
+            data/scripts_long.json
+            data/scripts_shorts.json
+            data/seo.json
+            data/qa_report*.json
+            data/compare.md
             data/run_log.json
             data/job_state.json
+            data/generated_visuals/**
+            data/thumbnails/**
