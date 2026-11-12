@@ -1,7 +1,23 @@
 # System dependency (not pip): ffmpeg + ffprobe must be installed separately.
-edge-tts
-requests
-google-api-python-client
-google-auth-oauthlib
+# All dependencies are pinned (==) so a fresh install reproduces the
+# versions this pipeline was built and tested against. Pinned versions
+# were verified 2026-11-12: kokoro/soundfile/numpy/Pillow/requests are
+# the versions installed in ~/workspace/tts_venv (kokoro 0.9.4 runs
+# there); edge-tts/google-api-python-client/google-auth-oauthlib/
+# pyttsx3 are not installed on this machine, so their pins are the
+# latest releases on PyPI, verified downloadable with
+# `pip download --no-deps` (wheels fetched 2026-11-12).
+edge-tts==7.3.1
+requests==2.34.2
+google-api-python-client==2.202.0
+google-auth-oauthlib==1.5.0
+# For Kokoro narration (local tier) and synthesized SFX:
+kokoro==0.9.4
+soundfile==0.14.0
+# Thumbnail generation (src/thumbnail.py) and audio arrays (src/narrate.py):
+Pillow==13.0.0
+numpy==2.5.4
+# Robotic offline fallback voice (src/narrate.py) when Edge TTS is unavailable:
+pyttsx3==2.99
 # Optional, for Google Trends interest data (RSS fallback works without it):
 # pytrends
