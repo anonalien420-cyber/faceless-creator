@@ -271,10 +271,6 @@ def upload_outputs(log, outputs, niche, args, seo_entries=None, long_title=""):
                "--niche", niche, "--format", fmt]
         if seo and seo.get("tags"):
             cmd += ["--tags", ",".join(seo["tags"])]
-        if args.public or args.auto_public:
-            cmd.append("--auto-public" if args.auto_public else "--public")
-        if args.publish_at_peak:
-            cmd.append("--publish-at-peak")
         if not args.upload:
             cmd.append("--dry-run")
         run_cmd(cmd, f"upload:{fmt}:{name}", log)
@@ -283,7 +279,7 @@ def upload_outputs(log, outputs, niche, args, seo_entries=None, long_title=""):
 
 
 def write_review_queue(outputs, niche, config, args, seo_entries, thumb_map):
-    """Human review queue (safety net, NOT full auto-public): one entry
+    """Human review queue (safety net — uploads are UNLISTED only): one entry
     per output with title, thumbnails (both A/B variants), script
     summary, SEO, QA result, and scheduled peak time. The creator
     should glance at this BEFORE the peak window. QA catches technical
@@ -294,10 +290,10 @@ def write_review_queue(outputs, niche, config, args, seo_entries, thumb_map):
         from scheduler import next_peak_window
     seo_by_topic = {e["topic"]: e for e in (seo_entries or [])}
     lines = ["# Human review queue — review BEFORE the peak window", "",
-             "Default uploads are UNLISTED (or private + scheduled with "
-             "--publish-at-peak). Nothing here is auto-public unless "
-             "--auto-public was passed, and that flag is OFF by default: "
-             "full auto-public risks factual/taste mistakes QA cannot catch. "
+             "Uploads are UNLISTED only. There is no public or scheduled-"
+             "public path in this pipeline: src/upload.py refuses any "
+             "public/scheduled request, and publishing happens manually "
+             "in YouTube Studio after a human reviews this queue. "
              "QA catches technical mistakes only (blank video, silent audio, "
              "wrong resolution, missing captions).", "",
              "HISTORICAL ACCURACY (history-mystery videos): before the peak "
@@ -354,13 +350,10 @@ def main(argv=None):
     parser.add_argument("--config", default="config.yaml")
     parser.add_argument("--trends-input", default="data/trends_input.json")
     parser.add_argument("--upload", action="store_true", help="Actually upload (needs UPLOAD_ENABLED=true).")
-    parser.add_argument("--public", action="store_true")
-    parser.add_argument("--auto-public", action="store_true",
-                        help="Publish publicly immediately (OFF by default). "
-                             "WARNING: QA catches technical mistakes only; "
-                             "review data/review_queue.md before using this.")
-    parser.add_argument("--publish-at-peak", action="store_true",
-                        help="Upload private with publishAt = next peak window (Shorts and long-form windows differ).")
+    # NOTE: there is deliberately NO --public / --auto-public /
+    # --publish-at-peak flag here. Public or scheduled publishing is
+    # disabled in src/upload.py and happens only manually in YouTube
+    # Studio after human review. Do not re-add these flags.
     parser.add_argument("--niche", default="",
                         help="Run one chosen niche only (overrides ranking).")
     parser.add_argument("--list-niches", action="store_true",
