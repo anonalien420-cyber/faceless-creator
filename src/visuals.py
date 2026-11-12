@@ -9,7 +9,9 @@ import hashlib
 import json
 import os
 import random
+import re
 import time
+import urllib.error
 import urllib.parse
 import urllib.request
 
@@ -22,9 +24,20 @@ def _request(base, path, payload=None, timeout=30):
     data = None if payload is None else json.dumps(payload).encode("utf-8")
     req = urllib.request.Request(base.rstrip("/") + path, data=data,
         headers={"Content-Type": "application/json"} if data is not None else {})
-    with urllib.request.urlopen(req, timeout=timeout) as response:
-        raw = response.read()
-        return json.loads(raw.decode("utf-8")) if raw else {}
+    try:
+        with urllib.request.urlopen(req, timeout=timeout) as response:
+            raw = response.read()
+            return json.loads(raw.decode("utf-8")) if raw else {}
+    except urllib.error.HTTPError as exc:
+        body = exc.read().decode("utf-8", "replace")[:500]
+        raise RuntimeError("ComfyUI request {} failed: HTTP {} {}".format(
+            path, exc.code, body)) from exc
+    except urllib.error.URLError as exc:
+        raise RuntimeError("Could not reach ComfyUI at {}{}: {}".format(
+            base, path, exc.reason)) from exc
+
+
+_PLACEHOLDER_RE = re.compile(r"\{\{(?:PROMPT|NEGATIVE_PROMPT|SEED)\}\}")
 
 
 def _replace(value, prompt, negative, seed):
@@ -33,9 +46,17 @@ def _replace(value, prompt, negative, seed):
     if isinstance(value, list):
         return [_replace(v, prompt, negative, seed) for v in value]
     if isinstance(value, str):
-        return (value.replace("{{PROMPT}}", prompt)
-                     .replace("{{NEGATIVE_PROMPT}}", negative)
-                     .replace("{{SEED}}", str(seed)))
+        # A bare {{SEED}} placeholder is a numeric node input in API-format
+        # workflows, so substitute the int seed itself: submitting the string
+        # "12345" would not match the seed the manifest records.
+        if value == "{{SEED}}":
+            return seed
+        subs = {"{{PROMPT}}": prompt, "{{NEGATIVE_PROMPT}}": negative,
+                "{{SEED}}": str(seed)}
+        # Single-pass substitution: replacement text is never rescanned, so a
+        # scene prompt that literally contains "{{SEED}}" (or another
+        # placeholder) survives verbatim instead of being rewritten.
+        return _PLACEHOLDER_RE.sub(lambda m: subs[m.group(0)], value)
     return value
 
 
@@ -68,7 +89,16 @@ def generate_scene(scene, workflow, base_url, outdir, media_type="image",
     history = {}
     while time.time() < deadline:
         history = _request(base_url, "/history/" + urllib.parse.quote(prompt_id))
-        if prompt_id in history and history[prompt_id].get("outputs"):
+        entry = history.get(prompt_id, {})
+        status = entry.get("status", {})
+        # Fail fast on a server-side error instead of burning the whole
+        # timeout and then reporting a misleading TimeoutError.
+        if status.get("status_str") == "error":
+            raise RuntimeError("ComfyUI generation failed for {}: {}".format(
+                prompt_id, status.get("messages") or status))
+        if entry.get("outputs"):
+            break
+        if status.get("status_str") == "success":
             break
         time.sleep(poll_interval)
     else:
