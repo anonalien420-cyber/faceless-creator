@@ -304,9 +304,12 @@ def build_video(script, audio_path, output, visuals=None, duration=None,
         f"x=(w-text_w)/2:y={height - 220}:enable='gt(t,{duration - 3:.2f})'")
     if not accepted:
         # Animated gradient fallback (no asset to grade).
+        # NOTE: the lavfi gradients source defaults to 25 fps, but the
+        # QA gate requires 30 fps — pin the chain to 30 explicitly, the
+        # same rate the visuals path enforces with fps={FPS}.
         cmd = ["ffmpeg", "-y", "-f", "lavfi",
                "-i", f"gradients=s={width}x{height}:c0=0x0f172a:c1=0x1e3a8a:x0=0:y0=0:x1={width}:y1={height}:duration={duration}",
-               "-i", audio_path, "-vf", ",".join(overlay),
+               "-i", audio_path, "-vf", ",".join(["fps=30"] + overlay),
                "-t", str(duration), "-c:v", "libx264", "-pix_fmt", "yuv420p",
                "-b:v", bitrate, "-maxrate", "12M", "-bufsize", "20M",
                "-c:a", "aac", "-shortest", output]
