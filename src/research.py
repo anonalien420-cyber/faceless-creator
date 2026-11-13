@@ -197,7 +197,7 @@ def provider_query_variants(query, config=None):
     extra = " ".join(synonyms)
     return {
         "OpenAlex": expanded,
-        "Crossref": (query.strip() + " " + extra).strip(),
+        "Crossref": (query.strip() + " " + " ".join(synonyms[:2])).strip(),
         "Library of Congress": (query.strip() + " OR " + extra).strip() if extra else query.strip(),
         "Internet Archive": "title:({}) OR description:({})".format(expanded, expanded),
     }
@@ -209,7 +209,7 @@ def _within_date_window(source, cutoff_year):
     if source_type in ("primary", "archival", "official_record"):
         return True
     value = source.get("publication_year")
-    match = re.search(r"\\b(1[0-9]{3}|20[0-9]{2})\\b", str(value or ""))
+    match = re.search(r"\b(1[0-9]{3}|20[0-9]{2})\b", str(value or ""))
     if not match:
         return True
     return int(match.group(1)) >= cutoff_year
@@ -276,6 +276,10 @@ def discover(query, limit=10, config=None):
     for index, item in enumerate(dated, 1):
         item["source_id"] = "src_" + str(index).zfill(4)
     kept, dropped = filter_sources(dated, query, threshold=threshold)
+    kept.sort(key=lambda item: (
+        item.get("relevance_score") is None,
+        -(item.get("relevance_score") or 0)
+    ))
     return {
         "query": query,
         "expanded_query": expanded_query,
