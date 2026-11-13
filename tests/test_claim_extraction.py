@@ -61,6 +61,7 @@ class ClaimExtractionTests(unittest.TestCase):
         self.assertEqual(claims[0]["text"], source["snippet"])
         self.assertEqual(claims[0]["source_ids"], ["loc-snippet"])
         self.assertEqual(claims[0]["status"], "UNKNOWN")
+        self.assertEqual(claims[0]["extraction_method"], "snippet_sentence")
 
 if __name__ == "__main__":
     unittest.main()
