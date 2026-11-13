@@ -248,14 +248,6 @@ def discover(query, limit=10, config=None):
             continue
         seen.add(key)
         item["source_id"] = "src_" + str(len(deduped) + 1).zfill(4)
-        host = (urllib.parse.urlparse(item.get("url") or "").hostname or "").lower()
-        publication = (item.get("publication") or "").lower()
-        if any(token in host for token in (".gov", ".edu", "museum", "archive", "library")):
-            item["source_priority"] = "institutional_or_primary"
-        elif any(token in publication for token in ("journal", "review", "proceedings", "transactions")):
-            item["source_priority"] = "academic_publication"
-        else:
-            item["source_priority"] = "scholarly_candidate"
         item["source_type"] = assign_source_type(item)
         item["notes"] = ""
         item["review_status"] = "UNREVIEWED"
@@ -270,9 +262,11 @@ def discover(query, limit=10, config=None):
          "cutoff_year": cutoff_year}
         for item in deduped if item not in dated
     ]
-    priority_order = {"institutional_or_primary": 0, "academic_publication": 1,
-                      "scholarly_candidate": 2}
-    dated.sort(key=lambda item: priority_order.get(item.get("source_priority"), 3))
+    source_type_order = {
+        "primary": 0, "archival": 1, "official_record": 1,
+        "academic": 2, "institutional": 3, "other": 4,
+    }
+    dated.sort(key=lambda item: source_type_order.get(item.get("source_type"), 5))
     for index, item in enumerate(dated, 1):
         item["source_id"] = "src_" + str(index).zfill(4)
     kept, dropped = filter_sources(dated, query, threshold=threshold)
@@ -335,7 +329,7 @@ def main(argv=None):
                 "publication": source.get("publication", ""),
                 "publication_year": source.get("publication_year"),
                 "authors": source.get("authors", []), "provider": source.get("provider"),
-                "notes": "", "source_priority": source.get("source_priority"),
+                "notes": "",
                 "source_type": source.get("source_type"),
                 "relevance_score": source.get("relevance_score"),
                 "relevance_reasons": source.get("relevance_reasons", []),
