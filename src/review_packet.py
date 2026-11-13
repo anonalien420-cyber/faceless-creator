@@ -9,9 +9,13 @@ import json
 import os
 from datetime import datetime, timezone
 
+from src.claim_extraction import extract_claims
 
-def build_packet(research, ledger, topic):
+
+def build_packet(research, ledger, topic, extracted_claims=None):
     sources = research.get("sources", [])
+    if extracted_claims is None:
+        extracted_claims = extract_claims(sources, topic)
     existing = {s.get("source_id"): s for s in ledger.get("sources", [])}
     rows = []
     for source in sources:
@@ -40,6 +44,7 @@ def build_packet(research, ledger, topic):
         "discovery_warning": research.get("warning", "Discovery candidates are not verified evidence."),
         "sources": rows,
         "dropped_sources": research.get("dropped_sources", []),
+        "extracted_claims": extracted_claims,
         "claim_review_template": {
             "claim_id": "",
             "topic": topic,
@@ -90,6 +95,23 @@ def render_markdown(packet):
             f"- Current ledger status: {source['review_status']}",
             "- Reviewer decision: PENDING",
             "- Review notes (exact passage/page/catalogue reference and relevance):",
+            "",
+        ])
+    lines.extend([
+        "## Extracted candidate claims (UNREVIEWED)",
+        "",
+        "These are verbatim source sentences offered for reviewer triage only. They are not ledger claims and cannot enter a script.",
+        "",
+    ])
+    for claim in packet.get("extracted_claims", []):
+        lines.extend([
+            "- Candidate: {}".format(claim.get("claim_id")),
+            "  - Text: {}".format(claim.get("text")),
+            "  - Source IDs: {}".format(", ".join(claim.get("source_ids", []))),
+            "  - Suggested tier: {}".format(claim.get("suggested_status", "UNKNOWN")),
+            "  - Final tier: UNKNOWN (human decision required)",
+            "  - Include in script: false",
+            "  - Extraction: {}".format(claim.get("extraction_method")),
             "",
         ])
     lines.extend([
