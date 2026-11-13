@@ -28,6 +28,9 @@ niche_keywords:
   - satellite archaeology
   - AI reconstruction
 
+# --- Deep Scan research discovery ---
+research_relevance_threshold: 40
+
 # --- Peak publishing windows (general YouTube windows, NOT a guarantee) ---
 # Weekdays 17:00-20:00, weekends 11:00-13:00, in channel_timezone.
 # Override per niche once you have your own analytics, e.g.:
