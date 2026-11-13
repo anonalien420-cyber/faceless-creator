@@ -29,7 +29,10 @@ _YEAR = re.compile(r"\b(?:1[0-9]{3}|20[0-9]{2})\b")
 
 
 def _source_abstract(source):
-    text = source.get("abstract") or abstract_text(source)
+    text = (source.get("abstract") or source.get("snippet")
+            or source.get("description") or abstract_text(source))
+    if isinstance(text, (list, tuple)):
+        text = " ".join(str(part) for part in text)
     text = html.unescape(str(text))
     text = re.sub(r"<[^>]+>", " ", text)
     return re.sub(r"\s+", " ", text).strip()
