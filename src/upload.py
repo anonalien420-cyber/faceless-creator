@@ -1,40 +1,16 @@
-"""Upload a video to YouTube. Draft-like by default, never public by accident.
+"""Upload only an unlisted draft after explicit human review.
 
-- Default privacyStatus: "unlisted" (draft-like; not listed, not public).
-  This is the human-review-queue flow: run.py writes data/review_queue.md
-  for every upload so a human can glance at title, thumbnail, script
-  summary, SEO, QA result, and scheduled peak time BEFORE the peak
-  window. Review the queue before the peak window.
-- --public / --auto-public publish immediately and publicly. --auto-public
-  is OFF by default for a reason: full auto-public risks factual and
-  taste mistakes that QA cannot catch — QA catches TECHNICAL mistakes
-  only (blank video, silent audio, wrong resolution, missing captions).
-  Use auto-public only if you accept that risk.
-- --publish-at-peak uploads as private with a YouTube publishAt time set
-  to the next peak window for the niche (src/scheduler.py). YouTube then
-  publishes the video at that time. This is the daily peak-time flow:
-  render in the morning, publish at peak, one video per day. Peak times
-  are general audience windows, NOT a guarantee of popularity.
-- --dry-run prints exactly what WOULD be uploaded and calls no API.
-- Real uploads are refused unless UPLOAD_ENABLED=true in the environment.
-- Requires client_secrets.json (YouTube Data API OAuth client) on first
-  run; the token is then stored in token.json (gitignored, never commit).
-
-Never run this in CI without explicitly setting UPLOAD_ENABLED=true.
+Deep Scan intentionally disables public and scheduled-public uploads.
+Manual unlisted uploads require HUMAN_REVIEW_APPROVED=true and
+UPLOAD_ENABLED=true. Final public publication must happen manually in
+YouTube Studio after the reviewer checks the evidence ledger and queue.
+--dry-run performs no network operation.
 """
 
 import argparse
 import json
 import os
 import sys
-from datetime import timezone
-
-try:
-    from src.config import load_config
-    from src.scheduler import next_peak_window
-except ImportError:
-    from config import load_config
-    from scheduler import next_peak_window
 
 
 def plan(video, title, description, privacy, publish_at=None):
@@ -46,6 +22,13 @@ def plan(video, title, description, privacy, publish_at=None):
 
 
 def upload(video, title, description, privacy, publish_at=None, tags=None):
+    # Defense in depth: callers cannot bypass the CLI publishing policy.
+    if privacy != "unlisted" or publish_at:
+        raise ValueError("Only unlisted, unscheduled uploads are permitted.")
+    if os.environ.get("HUMAN_REVIEW_APPROVED", "") != "true":
+        raise PermissionError("Human review approval is required before upload.")
+    if os.environ.get("UPLOAD_ENABLED", "") != "true":
+        raise PermissionError("UPLOAD_ENABLED must be true before upload.")
     try:
         from google_auth_oauthlib.flow import InstalledAppFlow
         from google.auth.transport.requests import Request
@@ -99,47 +82,37 @@ def main(argv=None):
                         help="Comma-separated tags for the video snippet.")
     parser.add_argument("--public", action="store_true")
     parser.add_argument("--auto-public", action="store_true",
-                        help="Publish publicly immediately (OFF by default). "
+                        help="Rejected: public publishing is disabled; publish manually in YouTube Studio. "
                              "WARNING: full auto-public risks factual/taste "
                              "mistakes QA cannot catch — QA catches technical "
                              "mistakes only. Review data/review_queue.md first.")
     parser.add_argument("--dry-run", action="store_true")
     parser.add_argument("--publish-at-peak", action="store_true",
-                        help="Upload private with publishAt = next peak window for --niche.")
+                        help="Rejected: scheduled public publishing is disabled.")
     parser.add_argument("--publish-at", default="",
-                        help="Explicit ISO publishAt timestamp (overrides --publish-at-peak).")
+                        help="Rejected: scheduled public publishing is disabled.")
     parser.add_argument("--niche", default="")
     parser.add_argument("--format", default="", choices=["", "short", "long"],
                         help="Use this format's peak window for --publish-at-peak.")
-    parser.add_argument("--config", default="config.yaml")
     args = parser.parse_args(argv)
-    privacy = "public" if (args.public or args.auto_public) else "unlisted"
-    publish_at = args.publish_at or None
-    if args.publish_at_peak and not publish_at:
-        config = load_config(args.config)
-        niche = args.niche or (config.get("niches") or [config.get("niche", "")])[0]
-        start, _end = next_peak_window(niche, config, fmt=args.format or None)
-        if start is None:
-            print("ERROR: --publish-at-peak requested but no peak window found "
-                  "in the next 14 days. Refusing to upload without a schedule.",
-                  file=sys.stderr)
-            return 1
-        publish_at = start.astimezone(timezone.utc).isoformat()
-        privacy = "private"  # required for scheduled publishing
-        print(f"Scheduled publishing: private now, publishAt {publish_at} "
-              f"(next peak window for niche '{niche}')")
+    # Deep Scan safety policy: no direct-public or scheduled-public publishing.
+    if args.public or args.auto_public or args.publish_at_peak or args.publish_at:
+        print("ERROR: Public or scheduled publishing is disabled. Review and publish manually in YouTube Studio.", file=sys.stderr)
+        return 1
     if args.dry_run:
         print("DRY RUN — nothing uploaded:")
-        print(json.dumps(plan(args.video, args.title, args.description, privacy,
-                              publish_at=publish_at), indent=2))
+        print(json.dumps(plan(args.video, args.title, args.description, "unlisted"), indent=2))
         return 0
+    if os.environ.get("HUMAN_REVIEW_APPROVED", "") != "true":
+        print("ERROR: Refusing upload: HUMAN_REVIEW_APPROVED must be set to true after reviewing the evidence ledger and review queue.", file=sys.stderr)
+        return 1
+    privacy = "unlisted"
     if os.environ.get("UPLOAD_ENABLED", "") != "true":
         print("ERROR: Refusing to upload: UPLOAD_ENABLED is not 'true'. "
               "Use --dry-run, or set UPLOAD_ENABLED=true explicitly.", file=sys.stderr)
         return 1
     tags = [t.strip() for t in args.tags.split(",") if t.strip()] or None
-    upload(args.video, args.title, args.description, privacy,
-           publish_at=publish_at, tags=tags)
+    upload(args.video, args.title, args.description, privacy, tags=tags)
     return 0
 
 

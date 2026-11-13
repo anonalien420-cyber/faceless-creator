@@ -121,9 +121,14 @@ def narrate_kokoro(text, voice, output, speed):
     it looks like a Kokoro voice, otherwise Kokoro's default is used."""
     from kokoro import KPipeline
     import soundfile as sf
-    lang = "a"  # American English
-    pipeline = KPipeline(lang_code=lang)
     kokoro_voice = voice if re.match(r"^[ab][fm]_", voice or "") else "af_heart"
+    # Kokoro's language pipeline must match the voice's accent: British
+    # voices (bm_/bf_) use the British pipeline ("b"), American voices
+    # (am_/af_) use the American one ("a"). Using "a" with a British
+    # voice silently Americanises pronunciation, so derive it from the
+    # resolved voice, not from a hardcoded default.
+    lang = "b" if kokoro_voice.startswith("b") else "a"
+    pipeline = KPipeline(lang_code=lang)
     audio_chunks = []
     for _, _, audio in pipeline(text, voice=kokoro_voice, speed=speed):
         audio_chunks.append(audio)

@@ -9,16 +9,12 @@ name: Daily faceless videos (1 long + 2 Shorts)
 #   output: "1 long + 2 Shorts". Defaults are capped at 1 + 2 — more
 #   than that risks spam and a quality drop, so do not raise them here
 #   without a reason (config: long_videos_per_day, shorts_per_day).
-# - Every output passes the QA gate (src/qa.py) before upload; a QA
-#   failure fails the run and uploads NOTHING.
-# - Upload (opt-in only, UPLOAD_ENABLED secret) uses --publish-at-peak:
-#   each video uploads as private, then YouTube publishes it at its own
-#   next peak window — Shorts midday + evening, long-form evening peak
-#   (config peak_windows, per-format windows). One niche per run, never
-#   every niche in one day. Every run also writes data/review_queue.md
-#   (unlisted by default + human review before the peak window) and
-#   data/seo.json; --auto-public stays OFF unless explicitly enabled.
-# - Peak times are general audience windows, NOT a guarantee of popularity.
+# - Every output passes the QA gate (src/qa.py) before review; a QA
+#   failure fails the run and prevents the output entering the queue.
+# - This workflow NEVER uploads to YouTube. It renders, runs QA, and
+#   writes the human review queue only. Public publication is manual.
+# - Peak-time scheduling is disabled for this workflow; no unattended
+#   publication can occur after a workflow run.
 on:
   schedule:
     - cron: "0 12 * * *"  # 12:00 UTC daily — morning render, before peak
@@ -28,10 +24,6 @@ on:
         description: "Niche to create videos for (empty = top-ranked niche with data)"
         required: false
         default: ""
-      publish_at_peak:
-        description: "Publish at the next peak window instead of staying unlisted"
-        type: boolean
-        default: true
 
 jobs:
   build:
@@ -45,24 +37,46 @@ jobs:
         run: sudo apt-get update && sudo apt-get install -y ffmpeg
       - name: Install Python deps
         run: pip install -r requirements.txt
-      - name: Run pipeline (dry-run upload unless UPLOAD_ENABLED)
+      - name: Run pipeline (render and review only)
         env:
           YT_API_KEY: ${{ secrets.YT_API_KEY }}
-          UPLOAD_ENABLED: ${{ secrets.UPLOAD_ENABLED }}
+          NICHE_INPUT: ${{ inputs.niche }}
         run: |
-          NICHE_ARG=""
-          if [ -n "${{ inputs.niche }}" ]; then
-            NICHE_ARG="--niche ${{ inputs.niche }}"
+          # Pass the workflow input through the environment, not by
+          # interpolating untrusted text into shell source.
+          NICHE_ARGS=()
+          if [[ -n "$NICHE_INPUT" ]]; then
+            NICHE_ARGS+=(--niche "$NICHE_INPUT")
           fi
-          PEAK_ARG=""
-          if [ "${{ inputs.publish_at_peak }}" = "true" ]; then
-            PEAK_ARG="--publish-at-peak"
-          fi
-          # With UPLOAD_ENABLED unset/false, src.upload dry-runs and
-          # nothing is posted. Verify a local run end to end before
-          # setting secrets.UPLOAD_ENABLED=true in the repo.
-          if [ "$UPLOAD_ENABLED" = "true" ]; then
-            python -m src.run $NICHE_ARG --upload $PEAK_ARG
-          else
-            python -m src.run $NICHE_ARG
-          fi
+          # Production workflow is render/review only. Publishing is a
+          # separate human action after evidence and review-queue approval.
+          python -m src.run "${NICHE_ARGS[@]}"
+      - name: Preserve rendered videos and review package
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: deep-scan-production-${{ github.run_id }}
+          if-no-files-found: warn
+          retention-days: 14
+          path: |
+            data/videos_long/**
+            data/videos_short/**
+            data/review_queue.md
+            data/review_packet.md
+            data/review_packet.json
+            data/research_sources.json
+            data/research_sources_archived.json
+            data/evidence_ledger.json
+            data/verification_report.json
+            data/scripts_long.json
+            data/scripts_shorts.json
+            data/seo.json
+            data/qa_report*.json
+            data/metadata_qa.json
+            data/compare.md
+            data/run_log.json
+            data/job_state.json
+            data/series_state.json
+            data/generated_visuals/**
+            data/thumbnails/**
+            data/thumbnails.json

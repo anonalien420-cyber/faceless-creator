@@ -23,10 +23,10 @@ the run must NOT upload that video. A broken video never goes out.
 Report: data/qa_report.json per run (pass/fail per check, fixes applied).
 
 Accuracy checklist (history-mystery scripts only; appended to the
-same report, same fail-loudly rule): the script must have a real
-`sources` field (not the placeholder), every section must carry a
-KNOWN/DEBATED/UNKNOWN tier, no KNOWN section may ship without
-sources, and the ending must contain an open viewer question.
+same report, same fail-loudly rule): the complete claim ledger must
+validate, every script claim ID must exist, and the narration must
+match a deterministic rebuild from the reviewed ledger. Sections
+carry KNOWN/DEBATED/UNKNOWN tiers and sources remain visible to viewers.
 Shock/source checks added for the "Shock, honestly" principle: the
 shock hook must be present with tier KNOWN and a filled source, and
 every description source entry must either carry a valid URL
@@ -264,10 +264,48 @@ def check_accuracy(script):
         checks.append({"check": name, "status": "pass" if passed else "fail",
                        "detail": detail})
 
-    if not script or script.get("style") != "history_mystery":
+    if not isinstance(script, dict) or script.get("style") != "history_mystery":
         add("accuracy_applies", True,
-            "not a history_mystery script; accuracy checklist not applicable")
+            "not a history_mystery script dict; accuracy checklist not applicable")
         return checks
+    # Claim-level evidence gate: every referenced claim must exist in the
+    # validated ledger and every claim/source must have human review.
+    try:
+        from src.evidence import load_ledger, validate_ledger
+    except ImportError:
+        from evidence import load_ledger, validate_ledger
+    ledger = load_ledger("data/evidence_ledger.json")
+    ledger_errors = validate_ledger(ledger)
+    script_claim_ids = set(script.get("claim_ids") or [])
+    ledger_claim_ids = {c.get("claim_id") for c in ledger.get("claims", [])}
+    missing_claims = sorted(script_claim_ids - ledger_claim_ids)
+    add("accuracy_evidence_ledger_valid", not ledger_errors,
+        "ledger validates" if not ledger_errors else "; ".join(ledger_errors[:8]))
+    try:
+        from src.verification import verify_ledger
+    except ImportError:
+        from verification import verify_ledger
+    verification = verify_ledger(ledger)
+    verification_errors = ["{}: {}".format(c["claim_id"], e)
+                           for c in verification.get("claims", []) for e in c.get("errors", [])]
+    add("accuracy_historical_metadata_verification", not verification_errors,
+        "date/source-diversity metadata checks passed" if not verification_errors
+        else "; ".join(verification_errors[:8]))
+    add("accuracy_claim_ids_in_ledger", bool(script_claim_ids) and not missing_claims,
+        "all script claim IDs exist in the ledger" if script_claim_ids and not missing_claims
+        else "missing or absent claim IDs: " + ", ".join(missing_claims or ["none supplied"]))
+    # Rebuild the expected narration from the ledger and compare it byte-for-byte.
+    # This catches unsupported edits made after script generation.
+    try:
+        from src.documentary import build_documentary
+        expected_script = build_documentary(script.get("topic", ""), script.get("format", "short"), ledger)
+        script_matches = (script.get("text") == expected_script.get("text")
+                          and script_claim_ids == set(expected_script.get("claim_ids") or []))
+        match_detail = "script text and claim references match the reviewed ledger"
+    except Exception as exc:
+        script_matches = False
+        match_detail = "could not rebuild from reviewed evidence: " + str(exc)
+    add("accuracy_script_matches_ledger", script_matches, match_detail)
     filled, sources = sources_filled(script)
     add("accuracy_sources_filled", filled,
         f"{len(sources)} source(s) listed"
@@ -402,7 +440,24 @@ def main(argv=None):
     script = None
     if args.script_json and os.path.exists(args.script_json):
         with open(args.script_json, encoding="utf-8") as fh:
-            script = json.load(fh)
+            loaded = json.load(fh)
+        # Pipeline script files are lists (scripts_long/shorts.json and
+        # documentary packages are both JSON lists). Unwrap to the single
+        # script dict this QA run is about: the one matching --title, or
+        # the only/first entry. A list must never crash check_accuracy.
+        if isinstance(loaded, list):
+            if not loaded:
+                script = None
+            elif len(loaded) == 1:
+                script = loaded[0]
+            else:
+                script = next(
+                    (e for e in loaded
+                     if isinstance(e, dict) and (e.get("topic") == args.title
+                                                 or e.get("title") == args.title)),
+                    loaded[0])
+        else:
+            script = loaded
     ok = run_qa(args.video, narration=args.narration,
                 script_text=args.script_text or "", title=args.title,
                 report_path=args.report, fmt=args.format, script=script)

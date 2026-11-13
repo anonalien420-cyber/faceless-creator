@@ -29,6 +29,7 @@ import re
 import shutil
 import subprocess
 import sys
+import tempfile
 import urllib.parse
 import urllib.request
 
@@ -39,6 +40,16 @@ except ImportError:
 
 WIDTH, HEIGHT, FPS = 1080, 1920, 30
 FADE = 0.5  # seconds of crossfade between visual segments
+
+
+def _run_ffmpeg(cmd):
+    """Run FFmpeg and preserve its diagnostic output on failure."""
+    result = subprocess.run(cmd, capture_output=True, text=True)
+    if result.returncode != 0:
+        details = (result.stderr or result.stdout or "FFmpeg returned no diagnostic output").strip()
+        raise RuntimeError(
+            f"FFmpeg failed with exit code {result.returncode}:\n{details[-12000:]}")
+    return result
 
 
 def _require(tool):
@@ -208,8 +219,17 @@ def make_ass(script_text, duration, path, width=1080, height=1920, fontsize=72):
     return path
 
 
-def _escape_drawtext(text):
-    return text.replace("\\", "\\\\").replace(":", "\\:").replace("'", "\\'")
+def _write_drawtext_file(directory, name, text):
+    """Write arbitrary text for FFmpeg drawtext without filtergraph quoting."""
+    path = os.path.join(directory, f"{name}.txt")
+    with open(path, "w", encoding="utf-8", newline="") as fh:
+        fh.write(str(text))
+    return path
+
+
+def _drawtext_path(path):
+    """Escape a generated path for FFmpeg's filter option parser."""
+    return path.replace("\\", "\\\\").replace(":", "\\:")
 
 
 def _fill_filter(width, height):
@@ -245,47 +265,58 @@ def build_video(script, audio_path, output, visuals=None, duration=None,
     fontsize = 72 if height > width else 54
     make_ass(script["text"], duration, ass_path, width=width, height=height,
              fontsize=fontsize)
-    title = _escape_drawtext(script["topic"].title()[:60])
-    hook_line = _escape_drawtext((script.get("hook", "") or "").split(". ")[0][:80])
+    drawtext_dir = tempfile.mkdtemp(prefix="deep_scan_drawtext_")
+    title = _write_drawtext_file(drawtext_dir, "title", script["topic"].title()[:60])
+    hook_text = (script.get("hook", "") or "").split(". ")[0][:80]
+    hook_line = (_write_drawtext_file(drawtext_dir, "hook", hook_text)
+                 if hook_text else "")
     accepted, _rejected = resolve_visuals(visuals or [], min_resolution)
     # Pattern-interrupt interval: 25s longs, 10s Shorts.
     interrupt = 25.0 if width > height else 10.0
     import math as _math
     chunk_count = max(1, _math.ceil(duration / interrupt))
     chunk = duration / chunk_count
-    # Caption/title/progress filters, applied after the visual chain.
+    # Dynamic text is read from files with expansion disabled.
     overlay = [
         f"drawbox=x=0:y={height - 50}:w='{width}*t/{duration:.2f}':h=12:color=yellow@0.9:t=fill",
-        f"drawtext=text='{title}':font=DejaVu Sans:fontsize={fontsize}:fontcolor=white:"
+        f"drawtext=textfile={_drawtext_path(title)}:expansion=none:font=DejaVu Sans:fontsize={fontsize}:fontcolor=white:"
         f"borderw=3:bordercolor=black:x=(w-text_w)/2:y=200:enable='lt(t,3)'",
         f"ass={ass_path}",
     ]
     if hook_line:
         overlay.append(
-            f"drawtext=text='{hook_line}':font=DejaVu Sans:fontsize={max(28, fontsize - 18)}:"
+            f"drawtext=textfile={_drawtext_path(hook_line)}:expansion=none:font=DejaVu Sans:fontsize={max(28, fontsize - 18)}:"
             f"fontcolor=white:borderw=2:bordercolor=black:x=(w-text_w)/2:"
             f"y={200 + fontsize + 20}:enable='lt(t,5)'")
     prompts = ["The key part:", "Here's why it works:", "Don't miss this:", "Quick check:"]
     for k in range(1, chunk_count):
         t = k * chunk
-        prompt = _escape_drawtext(prompts[(k - 1) % len(prompts)])
+        prompt_file = _write_drawtext_file(
+            drawtext_dir, f"prompt_{k}", prompts[(k - 1) % len(prompts)])
         overlay.append(
-            f"drawtext=text='{prompt}':font=DejaVu Sans:fontsize={max(32, fontsize - 14)}:"
+            f"drawtext=textfile={_drawtext_path(prompt_file)}:expansion=none:font=DejaVu Sans:fontsize={max(32, fontsize - 14)}:"
             f"fontcolor=yellow:borderw=3:bordercolor=black:x=(w-text_w)/2:"
             f"y={height // 3}:enable='between(t,{t:.2f},{t + 2:.2f})'")
+    end_card = _write_drawtext_file(drawtext_dir, "end_card", end_card_text)
     overlay.append(
-        f"drawtext=text='{_escape_drawtext(end_card_text)}':font=DejaVu Sans:"
+        f"drawtext=textfile={_drawtext_path(end_card)}:expansion=none:font=DejaVu Sans:"
         f"fontsize={fontsize}:fontcolor=white:borderw=3:bordercolor=black:"
         f"x=(w-text_w)/2:y={height - 220}:enable='gt(t,{duration - 3:.2f})'")
     if not accepted:
         # Animated gradient fallback (no asset to grade).
+        # NOTE: the lavfi gradients source defaults to 25 fps, but the
+        # QA gate requires 30 fps — pin the chain to 30 explicitly, the
+        # same rate the visuals path enforces with fps={FPS}.
         cmd = ["ffmpeg", "-y", "-f", "lavfi",
                "-i", f"gradients=s={width}x{height}:c0=0x0f172a:c1=0x1e3a8a:x0=0:y0=0:x1={width}:y1={height}:duration={duration}",
-               "-i", audio_path, "-vf", ",".join(overlay),
+               "-i", audio_path, "-vf", ",".join(["fps=30"] + overlay),
                "-t", str(duration), "-c:v", "libx264", "-pix_fmt", "yuv420p",
                "-b:v", bitrate, "-maxrate", "12M", "-bufsize", "20M",
                "-c:a", "aac", "-shortest", output]
-        subprocess.run(cmd, check=True)
+        try:
+            _run_ffmpeg(cmd)
+        finally:
+            shutil.rmtree(drawtext_dir, ignore_errors=True)
         print(f"Video -> {output} ({duration:.1f}s, {width}x{height}, gradient fallback)")
         return output
 
@@ -328,12 +359,15 @@ def build_video(script, audio_path, output, visuals=None, duration=None,
     filters.append("[vx]eq=contrast=1.05:saturation=1.10:brightness=0.02[vgrade]")
     filters.append(f"[vgrade]{','.join(overlay)}[vout]")
     cmd = (["ffmpeg", "-y"] + inputs +
-           ["-filter_complex", ";".join(filters),
+           ["-filter_complex_threads", "1", "-filter_complex", ";".join(filters),
             "-map", "[vout]", "-map", f"{audio_idx}:a",
             "-t", str(duration), "-c:v", "libx264", "-pix_fmt", "yuv420p",
             "-b:v", bitrate, "-maxrate", "12M", "-bufsize", "20M",
             "-c:a", "aac", "-shortest", output])
-    subprocess.run(cmd, check=True)
+    try:
+        _run_ffmpeg(cmd)
+    finally:
+        shutil.rmtree(drawtext_dir, ignore_errors=True)
     kinds = ",".join(v["type"] for v in accepted)
     print(f"Video -> {output} ({duration:.1f}s, {width}x{height}, "
           f"{len(accepted)} visual(s) in {n} chunk(s): {kinds}, {bitrate})")
@@ -369,9 +403,14 @@ def main(argv=None):
         scripts = json.load(fh)
     os.makedirs(args.outdir, exist_ok=True)
     visuals = list(args.visuals) + list(args.images)
+    topic_visuals = {}
     if args.visuals_file and os.path.exists(args.visuals_file):
         with open(args.visuals_file, encoding="utf-8") as fh:
-            visuals.extend(json.load(fh))
+            loaded_visuals = json.load(fh)
+        if isinstance(loaded_visuals, dict) and isinstance(loaded_visuals.get("by_topic"), dict):
+            topic_visuals = loaded_visuals["by_topic"]
+        elif isinstance(loaded_visuals, list):
+            visuals.extend(loaded_visuals)
     if args.fetch_stock:
         # Stock video first, then stock images — per visual_source order.
         stock = fetch_stock_videos(config, config.get("niche_keywords") or [])
@@ -385,7 +424,8 @@ def main(argv=None):
         if not os.path.exists(audio):
             audio = os.path.join("data/audio", f"{script['rank']:02d}-{slug}.mp3")
         output = os.path.join(args.outdir, f"{script['rank']:02d}-{slug}.mp4")
-        build_video(script, audio, output, visuals=visuals or None,
+        selected_visuals = topic_visuals.get(script.get("topic"), visuals)
+        build_video(script, audio, output, visuals=selected_visuals or None,
                     bitrate=bitrate, min_resolution=min_resolution,
                     width=width, height=height,
                     end_card_text=args.end_card_text)

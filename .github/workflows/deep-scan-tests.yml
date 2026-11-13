@@ -1,0 +1,37 @@
+name: Deep Scan tests
+
+on:
+  pull_request:
+    branches: [main, feature/deep-scan-evidence-engine]
+jobs:
+  tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install FFmpeg
+        run: sudo apt-get update && sudo apt-get install -y ffmpeg
+      - name: Install Python dependencies
+        run: pip install -r requirements.txt
+      - name: Install security and static-analysis tools
+        run: pip install pip-audit bandit
+      - name: Audit Python dependencies
+        run: pip-audit -r requirements.txt
+      - name: Static security scan
+        run: bandit -q -r src -x tests --severity-level high
+      - name: Compile Python modules
+        run: python -m compileall -q src tests
+      - name: Run complete test suite
+        run: python -m unittest discover -s tests -v
+      - name: Render portrait and landscape FFmpeg smoke tests
+        run: python scripts/ffmpeg_render_smoke.py
+      - name: Run end-to-end synthetic documentary production test
+        run: python scripts/deep_scan_integration_smoke.py
+      - name: Verify no accidental credential files are tracked
+        run: |
+          if git ls-files | grep -E '(^|/)(token\.json|client_secrets\.json|\.env)$'; then
+            echo 'Credential file is tracked' >&2
+            exit 1
+          fi
