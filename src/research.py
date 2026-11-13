@@ -107,7 +107,8 @@ def search_crossref(query, rows=10):
             "publication": (item.get("container-title") or [""])[0],
             "authors": [(" ".join(filter(None, [a.get("given"), a.get("family")]))).strip()
                         for a in item.get("author", [])],
-            "work_type": item.get("type") or "", "discovery_only": True,
+            "work_type": item.get("type") or "", "abstract": item.get("abstract") or "",
+            "discovery_only": True,
         })
     return results
 
