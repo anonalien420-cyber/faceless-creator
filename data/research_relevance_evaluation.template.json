@@ -1,0 +1,31 @@
+{
+  "schema_version": 1,
+  "note": "Fill this with the top 10 results for each topic from the baseline run and the Phase 2 run. A human must set every relevant field to true or false. Do not infer or auto-generate labels.",
+  "topics": [
+    {
+      "topic": "Great Pyramid mystery",
+      "baseline_results": [],
+      "phase2_results": []
+    },
+    {
+      "topic": "Antikythera mechanism",
+      "baseline_results": [],
+      "phase2_results": []
+    },
+    {
+      "topic": "Roanoke colony",
+      "baseline_results": [],
+      "phase2_results": []
+    },
+    {
+      "topic": "Voynich manuscript",
+      "baseline_results": [],
+      "phase2_results": []
+    },
+    {
+      "topic": "Indus Valley civilization",
+      "baseline_results": [],
+      "phase2_results": []
+    }
+  ]
+}
