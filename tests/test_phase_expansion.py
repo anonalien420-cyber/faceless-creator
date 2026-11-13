@@ -19,7 +19,7 @@ class PhaseExpansionTests(unittest.TestCase):
                 {"source_id": "a", "url": "https://archive.example.org/item",
                  "source_type": "primary", "review_status": "APPROVED", "notes": "Original record"},
                 {"source_id": "b", "url": "https://journal.example.com/paper",
-                 "source_type": "secondary", "review_status": "APPROVED", "notes": "Peer reviewed"},
+                 "source_type": "academic", "review_status": "APPROVED", "notes": "Peer reviewed"},
             ],
             "claims": [{"claim_id": "c1", "status": "KNOWN", "source_ids": ["a", "b"],
                         "date_start": "1900-02-30"}],
