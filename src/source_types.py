@@ -48,11 +48,6 @@ def classify_source(source):
         publication or work_type in {"article", "journal-article", "proceedings-article"}
     ):
         return "academic"
-    priority = str(source.get("source_priority") or "").strip().lower()
-    if priority == "institutional_or_primary":
-        return "institutional"
-    if priority == "academic_publication":
-        return "academic"
     if host.endswith(".edu") or ".edu." in host or any(
         token in host for token in ("museum", "university", "institute")
     ):
