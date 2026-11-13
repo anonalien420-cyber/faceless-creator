@@ -59,6 +59,7 @@ DEFAULTS = {
     "video_bitrate": "10M",
     "long_video_bitrate": "12M",
     "reddit_subreddits": [],
+    "research_relevance_threshold": 40,
 }
 
 # Keys that are NOT in DEFAULTS but are legitimate in config.yaml:
