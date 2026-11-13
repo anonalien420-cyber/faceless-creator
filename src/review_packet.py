@@ -15,7 +15,7 @@ from src.claim_extraction import extract_claims
 def build_packet(research, ledger, topic, extracted_claims=None):
     sources = research.get("sources", [])
     if extracted_claims is None:
-        extracted_claims = extract_claims(sources, topic)
+        extracted_claims = extract_claims(sources, research.get("expanded_query") or topic)
     existing = {s.get("source_id"): s for s in ledger.get("sources", [])}
     rows = []
     for source in sources:
@@ -97,6 +97,22 @@ def render_markdown(packet):
             "- Review notes (exact passage/page/catalogue reference and relevance):",
             "",
         ])
+    if packet.get("dropped_sources"):
+        lines.extend([
+            "## Filtered-out discovery candidates (audit trail)",
+            "",
+            "These candidates did not pass the configured discovery filters. They remain visible for audit and are not silently discarded.",
+            "",
+        ])
+        for dropped in packet["dropped_sources"]:
+            source = dropped.get("source", dropped)
+            lines.extend([
+                "- {} — {}".format(source.get("title", "(untitled)"),
+                                   dropped.get("reason") or ", ".join(dropped.get("reasons", [])) or "below threshold"),
+                "  - Relevance score: {}".format(dropped.get("relevance_score", "not scored")),
+                "  - Source ID: {}".format(source.get("source_id", "unknown")),
+                "",
+            ])
     lines.extend([
         "## Extracted candidate claims (UNREVIEWED)",
         "",
