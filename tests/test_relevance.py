@@ -134,20 +134,20 @@ class DoiNormalizationTests(unittest.TestCase):
 
 class SourceTypeTests(unittest.TestCase):
     def test_assign_source_type_per_provider(self):
-        loc = {"provider": "Library of Congress", "source_priority": "institutional_or_primary"}
+        loc = {"provider": "Library of Congress"}
         self.assertEqual(research.assign_source_type(loc), "archival")
-        ia = {"provider": "Internet Archive", "source_priority": "institutional_or_primary"}
+        ia = {"provider": "Internet Archive"}
         self.assertEqual(research.assign_source_type(ia), "archival")
-        journal = {"provider": "OpenAlex", "source_priority": "academic_publication"}
+        journal = {"provider": "OpenAlex", "publication": "Journal of Ancient History",
+                   "work_type": "article"}
         self.assertEqual(research.assign_source_type(journal), "academic")
-        gov = {"provider": "Crossref", "source_priority": "institutional_or_primary"}
-        self.assertEqual(research.assign_source_type(gov), "institutional")
-        unknown = {"provider": "Crossref", "source_priority": "scholarly_candidate"}
+        gov = {"provider": "Crossref", "url": "https://records.example.gov/report"}
+        self.assertEqual(research.assign_source_type(gov), "official_record")
+        unknown = {"provider": "Crossref", "url": "https://unknown.example.org/item"}
         self.assertEqual(research.assign_source_type(unknown), "other")
-        # Discovery never promotes a candidate to primary/official_record.
+        # Discovery metadata never assigns the primary classification.
         for row in (loc, ia, journal, gov, unknown):
-            self.assertNotIn(research.assign_source_type(row),
-                             ("primary", "official_record"))
+            self.assertNotEqual(research.assign_source_type(row), "primary")
 
     @patch("src.research.search_internet_archive", return_value=[])
     @patch("src.research.search_library_of_congress", return_value=[{
