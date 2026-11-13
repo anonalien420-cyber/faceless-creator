@@ -11,28 +11,28 @@ from src.relevance import abstract_text, _tokens
 
 
 _FACTUAL_PREDICATE = re.compile(
-    r"\\b(discovered|detected|measured|observed|identified|confirmed|"
+    r"\b(discovered|detected|measured|observed|identified|confirmed|"
     r"reported|recorded|found|revealed|indicated|located|estimated|"
-    r"consists|contains|is situated|was built|were built)\\b",
+    r"consists|contains|is situated|was built|were built)\b",
     re.IGNORECASE,
 )
 _MEASUREMENT = re.compile(
-    r"\\b\\d+(?:[.,]\\d+)?\\s*(?:mm|cm|m|metres?|meters?|km|kilometres?|"
-    r"kilometers?|degrees?|years?|percent|%)\\b",
+    r"\b\d+(?:[.,]\d+)?\s*(?:mm|cm|m|metres?|meters?|km|kilometres?|"
+    r"kilometers?|degrees?|years?|percent|%)\b",
     re.IGNORECASE,
 )
-_YEAR = re.compile(r"\\b(?:1[0-9]{3}|20[0-9]{2})\\b")
+_YEAR = re.compile(r"\b(?:1[0-9]{3}|20[0-9]{2})\b")
 
 
 def _source_abstract(source):
     text = source.get("abstract") or abstract_text(source)
     text = html.unescape(str(text))
     text = re.sub(r"<[^>]+>", " ", text)
-    return re.sub(r"\\s+", " ", text).strip()
+    return re.sub(r"\s+", " ", text).strip()
 
 
 def _sentences(text):
-    return [part.strip() for part in re.split(r"(?<=[.!?])\\s+", text) if part.strip()]
+    return [part.strip() for part in re.split(r"(?<=[.!?])\s+", text) if part.strip()]
 
 
 def _topic_terms(topic):
