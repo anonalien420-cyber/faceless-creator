@@ -31,7 +31,7 @@ The evaluator refuses missing labels; it never invents relevance judgments.
 
 Schema v2 requires each source record to use one canonical source_type value: primary, archival, official_record, academic, institutional, or other. Legacy v1 ledgers are migrated in memory; legacy secondary values map conservatively to other because they do not prove peer review. Classification is metadata only and never approves a source. Claims can optionally use date_start, date_end, date_precision, and conflicts_with.
 
-## Phase 2: AI visual reconstruction
+## Production Phase 2: AI visual reconstruction (separate visual track)
 
 \`src/visuals.py\` connects to a user-hosted ComfyUI server. This avoids locking
 the project to a paid image API. Configure:
