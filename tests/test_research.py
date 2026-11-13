@@ -29,6 +29,9 @@ class ResearchTests(unittest.TestCase):
         self.assertEqual(len(result["sources"]), 1)
         self.assertEqual(result["sources"][0]["review_status"], "UNREVIEWED")
         self.assertTrue(result["sources"][0]["source_id"].startswith("src_"))
+        self.assertIn(result["sources"][0]["source_type"],
+                      {"primary", "archival", "official_record", "academic", "institutional", "other"})
+        self.assertNotIn("source_priority", result["sources"][0])
 
 
 if __name__ == "__main__":
