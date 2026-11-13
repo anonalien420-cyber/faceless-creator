@@ -354,14 +354,12 @@ class BranchConfigSafeguardsTests(unittest.TestCase):
         self.assertEqual(real[0]["mood"], "mellow")
         self.assertIn("royalty-free", real[0]["license"])
         self.assertEqual(len([t for t in library if t.get("example")]), 3)
-        # The bed file itself is NOT in the branch tree (it lives in the
-        # main copy), so from the branch tree the matcher sees no usable
-        # track and warns instead of mixing a wrong bed.
-        self.assertFalse(os.path.exists(os.path.join(BRANCH_ROOT, "music")))
-        err = io.StringIO()
-        with contextlib.redirect_stderr(err):
-            self.assertEqual(music.available_library(config), [])
-        self.assertIn("Skipping music library entry with missing file", err.getvalue())
+        # The in-house bed is tracked in this branch and must be available.
+        bed_path = os.path.join(BRANCH_ROOT, "music", "mellow_history_bed.mp3")
+        self.assertTrue(os.path.isfile(bed_path))
+        available = music.available_library(config)
+        self.assertEqual(len(available), 1)
+        self.assertEqual(available[0]["file"], "music/mellow_history_bed.mp3")
 
     def test_real_bed_selected_when_present(self):
         # Same bed entry, pointed at a real file: it must win a perfect
