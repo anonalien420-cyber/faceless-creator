@@ -6,6 +6,7 @@ approves a source or a claim, and every dropped candidate is kept in
 the discover() output (``dropped_sources``) so a reviewer can audit
 or restore it. Human review stays the only approval path.
 """
+import html
 import re
 from datetime import date
 
@@ -47,10 +48,11 @@ def _tokens(text):
 
 
 def abstract_text(source):
-    """Rebuild an OpenAlex abstract from its inverted index.
-
-    Returns "" when the source carries no abstract_inverted_index.
-    """
+    """Return a provider abstract, rebuilding OpenAlex inverted indexes when needed."""
+    plain = source.get("abstract")
+    if isinstance(plain, str) and plain.strip():
+        plain = html.unescape(re.sub(r"<[^>]+>", " ", plain))
+        return re.sub(r"\s+", " ", plain).strip()
     index = source.get("abstract_inverted_index") or {}
     if not isinstance(index, dict) or not index:
         return ""
