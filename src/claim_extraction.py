@@ -47,7 +47,7 @@ def _topic_terms(topic):
 
 
 def extract_claims(sources, topic, max_claims_per_source=20):
-    """Return candidate sentences copied verbatim from source abstracts only."""
+    """Return candidate sentences copied verbatim from source abstracts or snippets."""
     terms = _topic_terms(topic)
     candidates = []
     by_text = {}
@@ -85,6 +85,7 @@ def extract_claims(sources, topic, max_claims_per_source=20):
                         "publication_year": source.get("publication_year"),
                         "sentence_index": sentence_index,
                         "source_text_sha256": digest,
+                        "extraction_method": extraction_method,
                     })
                 continue
             source_type = source.get("source_type", "other")
@@ -112,7 +113,8 @@ def extract_claims(sources, topic, max_claims_per_source=20):
                     "source_url": source.get("url", ""),
                     "publication_year": source.get("publication_year"),
                     "sentence_index": sentence_index,
-                    "abstract_sha256": digest,
+                    "source_text_sha256": digest,
+                    "extraction_method": extraction_method,
                 },
                 "source_provenance": [{
                     "source_id": source_id,
@@ -120,7 +122,8 @@ def extract_claims(sources, topic, max_claims_per_source=20):
                     "source_url": source.get("url", ""),
                     "publication_year": source.get("publication_year"),
                     "sentence_index": sentence_index,
-                    "abstract_sha256": digest,
+                    "source_text_sha256": digest,
+                    "extraction_method": extraction_method,
                 }],
             }
             candidates.append(candidate)
