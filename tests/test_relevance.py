@@ -289,5 +289,14 @@ class VerificationFlagTests(unittest.TestCase):
         self.assertEqual(strict["claims"][0]["linked_sources_below_relevance_threshold"], 1)
         self.assertEqual(strict["claims"][0]["errors"], [])
 
+    def test_plain_crossref_abstract_is_used_for_relevance(self):
+        source = {
+            "provider": "Crossref", "title": "A research paper",
+            "publication_year": 2020, "source_type": "academic",
+            "abstract": "The Great Pyramid void was measured using muon imaging."
+        }
+        self.assertIn("Great Pyramid void", abstract_text(source))
+        self.assertGreater(score_source(source, "Great Pyramid void")["score"], 60)
+
 if __name__ == "__main__":
     unittest.main()
