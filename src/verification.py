@@ -38,6 +38,12 @@ def verify_ledger(ledger):
         primary = [s for s in linked if s.get("source_type") in
                    ("primary", "archival", "official_record")]
         errors, warnings = [], []
+        relevance_values = [s.get("relevance_score") for s in linked
+                            if isinstance(s.get("relevance_score"), (int, float))]
+        min_relevance = min(relevance_values) if relevance_values else None
+        below_relevance_threshold = sum(1 for value in relevance_values if value < 40)
+        if below_relevance_threshold:
+            warnings.append("{} linked source(s) fall below the relevance triage threshold (40); inspect manually.".format(below_relevance_threshold))
         start = _parse_date(claim.get("date_start"))
         end = _parse_date(claim.get("date_end"))
         if claim.get("date_start") and not start:
@@ -84,7 +90,10 @@ def verify_ledger(ledger):
             "metadata_completeness_score": score,
             "score_disclaimer": "Completeness indicator only; not a truth probability or automated fact-check.",
             "source_count": len(linked), "independent_domains": sorted(hosts),
-            "primary_source_count": len(primary), "errors": errors, "warnings": warnings,
+            "primary_source_count": len(primary),
+            "minimum_linked_relevance_score": min_relevance,
+            "linked_sources_below_relevance_threshold": below_relevance_threshold,
+            "errors": errors, "warnings": warnings,
             "conflicts_with": claim.get("conflicts_with", []),
             "passed": not errors,
             "needs_review": needs_review,
