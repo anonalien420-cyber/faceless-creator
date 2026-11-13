@@ -42,7 +42,7 @@ def synthetic_ledger():
             "reviewed_by": "automated-test-fixture", "reviewed_at": "2026-11-09T00:00:00Z",
             "shock_hook": index == 0, "sequence": index + 1,
         })
-    return {"schema_version": 1, "claims": claims, "sources": sources}
+    return {"schema_version": 2, "claims": claims, "sources": sources}
 
 
 def main():
