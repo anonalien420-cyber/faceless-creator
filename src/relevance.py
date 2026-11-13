@@ -49,7 +49,7 @@ def _tokens(text):
 
 def abstract_text(source):
     """Return a provider abstract, rebuilding OpenAlex inverted indexes when needed."""
-    plain = source.get("abstract")
+    plain = source.get("abstract") or source.get("snippet") or source.get("description")
     if isinstance(plain, str) and plain.strip():
         plain = html.unescape(re.sub(r"<[^>]+>", " ", plain))
         return re.sub(r"\s+", " ", plain).strip()
