@@ -34,6 +34,13 @@ class ResearchExpansionTests(unittest.TestCase):
         loc.assert_not_called()
         ia.assert_not_called()
 
+    def test_provider_query_variants_are_distinct_and_topic_preserving(self):
+        variants = research.provider_query_variants("Great Pyramid void", self.CONFIG)
+        self.assertIn("Great Pyramid void", variants["OpenAlex"])
+        self.assertNotEqual(variants["OpenAlex"], variants["Crossref"])
+        self.assertIn("title:(", variants["Internet Archive"])
+        self.assertIn("Library of Congress", ["OpenAlex", "Crossref", "Library of Congress", "Internet Archive"])
+
     def test_date_window_keeps_archival_and_undated_records(self):
         self.assertFalse(research._within_date_window({
             "source_type": "academic", "publication_year": 1800
