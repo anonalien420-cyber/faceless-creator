@@ -4,6 +4,15 @@ This document describes the new systems and their limits. The pipeline remains
 human-reviewed. No automated score proves a historical claim and no feature
 enables unattended public publishing.
 
+## Deep Scan Phase 2: intelligent historical research
+
+The research engine uses deterministic source taxonomy, topic-aware query
+expansion, relevance scoring, configurable provider/date controls, and
+verbatim candidate-claim extraction. Discovery results and extracted claims
+remain unreviewed. Relevance scores are triage metadata, not truth
+probabilities. Every extracted sentence retains its source IDs and text
+provenance; only a human-reviewed ledger can feed documentary generation.
+
 ## Phase 1: historical verification
 
 - \`src/verification.py\` produces \`data/verification_report.json\`.
