@@ -253,7 +253,7 @@ def discover(query, limit=10, config=None):
         item["review_status"] = "UNREVIEWED"
         deduped.append(item)
     # Old primary/archival records are never removed by a scholarly-publication
-    # date window. The window only bounds dated secondary research records.
+    # date window. The window only bounds dated non-primary research records.
     years = int(config.get("research_date_window_years", 100))
     cutoff_year = date.today().year - years if years > 0 else 0
     dated = [item for item in deduped if _within_date_window(item, cutoff_year)]
