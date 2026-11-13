@@ -51,5 +51,16 @@ class ClaimExtractionTests(unittest.TestCase):
         self.assertEqual(extract_claims([source], "Great Pyramid void"), [])
 
 
+    def test_snippet_fallback_is_traceable(self):
+        source = {
+            "source_id": "loc-snippet", "source_type": "archival",
+            "snippet": "The Great Pyramid survey recorded a 30 metre void above the gallery."
+        }
+        claims = extract_claims([source], "Great Pyramid")
+        self.assertEqual(len(claims), 1)
+        self.assertEqual(claims[0]["text"], source["snippet"])
+        self.assertEqual(claims[0]["source_ids"], ["loc-snippet"])
+        self.assertEqual(claims[0]["status"], "UNKNOWN")
+
 if __name__ == "__main__":
     unittest.main()
