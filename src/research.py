@@ -153,8 +153,10 @@ def search_internet_archive(query, limit=10):
     return results
 
 
-def discover(query, limit=10):
+def discover(query, limit=10, config=None):
     """Return deduplicated scholarly candidates; no candidate is auto-approved."""
+    config = config or {}
+    threshold = int(config.get("research_relevance_threshold", DEFAULT_THRESHOLD))
     found = []
     errors = []
     for provider in (search_openalex, search_crossref, search_library_of_congress, search_internet_archive):
@@ -188,10 +190,10 @@ def discover(query, limit=10):
     # Relevance triage (never an approval): low-relevance candidates are
     # filtered out but kept in dropped_sources with their reasons, so a
     # reviewer can audit or restore them.
-    kept, dropped = filter_sources(deduped, query, threshold=DEFAULT_THRESHOLD)
+    kept, dropped = filter_sources(deduped, query, threshold=threshold)
     return {"query": query, "discovered_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
             "sources": kept, "dropped_sources": dropped, "errors": errors,
-            "relevance_threshold": DEFAULT_THRESHOLD,
+            "relevance_threshold": threshold,
             "warning": "Discovery results are leads, not verified evidence. Human review is required."}
 
 
@@ -201,7 +203,12 @@ def main(argv=None):
     parser.add_argument("--limit", type=int, default=10)
     parser.add_argument("--output", default="data/research_sources.json")
     args = parser.parse_args(argv)
-    result = discover(args.query, args.limit)
+    try:
+        from src.config import load_config
+    except ImportError:
+        from config import load_config
+    config = load_config()
+    result = discover(args.query, args.limit, config=config)
     os.makedirs(os.path.dirname(args.output) or ".", exist_ok=True)
     with open(args.output, "w", encoding="utf-8") as fh:
         json.dump(result, fh, indent=2, ensure_ascii=False)
