@@ -177,7 +177,7 @@ def expand_query(query, config=None):
     additions = []
     lowered = " ".join(terms).lower()
     for term, synonyms in mapping.items():
-        if re.search(r"\b" + re.escape(term) + r"\\b", lowered):
+        if re.search(r"\b" + re.escape(term) + r"\b", lowered):
             additions.extend(synonyms)
     seen = set()
     output = []
