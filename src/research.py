@@ -189,6 +189,20 @@ def expand_query(query, config=None):
     return " ".join(output)
 
 
+def provider_query_variants(query, config=None):
+    """Build provider-specific query strings while retaining the user's core topic."""
+    expanded = expand_query(query, config)
+    synonyms = [word for word in expanded.split() if word.casefold() not in
+                {part.casefold() for part in (query or "").split()}]
+    extra = " ".join(synonyms)
+    return {
+        "OpenAlex": expanded,
+        "Crossref": (query.strip() + " " + extra).strip(),
+        "Library of Congress": (query.strip() + " OR " + extra).strip() if extra else query.strip(),
+        "Internet Archive": "title:({}) OR description:({})".format(expanded, expanded),
+    }
+
+
 def _within_date_window(source, cutoff_year):
     """Keep archival leads and undated records; bound dated scholarly results."""
     source_type = source.get("source_type") or assign_source_type(source)
@@ -217,13 +231,14 @@ def discover(query, limit=10, config=None):
         "Library of Congress": search_library_of_congress,
         "Internet Archive": search_internet_archive,
     }
-    expanded_query = expand_query(query, config)
+    provider_queries = provider_query_variants(query, config)
+    expanded_query = provider_queries.get("OpenAlex", expand_query(query, config))
     found, errors = [], []
     for provider_name, provider in provider_map.items():
         if provider_name not in providers:
             continue
         try:
-            found.extend(provider(expanded_query, per_provider_limit))
+            found.extend(provider(provider_queries[provider_name], per_provider_limit))
         except Exception as exc:
             errors.append({"provider": provider.__name__, "error": str(exc)})
     deduped, seen = [], set()
@@ -264,6 +279,8 @@ def discover(query, limit=10, config=None):
     return {
         "query": query,
         "expanded_query": expanded_query,
+        "provider_queries": {name: value for name, value in provider_queries.items()
+                            if name in providers},
         "discovered_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
         "sources": kept,
         "dropped_sources": dropped + date_dropped,
@@ -316,6 +333,8 @@ def main(argv=None):
                 "authors": source.get("authors", []), "provider": source.get("provider"),
                 "notes": "", "source_priority": source.get("source_priority"),
                 "source_type": source.get("source_type"),
+                "relevance_score": source.get("relevance_score"),
+                "relevance_reasons": source.get("relevance_reasons", []),
                 "review_status": "UNREVIEWED"
             })
             known.add(key)
