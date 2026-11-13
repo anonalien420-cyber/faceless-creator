@@ -12,6 +12,10 @@ verbatim candidate-claim extraction. Discovery results and extracted claims
 remain unreviewed. Relevance scores are triage metadata, not truth
 probabilities. Every extracted sentence retains its source IDs and text
 provenance; only a human-reviewed ledger can feed documentary generation.
+`src/research_evaluation.py` compares precision@10 using explicit human
+labels. The blank `data/research_relevance_evaluation.template.json` has
+five topics and must be filled with baseline and Phase 2 top-10 results.
+The evaluator refuses missing labels; it never invents relevance judgments.
 
 ## Phase 1: historical verification
 
