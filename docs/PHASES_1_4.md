@@ -16,9 +16,7 @@ enables unattended public publishing.
   sources or change evidence tiers.
 - Documentary QA now includes these checks.
 
-For source records, use \`source_type\` values \`primary\`, \`archival\`,
-\`official_record\`, or \`secondary\`. Claims can optionally use
-\`date_start\`, \`date_end\`, \`date_precision\`, and \`conflicts_with\`.
+Schema v2 requires each source record to use one canonical source_type value: primary, archival, official_record, academic, institutional, or other. Legacy v1 ledgers are migrated in memory; legacy secondary values map conservatively to other because they do not prove peer review. Classification is metadata only and never approves a source. Claims can optionally use date_start, date_end, date_precision, and conflicts_with.
 
 ## Phase 2: AI visual reconstruction
 
