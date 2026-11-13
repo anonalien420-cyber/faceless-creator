@@ -173,11 +173,11 @@ def expand_query(query, config=None):
     """Add configured topic synonyms without changing or discarding original terms."""
     config = config or {}
     mapping = _synonym_map(config)
-    terms = [part for part in re.split(r"\\s+", (query or "").strip()) if part]
+    terms = [part for part in re.split(r"\s+", (query or "").strip()) if part]
     additions = []
     lowered = " ".join(terms).lower()
     for term, synonyms in mapping.items():
-        if re.search(r"\\b" + re.escape(term) + r"\\b", lowered):
+        if re.search(r"\b" + re.escape(term) + r"\\b", lowered):
             additions.extend(synonyms)
     seen = set()
     output = []
