@@ -280,5 +280,14 @@ class VerificationFlagTests(unittest.TestCase):
         self.assertTrue(any("relevance triage threshold" in w for w in claim["warnings"]))
         self.assertEqual(claim["status"], "KNOWN")
 
+    def test_verification_uses_configured_relevance_threshold(self):
+        ledger = self._ledger(["primary"])
+        ledger["sources"][0]["relevance_score"] = 45
+        default = verify_ledger(ledger)
+        strict = verify_ledger(ledger, relevance_threshold=50)
+        self.assertEqual(default["claims"][0]["linked_sources_below_relevance_threshold"], 0)
+        self.assertEqual(strict["claims"][0]["linked_sources_below_relevance_threshold"], 1)
+        self.assertEqual(strict["claims"][0]["errors"], [])
+
 if __name__ == "__main__":
     unittest.main()
