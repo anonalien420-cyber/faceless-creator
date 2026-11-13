@@ -16,6 +16,10 @@ _FACTUAL_PREDICATE = re.compile(
     r"consists|contains|is situated|was built|were built)\b",
     re.IGNORECASE,
 )
+_STRONG_FINDING = re.compile(
+    r"\\b(discovered|detected|measured|observed|identified|confirmed|documented)\\b",
+    re.IGNORECASE,
+)
 _MEASUREMENT = re.compile(
     r"\b\d+(?:[.,]\d+)?\s*(?:mm|cm|m|metres?|meters?|km|kilometres?|"
     r"kilometers?|degrees?|years?|percent|%)\b",
@@ -67,11 +71,19 @@ def extract_claims(sources, topic, max_claims_per_source=20):
                 existing = by_text[normalized]
                 if source_id not in existing["source_ids"]:
                     existing["source_ids"].append(source_id)
+                    existing["source_provenance"].append({
+                        "source_id": source_id,
+                        "source_title": source.get("title", ""),
+                        "source_url": source.get("url", ""),
+                        "publication_year": source.get("publication_year"),
+                        "sentence_index": sentence_index,
+                        "abstract_sha256": digest,
+                    })
                 continue
             source_type = source.get("source_type", "other")
             supported_tier = (
                 "KNOWN" if source_type in ("primary", "academic")
-                and (_MEASUREMENT.search(sentence) or _FACTUAL_PREDICATE.search(sentence))
+                and (_MEASUREMENT.search(sentence) or _STRONG_FINDING.search(sentence))
                 else "UNKNOWN"
             )
             candidate = {
@@ -95,6 +107,14 @@ def extract_claims(sources, topic, max_claims_per_source=20):
                     "sentence_index": sentence_index,
                     "abstract_sha256": digest,
                 },
+                "source_provenance": [{
+                    "source_id": source_id,
+                    "source_title": source.get("title", ""),
+                    "source_url": source.get("url", ""),
+                    "publication_year": source.get("publication_year"),
+                    "sentence_index": sentence_index,
+                    "abstract_sha256": digest,
+                }],
             }
             candidates.append(candidate)
             by_text[normalized] = candidate
