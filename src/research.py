@@ -153,48 +153,125 @@ def search_internet_archive(query, limit=10):
     return results
 
 
-def discover(query, limit=10, config=None):
-    """Return deduplicated scholarly candidates; no candidate is auto-approved."""
+def _synonym_map(config):
+    mapping = {}
+    for row in config.get("research_synonyms", []) or []:
+        if not isinstance(row, dict):
+            continue
+        term = str(row.get("term") or "").strip().lower()
+        values = row.get("synonyms") or []
+        if isinstance(values, str):
+            values = values.split(";")
+        synonyms = [str(value).strip() for value in values if str(value).strip()]
+        if term and synonyms:
+            mapping[term] = synonyms
+    return mapping
+
+
+def expand_query(query, config=None):
+    """Add configured topic synonyms without changing or discarding original terms."""
     config = config or {}
+    mapping = _synonym_map(config)
+    terms = [part for part in re.split(r"\\s+", (query or "").strip()) if part]
+    additions = []
+    lowered = " ".join(terms).lower()
+    for term, synonyms in mapping.items():
+        if re.search(r"\\b" + re.escape(term) + r"\\b", lowered):
+            additions.extend(synonyms)
+    seen = set()
+    output = []
+    for term in terms + additions:
+        key = term.casefold()
+        if key not in seen:
+            seen.add(key)
+            output.append(term)
+    return " ".join(output)
+
+
+def _within_date_window(source, cutoff_year):
+    """Keep archival leads and undated records; bound dated scholarly results."""
+    source_type = source.get("source_type") or assign_source_type(source)
+    if source_type in ("primary", "archival", "official_record"):
+        return True
+    value = source.get("publication_year")
+    match = re.search(r"\\b(1[0-9]{3}|20[0-9]{2})\\b", str(value or ""))
+    if not match:
+        return True
+    return int(match.group(1)) >= cutoff_year
+
+
+def discover(query, limit=10, config=None):
+    """Discover, expand, classify, score and filter candidates; never auto-approve."""
+    from datetime import date
+    config = config or {}
+    max_results = max(1, min(int(config.get("research_max_results", limit)), 50))
+    per_provider_limit = min(max(int(limit), 1), max_results)
     threshold = int(config.get("research_relevance_threshold", DEFAULT_THRESHOLD))
-    found = []
-    errors = []
-    for provider in (search_openalex, search_crossref, search_library_of_congress, search_internet_archive):
+    providers = config.get("research_providers") or [
+        "OpenAlex", "Crossref", "Library of Congress", "Internet Archive"
+    ]
+    provider_map = {
+        "OpenAlex": search_openalex,
+        "Crossref": search_crossref,
+        "Library of Congress": search_library_of_congress,
+        "Internet Archive": search_internet_archive,
+    }
+    expanded_query = expand_query(query, config)
+    found, errors = [], []
+    for provider_name, provider in provider_map.items():
+        if provider_name not in providers:
+            continue
         try:
-            found.extend(provider(query, limit))
+            found.extend(provider(expanded_query, per_provider_limit))
         except Exception as exc:
             errors.append({"provider": provider.__name__, "error": str(exc)})
     deduped, seen = [], set()
     for item in found:
         key = dedup_key(item)
-        if key and key not in seen:
-            seen.add(key)
-            item["source_id"] = "src_" + str(len(deduped) + 1).zfill(4)
-            host = (urllib.parse.urlparse(item.get("url") or "").hostname or "").lower()
-            publication = (item.get("publication") or "").lower()
-            if any(token in host for token in (".gov", ".edu", "museum", "archive", "library")):
-                item["source_priority"] = "institutional_or_primary"
-            elif any(token in publication for token in ("journal", "review", "proceedings", "transactions")):
-                item["source_priority"] = "academic_publication"
-            else:
-                item["source_priority"] = "scholarly_candidate"
-            item["source_type"] = assign_source_type(item)
-            item["notes"] = ""
-            item["review_status"] = "UNREVIEWED"
-            deduped.append(item)
+        if not key or key in seen:
+            continue
+        seen.add(key)
+        item["source_id"] = "src_" + str(len(deduped) + 1).zfill(4)
+        host = (urllib.parse.urlparse(item.get("url") or "").hostname or "").lower()
+        publication = (item.get("publication") or "").lower()
+        if any(token in host for token in (".gov", ".edu", "museum", "archive", "library")):
+            item["source_priority"] = "institutional_or_primary"
+        elif any(token in publication for token in ("journal", "review", "proceedings", "transactions")):
+            item["source_priority"] = "academic_publication"
+        else:
+            item["source_priority"] = "scholarly_candidate"
+        item["source_type"] = assign_source_type(item)
+        item["notes"] = ""
+        item["review_status"] = "UNREVIEWED"
+        deduped.append(item)
+    # Old primary/archival records are never removed by a scholarly-publication
+    # date window. The window only bounds dated secondary research records.
+    years = int(config.get("research_date_window_years", 100))
+    cutoff_year = date.today().year - years if years > 0 else 0
+    dated = [item for item in deduped if _within_date_window(item, cutoff_year)]
+    date_dropped = [
+        {"source": item, "reason": "outside_research_publication_date_window",
+         "cutoff_year": cutoff_year}
+        for item in deduped if item not in dated
+    ]
     priority_order = {"institutional_or_primary": 0, "academic_publication": 1,
                       "scholarly_candidate": 2}
-    deduped.sort(key=lambda item: priority_order.get(item.get("source_priority"), 3))
-    for index, item in enumerate(deduped, 1):
+    dated.sort(key=lambda item: priority_order.get(item.get("source_priority"), 3))
+    for index, item in enumerate(dated, 1):
         item["source_id"] = "src_" + str(index).zfill(4)
-    # Relevance triage (never an approval): low-relevance candidates are
-    # filtered out but kept in dropped_sources with their reasons, so a
-    # reviewer can audit or restore them.
-    kept, dropped = filter_sources(deduped, query, threshold=threshold)
-    return {"query": query, "discovered_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
-            "sources": kept, "dropped_sources": dropped, "errors": errors,
-            "relevance_threshold": threshold,
-            "warning": "Discovery results are leads, not verified evidence. Human review is required."}
+    kept, dropped = filter_sources(dated, query, threshold=threshold)
+    return {
+        "query": query,
+        "expanded_query": expanded_query,
+        "discovered_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+        "sources": kept,
+        "dropped_sources": dropped + date_dropped,
+        "errors": errors,
+        "relevance_threshold": threshold,
+        "research_date_cutoff_year": cutoff_year or None,
+        "providers_enabled": list(providers),
+        "warning": "Discovery results are leads, not verified evidence. Human review is required."
+    }
 
 
 def main(argv=None):
