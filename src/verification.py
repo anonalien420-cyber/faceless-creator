@@ -24,7 +24,7 @@ def _host(url):
         return ""
 
 
-def verify_ledger(ledger):
+def verify_ledger(ledger, relevance_threshold=40):
     claims = ledger.get("claims", [])
     sources = {s.get("source_id"): s for s in ledger.get("sources", [])
                if s.get("source_id")}
@@ -41,9 +41,9 @@ def verify_ledger(ledger):
         relevance_values = [s.get("relevance_score") for s in linked
                             if isinstance(s.get("relevance_score"), (int, float))]
         min_relevance = min(relevance_values) if relevance_values else None
-        below_relevance_threshold = sum(1 for value in relevance_values if value < 40)
+        below_relevance_threshold = sum(1 for value in relevance_values if value < relevance_threshold)
         if below_relevance_threshold:
-            warnings.append("{} linked source(s) fall below the relevance triage threshold (40); inspect manually.".format(below_relevance_threshold))
+            warnings.append("{} linked source(s) fall below the relevance triage threshold ({}); inspect manually.".format(below_relevance_threshold, relevance_threshold)".format(below_relevance_threshold))
         start = _parse_date(claim.get("date_start"))
         end = _parse_date(claim.get("date_end"))
         if claim.get("date_start") and not start:
