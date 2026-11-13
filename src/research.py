@@ -126,6 +126,7 @@ def search_library_of_congress(query, limit=10):
             "publication": "Library of Congress catalogue",
             "authors": item.get("contributor") or [],
             "work_type": item.get("original_format") or "primary-source catalogue record",
+            "snippet": item.get("description") or "",
             "discovery_only": True,
         })
     return results
@@ -134,7 +135,7 @@ def search_library_of_congress(query, limit=10):
 def search_internet_archive(query, limit=10):
     """Search Internet Archive metadata for archival and primary-source leads."""
     params = urllib.parse.urlencode({
-        "q": query, "fl[]": ["identifier", "title", "date", "creator", "mediatype"],
+        "q": query, "fl[]": ["identifier", "title", "date", "creator", "mediatype", "description"],
         "rows": min(max(int(limit), 1), 50), "output": "json"
     }, doseq=True)
     payload = _get_json("https://archive.org/advancedsearch.php?" + params)
@@ -149,6 +150,7 @@ def search_internet_archive(query, limit=10):
             "publication": "Internet Archive digital collection",
             "authors": item.get("creator") or [],
             "work_type": item.get("mediatype") or "archival catalogue record",
+            "snippet": item.get("description") or "",
             "discovery_only": True,
         })
     return results
