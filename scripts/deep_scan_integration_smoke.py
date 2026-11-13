@@ -26,7 +26,7 @@ def synthetic_ledger():
         {"source_id": "journal", "title": "Synthetic historical research paper",
          "url": "https://journal.example.com/research", "publication": "Synthetic journal",
          "publication_year": 2020, "review_status": "APPROVED",
-         "source_type": "secondary", "notes": "Synthetic fixture for automated tests."},
+         "source_type": "academic", "notes": "Synthetic fixture for automated tests."},
     ]
     statement = ("A documented historical record describes the event with a precise date, named location, "
                  "and surviving material evidence that researchers can examine, rather than relying on later "
