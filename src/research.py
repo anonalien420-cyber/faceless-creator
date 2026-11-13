@@ -13,8 +13,10 @@ import urllib.request
 
 try:
     from src.relevance import DEFAULT_THRESHOLD, filter_sources
+    from src.source_types import classify_source
 except ImportError:  # pragma: no cover - direct module execution
     from relevance import DEFAULT_THRESHOLD, filter_sources
+    from source_types import classify_source
 
 OPENALEX = "https://api.openalex.org/works"
 CROSSREF = "https://api.crossref.org/works"
@@ -60,34 +62,8 @@ def dedup_key(item):
 
 
 def assign_source_type(item):
-    """Canonical source taxonomy (same set as PR #5 Phase A schema v2,
-    implemented inline here; that branch is NOT merged).
-
-    Mapping, from provider + source_priority signals:
-      archival       - Library of Congress / Internet Archive catalogue
-                       records (primary-source and archival holdings).
-      institutional  - OpenAlex/Crossref record whose host/publication
-                       signals a .gov/.edu/museum/library/archive body.
-      academic       - OpenAlex/Crossref record from a journal,
-                       proceedings, or other peer-reviewed publication.
-      other          - everything else; never counts as primary evidence.
-
-    "primary" and "official_record" are deliberately never assigned by
-    discovery: only a human reviewer may promote a candidate to those
-    types. Verification counts source_type in
-    (primary, archival, official_record) toward its +20 component, so
-    archival records from LOC/IA are what make that component fire
-    from discovery alone.
-    """
-    provider = (item.get("provider") or "").lower()
-    if provider in ("library of congress", "internet archive"):
-        return "archival"
-    priority = item.get("source_priority")
-    if priority == "institutional_or_primary":
-        return "institutional"
-    if priority == "academic_publication":
-        return "academic"
-    return "other"
+    """Backward-compatible alias for the canonical Phase A classifier."""
+    return classify_source(item)
 
 
 def _get_json(url, timeout=20):
