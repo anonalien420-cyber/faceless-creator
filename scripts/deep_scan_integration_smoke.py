@@ -9,6 +9,9 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if ROOT not in sys.path:
     sys.path.insert(0, ROOT)
 
+from src.claim_extraction import extract_claims
+from src.relevance import filter_sources
+from src.review_packet import build_packet
 from src.documentary import build_documentary
 from src.evidence import save_ledger, validate_ledger
 from src.growth import lint_metadata
@@ -43,6 +46,30 @@ def synthetic_ledger():
 
 
 def main():
+    # Exercise the research triage and extraction path before documentary
+    # generation. The candidate is deliberately synthetic and stays outside
+    # the ledger until the fixture reviewer explicitly confirms it.
+    research_fixture = [{
+        "source_id": "research-smoke-1",
+        "title": "Great Pyramid void measurement test record",
+        "url": "https://research-smoke.example.org/record",
+        "publication": "Synthetic research fixture",
+        "publication_year": 2020,
+        "source_type": "academic",
+        "review_status": "UNREVIEWED",
+        "abstract": "Synthetic test fixture: researchers measured a 30 metre void in the Great Pyramid."
+    }]
+    kept, dropped = filter_sources(research_fixture, "Great Pyramid void", threshold=40)
+    if dropped or len(kept) != 1:
+        raise RuntimeError("Research relevance smoke failed: {}".format(dropped))
+    candidates = extract_claims(kept, "Great Pyramid")
+    if len(candidates) != 1 or candidates[0]["text"] not in research_fixture[0]["abstract"]:
+        raise RuntimeError("Claim extraction smoke failed: {}".format(candidates))
+    packet = build_packet({"sources": kept, "dropped_sources": dropped},
+                          {"sources": [], "claims": []}, "Great Pyramid")
+    if not packet["extracted_claims"] or packet["extracted_claims"][0]["include_in_script"]:
+        raise RuntimeError("Review packet safety smoke failed")
+
     with tempfile.TemporaryDirectory(prefix="deep-scan-integration-") as temp:
         data_dir = os.path.join(temp, "data")
         os.makedirs(data_dir)
