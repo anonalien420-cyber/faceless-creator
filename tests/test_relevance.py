@@ -298,5 +298,13 @@ class VerificationFlagTests(unittest.TestCase):
         self.assertIn("Great Pyramid void", abstract_text(source))
         self.assertGreater(score_source(source, "Great Pyramid void")["score"], 60)
 
+    def test_archival_snippet_contributes_to_relevance(self):
+        source = {
+            "provider": "Library of Congress", "title": "Catalogue entry",
+            "source_type": "archival", "publication_year": 1920,
+            "snippet": "Great Pyramid void survey records a chamber above the Grand Gallery."
+        }
+        self.assertGreater(score_source(source, "Great Pyramid void")["score"], 60)
+
 if __name__ == "__main__":
     unittest.main()
