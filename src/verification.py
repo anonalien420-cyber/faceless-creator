@@ -108,9 +108,9 @@ def verify_ledger(ledger, relevance_threshold=40):
     }
 
 
-def write_report(ledger, output_path):
+def write_report(ledger, output_path, relevance_threshold=40):
     import json
-    report = verify_ledger(ledger)
+    report = verify_ledger(ledger, relevance_threshold=relevance_threshold)
     with open(output_path, "w", encoding="utf-8") as fh:
         json.dump(report, fh, indent=2, ensure_ascii=False)
     return report
@@ -123,7 +123,12 @@ if __name__ == "__main__":
     parser.add_argument("--ledger", default="data/evidence_ledger.json")
     parser.add_argument("--output", default="data/verification_report.json")
     args = parser.parse_args()
-    result = write_report(load_ledger(args.ledger), args.output)
+    try:
+        from src.config import load_config
+    except ImportError:
+        from config import load_config
+    threshold = load_config().get("research_relevance_threshold", 40)
+    result = write_report(load_ledger(args.ledger), args.output, threshold)
     print("Historical verification metadata report: {} claim(s), {}".format(
         result["claim_count"], "PASS" if result["passed"] else "BLOCKED"))
     raise SystemExit(0 if result["passed"] else 1)
