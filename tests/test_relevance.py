@@ -267,5 +267,18 @@ class VerificationFlagTests(unittest.TestCase):
         self.assertTrue(report["passed"])
 
 
+
+    def test_verification_reports_low_relevance_as_warning_only(self):
+        ledger = self._ledger(["primary", "academic"])
+        ledger["sources"][0]["relevance_score"] = 39
+        ledger["sources"][1]["relevance_score"] = 82
+        report = verify_ledger(ledger)
+        claim = report["claims"][0]
+        self.assertEqual(claim["minimum_linked_relevance_score"], 39)
+        self.assertEqual(claim["linked_sources_below_relevance_threshold"], 1)
+        self.assertEqual(claim["errors"], [])
+        self.assertTrue(any("relevance triage threshold" in w for w in claim["warnings"]))
+        self.assertEqual(claim["status"], "KNOWN")
+
 if __name__ == "__main__":
     unittest.main()
