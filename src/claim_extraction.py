@@ -59,6 +59,10 @@ def extract_claims(sources, topic, max_claims_per_source=20):
         if not abstract:
             continue
         digest = hashlib.sha256(abstract.encode("utf-8")).hexdigest()
+        extraction_method = (
+            "abstract_sentence" if source.get("abstract") or source.get("abstract_inverted_index")
+            else "snippet_sentence"
+        )
         for sentence_index, sentence in enumerate(_sentences(abstract)):
             sentence_terms = set(_tokens(sentence))
             if not terms.intersection(sentence_terms):
@@ -80,7 +84,7 @@ def extract_claims(sources, topic, max_claims_per_source=20):
                         "source_url": source.get("url", ""),
                         "publication_year": source.get("publication_year"),
                         "sentence_index": sentence_index,
-                        "abstract_sha256": digest,
+                        "source_text_sha256": digest,
                     })
                 continue
             source_type = source.get("source_type", "other")
@@ -102,7 +106,7 @@ def extract_claims(sources, topic, max_claims_per_source=20):
                 "reviewed_at": "",
                 "include_in_script": False,
                 "extracted": True,
-                "extraction_method": "abstract_sentence",
+                "extraction_method": extraction_method,
                 "provenance": {
                     "source_title": source.get("title", ""),
                     "source_url": source.get("url", ""),
