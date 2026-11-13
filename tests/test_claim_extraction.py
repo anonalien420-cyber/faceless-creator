@@ -27,7 +27,7 @@ class ClaimExtractionTests(unittest.TestCase):
             self.assertEqual(claim["text"], claim["extracted_text"])
             self.assertEqual(claim["source_ids"], ["nature-2017"])
             self.assertEqual(claim["extraction_method"], "abstract_sentence")
-            self.assertTrue(claim["provenance"]["abstract_sha256"])
+            self.assertTrue(claim["provenance"]["source_text_sha256"])
 
     def test_candidates_never_enter_script_or_gain_final_tier(self):
         claims = extract_claims([self.source], "Great Pyramid void")
