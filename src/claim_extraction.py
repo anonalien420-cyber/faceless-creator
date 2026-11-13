@@ -13,11 +13,11 @@ from src.relevance import abstract_text, _tokens
 _FACTUAL_PREDICATE = re.compile(
     r"\b(discovered|detected|measured|observed|identified|confirmed|"
     r"reported|recorded|found|revealed|indicated|located|estimated|"
-    r"consists|contains|is situated|was built|were built)\b",
+    r"consists|contains|is situated|was built|were built|documented)\b",
     re.IGNORECASE,
 )
 _STRONG_FINDING = re.compile(
-    r"\\b(discovered|detected|measured|observed|identified|confirmed|documented)\\b",
+    r"\b(discovered|detected|measured|observed|identified|confirmed|documented)\b",
     re.IGNORECASE,
 )
 _MEASUREMENT = re.compile(
