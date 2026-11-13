@@ -46,6 +46,21 @@ def evaluate_precision_at_k(dataset, k=10):
     }
 
 
+def compare_precision_at_k(dataset, k=10):
+    if "baseline" not in dataset or "phase2" not in dataset:
+        raise ValueError("Comparison input requires baseline and phase2 datasets")
+    baseline = evaluate_precision_at_k(dataset["baseline"], k)
+    phase2 = evaluate_precision_at_k(dataset["phase2"], k)
+    return {
+        "schema_version": 1,
+        "metric": "precision@{}".format(k),
+        "baseline": baseline,
+        "phase2": phase2,
+        "absolute_delta": phase2["mean_precision_at_k"] - baseline["mean_precision_at_k"],
+        "disclaimer": "Difference in human-labelled topical relevance only; not claim truth, source authenticity, or causal proof.",
+    }
+
+
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--input", required=True,
@@ -55,11 +70,18 @@ def main(argv=None):
     args = parser.parse_args(argv)
     with open(args.input, encoding="utf-8") as handle:
         dataset = json.load(handle)
-    report = evaluate_precision_at_k(dataset, args.k)
+    if "baseline" in dataset and "phase2" in dataset:
+        report = compare_precision_at_k(dataset, args.k)
+        score = report["phase2"]["mean_precision_at_k"]
+        count = report["phase2"]["topic_count"]
+    else:
+        report = evaluate_precision_at_k(dataset, args.k)
+        score = report["mean_precision_at_k"]
+        count = report["topic_count"]
     with open(args.output, "w", encoding="utf-8") as handle:
         json.dump(report, handle, indent=2, ensure_ascii=False)
     print("Human-labelled {} across {} topics: {:.3f}".format(
-        report["metric"], report["topic_count"], report["mean_precision_at_k"]))
+        report["metric"], count, score))
     return 0
 
 
