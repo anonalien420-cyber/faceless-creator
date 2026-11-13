@@ -1,7 +1,7 @@
 """Tests for the human-labelled research precision evaluator."""
 import unittest
 
-from src.research_evaluation import evaluate_precision_at_k
+from src.research_evaluation import evaluate_precision_at_k, compare_precision_at_k
 
 
 class ResearchEvaluationTests(unittest.TestCase):
@@ -40,6 +40,19 @@ class ResearchEvaluationTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "duplicate source_id"):
             evaluate_precision_at_k(dataset, k=2)
 
+
+    def test_comparison_reports_phase2_delta_without_claiming_truth(self):
+        dataset = {
+            "baseline": {"topics": [{"topic": "topic", "results": [
+                {"source_id": "b{}".format(i), "relevant": i < 4} for i in range(10)
+            ]}]},
+            "phase2": {"topics": [{"topic": "topic", "results": [
+                {"source_id": "p{}".format(i), "relevant": i < 7} for i in range(10)
+            ]}]},
+        }
+        report = compare_precision_at_k(dataset, k=10)
+        self.assertAlmostEqual(report["absolute_delta"], 0.3)
+        self.assertIn("not claim truth", report["disclaimer"])
 
 if __name__ == "__main__":
     unittest.main()
