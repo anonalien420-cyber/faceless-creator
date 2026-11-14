@@ -369,10 +369,26 @@ def evaluate_historical_production_gate(niche, long_candidates, short_candidates
 
     topics, blockers = [], []
     if not claims:
-        blockers.append(
+        reason = (
             "No human-reviewed evidence claims exist yet. Review sources and "
             "claims in data/review_packet.md, then update data/evidence_ledger.json."
         )
+        for fmt, candidates in (("long", long_candidates), ("short", short_candidates)):
+            for candidate in candidates:
+                topics.append({
+                    "format": fmt,
+                    "topic": topic_from_candidate(candidate),
+                    "status": "blocked_review_required",
+                    "reason": reason,
+                })
+        return {
+            "required": True,
+            "status": "blocked_review_required",
+            "reviewed_claim_count": 0,
+            "topics": topics,
+            "blockers": [reason],
+            "policy": "No candidate source or extracted claim is auto-approved; rendering requires human-reviewed, topic-matched claims and a reviewed KNOWN shock hook.",
+        }
 
     for fmt, candidates in (("long", long_candidates), ("short", short_candidates)):
         for candidate in candidates:
