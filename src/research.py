@@ -94,7 +94,10 @@ def search_openalex(query, per_page=10):
 
 
 def search_crossref(query, rows=10):
-    params = urllib.parse.urlencode({"query.bibliographic": query, "rows": min(max(int(rows), 1), 50)})
+    # Query titles rather than broad bibliographic metadata. This avoids
+    # unrelated papers being returned merely because their abstracts mention
+    # generic words such as "history" or "mystery".
+    params = urllib.parse.urlencode({"query.title": query, "rows": min(max(int(rows), 1), 50)})
     payload = _get_json(CROSSREF + "?" + params)
     results = []
     for item in payload.get("message", {}).get("items", []):
