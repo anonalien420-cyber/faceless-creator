@@ -345,6 +345,73 @@ def write_review_queue(outputs, niche, config, args, seo_entries, thumb_map):
     print(f"Review queue -> data/review_queue.md ({len(outputs)} video(s))")
 
 
+
+def evaluate_historical_production_gate(niche, long_candidates, short_candidates, ledger):
+    """Preflight every planned history-mystery script before any rendering.
+
+    Discovery candidates are not evidence. A run with missing, invalid, or
+    topic/format-incomplete human review returns a durable blocked report and
+    skips production instead of crashing halfway through the script stage.
+    """
+    if "history" not in (niche or "").lower():
+        return {"required": False, "status": "ready", "topics": [], "blockers": []}
+
+    from src.documentary import build_documentary
+    from src.evidence import reviewed_claims
+    from src.script import topic_from_candidate
+
+    try:
+        claims = reviewed_claims(ledger)
+    except (ValueError, TypeError, KeyError) as exc:
+        reason = "Evidence ledger is not publishable: {}".format(exc)
+        return {"required": True, "status": "blocked_review_required",
+                "topics": [], "blockers": [reason]}
+
+    topics, blockers = [], []
+    if not claims:
+        reason = (
+            "No human-reviewed evidence claims exist yet. Review sources and "
+            "claims in data/review_packet.md, then update data/evidence_ledger.json."
+        )
+        for fmt, candidates in (("long", long_candidates), ("short", short_candidates)):
+            for candidate in candidates:
+                topics.append({
+                    "format": fmt,
+                    "topic": topic_from_candidate(candidate),
+                    "status": "blocked_review_required",
+                    "reason": reason,
+                })
+        return {
+            "required": True,
+            "status": "blocked_review_required",
+            "reviewed_claim_count": 0,
+            "topics": topics,
+            "blockers": [reason],
+            "policy": "No candidate source or extracted claim is auto-approved; rendering requires human-reviewed, topic-matched claims and a reviewed KNOWN shock hook.",
+        }
+
+    for fmt, candidates in (("long", long_candidates), ("short", short_candidates)):
+        for candidate in candidates:
+            topic = topic_from_candidate(candidate)
+            item = {"format": fmt, "topic": topic, "status": "ready"}
+            try:
+                build_documentary(topic, fmt, ledger)
+            except (ValueError, TypeError, KeyError) as exc:
+                item["status"] = "blocked_review_required"
+                item["reason"] = str(exc)
+                blockers.append("{} [{}]: {}".format(fmt, topic, exc))
+            topics.append(item)
+
+    return {
+        "required": True,
+        "status": "blocked_review_required" if blockers else "ready",
+        "reviewed_claim_count": len(claims),
+        "topics": topics,
+        "blockers": blockers,
+        "policy": "No candidate source or extracted claim is auto-approved; rendering requires human-reviewed, topic-matched claims and a reviewed KNOWN shock hook.",
+    }
+
+
 def main(argv=None):
     parser = argparse.ArgumentParser()
     parser.add_argument("--config", default="config.yaml")
@@ -395,31 +462,43 @@ def main(argv=None):
                 "trends", log)
         with open("data/top5.json", encoding="utf-8") as fh:
             top5 = json.load(fh)["candidates"]
-        # Research is discovery only. Results are added to the evidence ledger
-        # as UNREVIEWED; no discovered source can become a factual claim
-        # without an explicit human review in the ledger.
+        # Research is discovery only. Search each planned episode by its
+        # actual topic (not the broad channel niche), and preserve a separate
+        # review packet for the long video and each Short. All discoveries
+        # remain UNREVIEWED; no source or claim is auto-approved.
         if "history" in niche.lower():
-            run_cmd([sys.executable, "-m", "src.research", "--query", niche,
-                     "--output", "data/research_sources.json"],
-                    "historical_research", log)
-            run_cmd([sys.executable, "-m", "src.source_archive", "--input",
-                     "data/research_sources.json", "--output",
-                     "data/research_sources_archived.json"],
-                    "historical_source_archive", log)
+            from src.script import topic_from_candidate
+            research_candidates = top5[:long_count + short_count]
+            os.makedirs("data/review_packets", exist_ok=True)
+            for index, candidate in enumerate(research_candidates, 1):
+                research_topic = topic_from_candidate(candidate)
+                suffix = "" if index == 1 else "_{:02d}-{}".format(
+                    index, slug(research_topic))
+                research_path = "data/research_sources{}.json".format(suffix)
+                archive_path = "data/research_sources_archived{}.json".format(suffix)
+                packet_md = ("data/review_packet.md" if index == 1 else
+                             "data/review_packets/{:02d}-{}.md".format(
+                                 index, slug(research_topic)))
+                packet_json = ("data/review_packet.json" if index == 1 else
+                               "data/review_packets/{:02d}-{}.json".format(
+                                   index, slug(research_topic)))
+                run_cmd([sys.executable, "-m", "src.research", "--query",
+                         research_topic, "--output", research_path],
+                        "historical_research:{}:{}".format(index, slug(research_topic)), log)
+                run_cmd([sys.executable, "-m", "src.source_archive", "--input",
+                         research_path, "--output", archive_path],
+                        "historical_source_archive:{}:{}".format(
+                            index, slug(research_topic)), log)
+                run_cmd([sys.executable, "-m", "src.review_packet",
+                         "--input", research_path,
+                         "--ledger", "data/evidence_ledger.json",
+                         "--topic", research_topic,
+                         "--output", packet_md,
+                         "--json-output", packet_json],
+                        "historical_review_packet:{}:{}".format(
+                            index, slug(research_topic)), log)
             # Metadata verification is a separate report, never an automatic
             # source approval or truth score. The evidence ledger remains the gate.
-            # Create a human-readable review packet for the lead episode.
-            # It contains discovery candidates only; it never approves a
-            # source or invents a factual claim.
-            research_topic = (top5[0].get("title") or top5[0].get("topic")
-                              or niche) if top5 else niche
-            run_cmd([sys.executable, "-m", "src.review_packet",
-                     "--input", "data/research_sources.json",
-                     "--ledger", "data/evidence_ledger.json",
-                     "--topic", research_topic,
-                     "--output", "data/review_packet.md",
-                     "--json-output", "data/review_packet.json"],
-                    "historical_review_packet", log)
             if os.path.exists("data/evidence_ledger.json"):
                 run_cmd([sys.executable, "-m", "src.verification", "--ledger",
                          "data/evidence_ledger.json", "--output",
@@ -433,6 +512,29 @@ def main(argv=None):
             json.dump(long_cands, fh, indent=2)
         with open("data/top5_shorts.json", "w", encoding="utf-8") as fh:
             json.dump(short_cands, fh, indent=2)
+
+        # Preflight the complete historical slate before generating any scripts,
+        # narration, or video. A review gap is a normal blocked state, not a crash.
+        if "history" in niche.lower():
+            from src.evidence import load_ledger
+            production_gate = evaluate_historical_production_gate(
+                niche, long_cands, short_cands, load_ledger("data/evidence_ledger.json"))
+            with open("data/production_gate.json", "w", encoding="utf-8") as fh:
+                json.dump(production_gate, fh, indent=2, ensure_ascii=False)
+            if production_gate["status"] != "ready":
+                detail = "; ".join(production_gate["blockers"])
+                log_step(log, "production_gate", "BLOCKED_REVIEW_REQUIRED", detail)
+                log["status"] = "blocked_review_required"
+                log["finished_at"] = datetime.now(timezone.utc).isoformat()
+                with open("data/run_log.json", "w", encoding="utf-8") as fh:
+                    json.dump(log, fh, indent=2)
+                print(
+                    "Research and review packet completed; rendering skipped. "
+                    "Human evidence review is required. See data/production_gate.json "
+                    "and data/review_packet.md."
+                )
+                return 0
+
         run_cmd([sys.executable, "-m", "src.script", "--input", "data/top5_long.json",
                  "--output", "data/scripts_long.json", "--format", "long",
                  "--count", str(long_count)], "scripts:long", log)

@@ -4,6 +4,19 @@ This document describes the new systems and their limits. The pipeline remains
 human-reviewed. No automated score proves a historical claim and no feature
 enables unattended public publishing.
 
+## Deep Scan Phase 2: intelligent historical research
+
+The research engine uses deterministic source taxonomy, topic-aware query
+expansion, relevance scoring, configurable provider/date controls, and
+verbatim candidate-claim extraction. Discovery results and extracted claims
+remain unreviewed. Relevance scores are triage metadata, not truth
+probabilities. Every extracted sentence retains its source IDs and text
+provenance; only a human-reviewed ledger can feed documentary generation.
+`src/research_evaluation.py` compares precision@10 using explicit human
+labels. The blank `data/research_relevance_evaluation.template.json` has
+five topics and must be filled with baseline and Phase 2 top-10 results.
+The evaluator refuses missing labels; it never invents relevance judgments.
+
 ## Phase 1: historical verification
 
 - \`src/verification.py\` produces \`data/verification_report.json\`.
@@ -16,11 +29,9 @@ enables unattended public publishing.
   sources or change evidence tiers.
 - Documentary QA now includes these checks.
 
-For source records, use \`source_type\` values \`primary\`, \`archival\`,
-\`official_record\`, or \`secondary\`. Claims can optionally use
-\`date_start\`, \`date_end\`, \`date_precision\`, and \`conflicts_with\`.
+Schema v2 requires each source record to use one canonical source_type value: primary, archival, official_record, academic, institutional, or other. Legacy v1 ledgers are migrated in memory; legacy secondary values map conservatively to other because they do not prove peer review. Classification is metadata only and never approves a source. Claims can optionally use date_start, date_end, date_precision, and conflicts_with.
 
-## Phase 2: AI visual reconstruction
+## Production Phase 2: AI visual reconstruction (separate visual track)
 
 \`src/visuals.py\` connects to a user-hosted ComfyUI server. This avoids locking
 the project to a paid image API. Configure:

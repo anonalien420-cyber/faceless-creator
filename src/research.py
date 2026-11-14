@@ -13,8 +13,10 @@ import urllib.request
 
 try:
     from src.relevance import DEFAULT_THRESHOLD, filter_sources
+    from src.source_types import classify_source
 except ImportError:  # pragma: no cover - direct module execution
     from relevance import DEFAULT_THRESHOLD, filter_sources
+    from source_types import classify_source
 
 OPENALEX = "https://api.openalex.org/works"
 CROSSREF = "https://api.crossref.org/works"
@@ -60,34 +62,8 @@ def dedup_key(item):
 
 
 def assign_source_type(item):
-    """Canonical source taxonomy (same set as PR #5 Phase A schema v2,
-    implemented inline here; that branch is NOT merged).
-
-    Mapping, from provider + source_priority signals:
-      archival       - Library of Congress / Internet Archive catalogue
-                       records (primary-source and archival holdings).
-      institutional  - OpenAlex/Crossref record whose host/publication
-                       signals a .gov/.edu/museum/library/archive body.
-      academic       - OpenAlex/Crossref record from a journal,
-                       proceedings, or other peer-reviewed publication.
-      other          - everything else; never counts as primary evidence.
-
-    "primary" and "official_record" are deliberately never assigned by
-    discovery: only a human reviewer may promote a candidate to those
-    types. Verification counts source_type in
-    (primary, archival, official_record) toward its +20 component, so
-    archival records from LOC/IA are what make that component fire
-    from discovery alone.
-    """
-    provider = (item.get("provider") or "").lower()
-    if provider in ("library of congress", "internet archive"):
-        return "archival"
-    priority = item.get("source_priority")
-    if priority == "institutional_or_primary":
-        return "institutional"
-    if priority == "academic_publication":
-        return "academic"
-    return "other"
+    """Backward-compatible alias for the canonical Phase A classifier."""
+    return classify_source(item)
 
 
 def _get_json(url, timeout=20):
@@ -118,7 +94,10 @@ def search_openalex(query, per_page=10):
 
 
 def search_crossref(query, rows=10):
-    params = urllib.parse.urlencode({"query.bibliographic": query, "rows": min(max(int(rows), 1), 50)})
+    # Query titles rather than broad bibliographic metadata. This avoids
+    # unrelated papers being returned merely because their abstracts mention
+    # generic words such as "history" or "mystery".
+    params = urllib.parse.urlencode({"query.title": query, "rows": min(max(int(rows), 1), 50)})
     payload = _get_json(CROSSREF + "?" + params)
     results = []
     for item in payload.get("message", {}).get("items", []):
@@ -131,7 +110,8 @@ def search_crossref(query, rows=10):
             "publication": (item.get("container-title") or [""])[0],
             "authors": [(" ".join(filter(None, [a.get("given"), a.get("family")]))).strip()
                         for a in item.get("author", [])],
-            "work_type": item.get("type") or "", "discovery_only": True,
+            "work_type": item.get("type") or "", "abstract": item.get("abstract") or "",
+            "discovery_only": True,
         })
     return results
 
@@ -149,6 +129,7 @@ def search_library_of_congress(query, limit=10):
             "publication": "Library of Congress catalogue",
             "authors": item.get("contributor") or [],
             "work_type": item.get("original_format") or "primary-source catalogue record",
+            "snippet": item.get("description") or "",
             "discovery_only": True,
         })
     return results
@@ -157,7 +138,7 @@ def search_library_of_congress(query, limit=10):
 def search_internet_archive(query, limit=10):
     """Search Internet Archive metadata for archival and primary-source leads."""
     params = urllib.parse.urlencode({
-        "q": query, "fl[]": ["identifier", "title", "date", "creator", "mediatype"],
+        "q": query, "fl[]": ["identifier", "title", "date", "creator", "mediatype", "description"],
         "rows": min(max(int(limit), 1), 50), "output": "json"
     }, doseq=True)
     payload = _get_json("https://archive.org/advancedsearch.php?" + params)
@@ -172,51 +153,146 @@ def search_internet_archive(query, limit=10):
             "publication": "Internet Archive digital collection",
             "authors": item.get("creator") or [],
             "work_type": item.get("mediatype") or "archival catalogue record",
+            "snippet": item.get("description") or "",
             "discovery_only": True,
         })
     return results
 
 
-def discover(query, limit=10):
-    """Return deduplicated scholarly candidates; no candidate is auto-approved."""
-    found = []
-    errors = []
-    for provider in (search_openalex, search_crossref, search_library_of_congress, search_internet_archive):
+def _synonym_map(config):
+    mapping = {}
+    for row in config.get("research_synonyms", []) or []:
+        if not isinstance(row, dict):
+            continue
+        term = str(row.get("term") or "").strip().lower()
+        values = row.get("synonyms") or []
+        if isinstance(values, str):
+            values = values.split(";")
+        synonyms = [str(value).strip() for value in values if str(value).strip()]
+        if term and synonyms:
+            mapping[term] = synonyms
+    return mapping
+
+
+def expand_query(query, config=None):
+    """Add configured topic synonyms without changing or discarding original terms."""
+    config = config or {}
+    mapping = _synonym_map(config)
+    terms = [part for part in re.split(r"\s+", (query or "").strip()) if part]
+    additions = []
+    lowered = " ".join(terms).lower()
+    for term, synonyms in mapping.items():
+        if re.search(r"\b" + re.escape(term) + r"\b", lowered):
+            additions.extend(synonyms)
+    seen = set()
+    output = []
+    for term in terms + additions:
+        key = term.casefold()
+        if key not in seen:
+            seen.add(key)
+            output.append(term)
+    return " ".join(output)
+
+
+def provider_query_variants(query, config=None):
+    """Build provider-specific query strings while retaining the user's core topic."""
+    expanded = expand_query(query, config)
+    synonyms = [word for word in expanded.split() if word.casefold() not in
+                {part.casefold() for part in (query or "").split()}]
+    extra = " ".join(synonyms)
+    return {
+        "OpenAlex": expanded,
+        "Crossref": (query.strip() + " " + " ".join(synonyms[:2])).strip(),
+        "Library of Congress": (query.strip() + " OR " + extra).strip() if extra else query.strip(),
+        "Internet Archive": "title:({}) OR description:({})".format(expanded, expanded),
+    }
+
+
+def _within_date_window(source, cutoff_year):
+    """Keep archival leads and undated records; bound dated scholarly results."""
+    source_type = source.get("source_type") or assign_source_type(source)
+    if source_type in ("primary", "archival", "official_record"):
+        return True
+    value = source.get("publication_year")
+    match = re.search(r"\b(1[0-9]{3}|20[0-9]{2})\b", str(value or ""))
+    if not match:
+        return True
+    return int(match.group(1)) >= cutoff_year
+
+
+def discover(query, limit=10, config=None):
+    """Discover, expand, classify, score and filter candidates; never auto-approve."""
+    from datetime import date
+    config = config or {}
+    max_results = max(1, min(int(config.get("research_max_results", limit)), 50))
+    per_provider_limit = min(max(int(limit), 1), max_results)
+    threshold = int(config.get("research_relevance_threshold", DEFAULT_THRESHOLD))
+    providers = config.get("research_providers") or [
+        "OpenAlex", "Crossref", "Library of Congress", "Internet Archive"
+    ]
+    provider_map = {
+        "OpenAlex": search_openalex,
+        "Crossref": search_crossref,
+        "Library of Congress": search_library_of_congress,
+        "Internet Archive": search_internet_archive,
+    }
+    provider_queries = provider_query_variants(query, config)
+    expanded_query = provider_queries.get("OpenAlex", expand_query(query, config))
+    found, errors = [], []
+    for provider_name, provider in provider_map.items():
+        if provider_name not in providers:
+            continue
         try:
-            found.extend(provider(query, limit))
+            found.extend(provider(provider_queries[provider_name], per_provider_limit))
         except Exception as exc:
             errors.append({"provider": provider.__name__, "error": str(exc)})
     deduped, seen = [], set()
     for item in found:
         key = dedup_key(item)
-        if key and key not in seen:
-            seen.add(key)
-            item["source_id"] = "src_" + str(len(deduped) + 1).zfill(4)
-            host = (urllib.parse.urlparse(item.get("url") or "").hostname or "").lower()
-            publication = (item.get("publication") or "").lower()
-            if any(token in host for token in (".gov", ".edu", "museum", "archive", "library")):
-                item["source_priority"] = "institutional_or_primary"
-            elif any(token in publication for token in ("journal", "review", "proceedings", "transactions")):
-                item["source_priority"] = "academic_publication"
-            else:
-                item["source_priority"] = "scholarly_candidate"
-            item["source_type"] = assign_source_type(item)
-            item["notes"] = ""
-            item["review_status"] = "UNREVIEWED"
-            deduped.append(item)
-    priority_order = {"institutional_or_primary": 0, "academic_publication": 1,
-                      "scholarly_candidate": 2}
-    deduped.sort(key=lambda item: priority_order.get(item.get("source_priority"), 3))
-    for index, item in enumerate(deduped, 1):
+        if not key or key in seen:
+            continue
+        seen.add(key)
+        item["source_id"] = "src_" + str(len(deduped) + 1).zfill(4)
+        item["source_type"] = assign_source_type(item)
+        item["notes"] = ""
+        item["review_status"] = "UNREVIEWED"
+        deduped.append(item)
+    # Old primary/archival records are never removed by a scholarly-publication
+    # date window. The window only bounds dated non-primary research records.
+    years = int(config.get("research_date_window_years", 100))
+    cutoff_year = date.today().year - years if years > 0 else 0
+    dated = [item for item in deduped if _within_date_window(item, cutoff_year)]
+    date_dropped = [
+        {"source": item, "reason": "outside_research_publication_date_window",
+         "cutoff_year": cutoff_year}
+        for item in deduped if item not in dated
+    ]
+    source_type_order = {
+        "primary": 0, "archival": 1, "official_record": 1,
+        "academic": 2, "institutional": 3, "other": 4,
+    }
+    dated.sort(key=lambda item: source_type_order.get(item.get("source_type"), 5))
+    for index, item in enumerate(dated, 1):
         item["source_id"] = "src_" + str(index).zfill(4)
-    # Relevance triage (never an approval): low-relevance candidates are
-    # filtered out but kept in dropped_sources with their reasons, so a
-    # reviewer can audit or restore them.
-    kept, dropped = filter_sources(deduped, query, threshold=DEFAULT_THRESHOLD)
-    return {"query": query, "discovered_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
-            "sources": kept, "dropped_sources": dropped, "errors": errors,
-            "relevance_threshold": DEFAULT_THRESHOLD,
-            "warning": "Discovery results are leads, not verified evidence. Human review is required."}
+    kept, dropped = filter_sources(dated, query, threshold=threshold)
+    kept.sort(key=lambda item: (
+        item.get("relevance_score") is None,
+        -(item.get("relevance_score") or 0)
+    ))
+    return {
+        "query": query,
+        "expanded_query": expanded_query,
+        "provider_queries": {name: value for name, value in provider_queries.items()
+                            if name in providers},
+        "discovered_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+        "sources": kept,
+        "dropped_sources": dropped + date_dropped,
+        "errors": errors,
+        "relevance_threshold": threshold,
+        "research_date_cutoff_year": cutoff_year or None,
+        "providers_enabled": list(providers),
+        "warning": "Discovery results are leads, not verified evidence. Human review is required."
+    }
 
 
 def main(argv=None):
@@ -225,7 +301,12 @@ def main(argv=None):
     parser.add_argument("--limit", type=int, default=10)
     parser.add_argument("--output", default="data/research_sources.json")
     args = parser.parse_args(argv)
-    result = discover(args.query, args.limit)
+    try:
+        from src.config import load_config
+    except ImportError:
+        from config import load_config
+    config = load_config()
+    result = discover(args.query, args.limit, config=config)
     os.makedirs(os.path.dirname(args.output) or ".", exist_ok=True)
     with open(args.output, "w", encoding="utf-8") as fh:
         json.dump(result, fh, indent=2, ensure_ascii=False)
@@ -253,8 +334,10 @@ def main(argv=None):
                 "publication": source.get("publication", ""),
                 "publication_year": source.get("publication_year"),
                 "authors": source.get("authors", []), "provider": source.get("provider"),
-                "notes": "", "source_priority": source.get("source_priority"),
+                "notes": "",
                 "source_type": source.get("source_type"),
+                "relevance_score": source.get("relevance_score"),
+                "relevance_reasons": source.get("relevance_reasons", []),
                 "review_status": "UNREVIEWED"
             })
             known.add(key)

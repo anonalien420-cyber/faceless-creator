@@ -1,0 +1,99 @@
+{
+  "schema_version": 1,
+  "topic": "The Sacred Secrets of SOUND",
+  "status": "REVIEW_REQUIRED",
+  "framing_note": "Treat the trending Gaia episode as a trend signal only, not as evidence. Scholarly sources support studying sound in ancient Egyptian worship spaces and musical practice; they do not establish that sound frequencies built the pyramids or that ancient Egyptians possessed a modern acoustic/quantum theory.",
+  "sources": [
+    {
+      "source_id": "snd_src_001",
+      "title": "Assessing the Acoustics of an Ancient Egyptian temple",
+      "authors": "IEEE conference paper",
+      "publication": "2021 Immersive and 3D Audio (I3DA)",
+      "date": "2021-09",
+      "url": "https://doi.org/10.1109/i3da48870.2021.9610973",
+      "status": "UNREVIEWED",
+      "review_anchor": "Abstract; sections II–IV; measurement campaign and post-processing",
+      "relevance": "Reports an acoustic measurement campaign at the Dendera temple using a spherical microphone array and room impulse responses. It notes the temple's sound-related religious context.",
+      "limitations": "The paper says no text has been found showing that acoustical theory governed temple design; whether properties were intentional or incidental remains debated."
+    },
+    {
+      "source_id": "snd_src_002",
+      "title": "The Sound of Ancient Egypt – Acoustics and Volume Measurements",
+      "authors": "Heidi Köpp-Junk",
+      "publication": "Ars inter Culturas 9, 13–33",
+      "date": "2020-12-05",
+      "url": "https://cejsh.icm.edu.pl/cejsh/element/bwmeta1.element.desklight-57e2fef5-1f97-4f03-bc8c-a9958538e2e0",
+      "status": "UNREVIEWED",
+      "review_anchor": "Full article pp. 13–33; methods and measurements of replica instruments",
+      "relevance": "Discusses acoustic conditions at ancient Egyptian performance venues and measurements of replicas of ancient Egyptian musical instruments.",
+      "limitations": "Replica measurements and venue comparisons do not establish supernatural effects or a hidden engineering technology."
+    },
+    {
+      "source_id": "snd_src_003",
+      "title": "The Rattles from Tell el-Farcha: Acoustic Research with the Use of Numerical Sound Reconstruction",
+      "authors": "Katarzyna Tatoń and Ireneusz Czajka",
+      "publication": "Studies in Ancient Art and Civilization 25, 7–29",
+      "date": "2021",
+      "doi": "10.12797/SAAC.25.2021.25.01",
+      "url": "https://journals.akademicka.pl/saac/article/download/4541/3909/5901",
+      "status": "UNREVIEWED",
+      "review_anchor": "Full paper pp. 7–29; acoustic analysis and numerical reconstruction",
+      "relevance": "Uses sound analysis and numerical reconstruction to study ancient Egyptian clay rattles and explore aspects of past soundscapes.",
+      "limitations": "Reconstruction is a research method, not a recording of the exact sound heard in antiquity."
+    }
+  ],
+  "candidate_claims": [
+    {
+      "claim_id": "snd_claim_001",
+      "text": "A 2021 study measured acoustic properties in the Dendera temple using a spherical microphone array and room-impulse-response analysis.",
+      "source_ids": [
+        "snd_src_001"
+      ],
+      "suggested_status": "KNOWN",
+      "review_status": "PENDING",
+      "include_in_script": false
+    },
+    {
+      "claim_id": "snd_claim_002",
+      "text": "The Dendera acoustics study says there is no known ancient Egyptian text demonstrating that a formal acoustic theory governed temple design; intentional design versus incidental acoustics remains debated.",
+      "source_ids": [
+        "snd_src_001"
+      ],
+      "suggested_status": "DEBATED",
+      "review_status": "PENDING",
+      "include_in_script": false
+    },
+    {
+      "claim_id": "snd_claim_003",
+      "text": "Researchers have measured replicas of ancient Egyptian musical instruments and used archaeological, textual, and iconographic evidence to study ancient performance sound.",
+      "source_ids": [
+        "snd_src_002"
+      ],
+      "suggested_status": "KNOWN",
+      "review_status": "PENDING",
+      "include_in_script": false
+    },
+    {
+      "claim_id": "snd_claim_004",
+      "text": "Researchers have used acoustic analysis and numerical sound reconstruction to investigate ancient Egyptian clay rattles from Tell el-Farcha.",
+      "source_ids": [
+        "snd_src_003"
+      ],
+      "suggested_status": "KNOWN",
+      "review_status": "PENDING",
+      "include_in_script": false
+    }
+  ],
+  "unsupported_claims": [
+    "Ancient Egyptians used sound frequencies to build the pyramids.",
+    "Ancient Egyptian temples were proven to be designed as acoustic amplifiers for supernatural energy.",
+    "Sound or vibration can be presented as a proven quantum healing technology based on these archaeological studies."
+  ],
+  "reviewer_instructions": [
+    "Inspect the original paper and exact methods/results before approval.",
+    "Keep the Dendera temple's Ptolemaic/Roman-era context separate from Old Kingdom pyramid construction.",
+    "Distinguish measured acoustics, reconstructed sounds, and interpretations of ritual experience.",
+    "Mark claims about intentional acoustic design as DEBATED unless the paper establishes them directly.",
+    "No claim enters the evidence ledger until a human reviewer records source approval and an exact reference."
+  ]
+}

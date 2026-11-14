@@ -24,7 +24,7 @@ def _host(url):
         return ""
 
 
-def verify_ledger(ledger):
+def verify_ledger(ledger, relevance_threshold=40):
     claims = ledger.get("claims", [])
     sources = {s.get("source_id"): s for s in ledger.get("sources", [])
                if s.get("source_id")}
@@ -38,6 +38,12 @@ def verify_ledger(ledger):
         primary = [s for s in linked if s.get("source_type") in
                    ("primary", "archival", "official_record")]
         errors, warnings = [], []
+        relevance_values = [s.get("relevance_score") for s in linked
+                            if isinstance(s.get("relevance_score"), (int, float))]
+        min_relevance = min(relevance_values) if relevance_values else None
+        below_relevance_threshold = sum(1 for value in relevance_values if value < relevance_threshold)
+        if below_relevance_threshold:
+            warnings.append("{} linked source(s) fall below the relevance triage threshold ({}); inspect manually.".format(below_relevance_threshold, relevance_threshold))
         start = _parse_date(claim.get("date_start"))
         end = _parse_date(claim.get("date_end"))
         if claim.get("date_start") and not start:
@@ -84,7 +90,10 @@ def verify_ledger(ledger):
             "metadata_completeness_score": score,
             "score_disclaimer": "Completeness indicator only; not a truth probability or automated fact-check.",
             "source_count": len(linked), "independent_domains": sorted(hosts),
-            "primary_source_count": len(primary), "errors": errors, "warnings": warnings,
+            "primary_source_count": len(primary),
+            "minimum_linked_relevance_score": min_relevance,
+            "linked_sources_below_relevance_threshold": below_relevance_threshold,
+            "errors": errors, "warnings": warnings,
             "conflicts_with": claim.get("conflicts_with", []),
             "passed": not errors,
             "needs_review": needs_review,
@@ -99,9 +108,9 @@ def verify_ledger(ledger):
     }
 
 
-def write_report(ledger, output_path):
+def write_report(ledger, output_path, relevance_threshold=40):
     import json
-    report = verify_ledger(ledger)
+    report = verify_ledger(ledger, relevance_threshold=relevance_threshold)
     with open(output_path, "w", encoding="utf-8") as fh:
         json.dump(report, fh, indent=2, ensure_ascii=False)
     return report
@@ -114,7 +123,12 @@ if __name__ == "__main__":
     parser.add_argument("--ledger", default="data/evidence_ledger.json")
     parser.add_argument("--output", default="data/verification_report.json")
     args = parser.parse_args()
-    result = write_report(load_ledger(args.ledger), args.output)
+    try:
+        from src.config import load_config
+    except ImportError:
+        from config import load_config
+    threshold = load_config().get("research_relevance_threshold", 40)
+    result = write_report(load_ledger(args.ledger), args.output, threshold)
     print("Historical verification metadata report: {} claim(s), {}".format(
         result["claim_count"], "PASS" if result["passed"] else "BLOCKED"))
     raise SystemExit(0 if result["passed"] else 1)

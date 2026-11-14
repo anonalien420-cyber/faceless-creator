@@ -1,0 +1,52 @@
+{
+  "schema_version": 1,
+  "note": "Populate the baseline and phase2 result lists with the top 10 source IDs for each topic. A human must set every relevant field to true or false. Do not infer or auto-generate labels.",
+  "baseline": {
+    "topics": [
+      {
+        "topic": "Great Pyramid mystery",
+        "results": []
+      },
+      {
+        "topic": "Antikythera mechanism",
+        "results": []
+      },
+      {
+        "topic": "Roanoke colony",
+        "results": []
+      },
+      {
+        "topic": "Voynich manuscript",
+        "results": []
+      },
+      {
+        "topic": "Indus Valley civilization",
+        "results": []
+      }
+    ]
+  },
+  "phase2": {
+    "topics": [
+      {
+        "topic": "Great Pyramid mystery",
+        "results": []
+      },
+      {
+        "topic": "Antikythera mechanism",
+        "results": []
+      },
+      {
+        "topic": "Roanoke colony",
+        "results": []
+      },
+      {
+        "topic": "Voynich manuscript",
+        "results": []
+      },
+      {
+        "topic": "Indus Valley civilization",
+        "results": []
+      }
+    ]
+  }
+}

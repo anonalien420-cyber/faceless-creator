@@ -59,6 +59,14 @@ DEFAULTS = {
     "video_bitrate": "10M",
     "long_video_bitrate": "12M",
     "reddit_subreddits": [],
+    "research_relevance_threshold": 40,
+    "research_providers": ["OpenAlex", "Crossref", "Library of Congress", "Internet Archive"],
+    "research_date_window_years": 100,
+    "research_max_results": 10,
+    "research_synonyms": [
+        {"term": "void", "synonyms": "cavity;chamber;anomaly"},
+        {"term": "pyramid", "synonyms": "Khufu;Giza"},
+    ],
 }
 
 # Keys that are NOT in DEFAULTS but are legitimate in config.yaml:

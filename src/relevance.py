@@ -6,6 +6,7 @@ approves a source or a claim, and every dropped candidate is kept in
 the discover() output (``dropped_sources``) so a reviewer can audit
 or restore it. Human review stays the only approval path.
 """
+import html
 import re
 from datetime import date
 
@@ -37,6 +38,15 @@ _STOPWORDS = {
     "via", "de", "la", "le", "et", "und", "der", "die", "das",
 }
 
+# These words describe the channel's broad niche, not the subject of an
+# individual episode. They must never be allowed to make an unrelated
+# result look relevant (e.g. "History and mysteries" in a physics paper).
+_GENERIC_TOPIC_TERMS = {
+    "history", "histories", "mystery", "mysteries", "investigated",
+    "investigation", "investigations", "modern", "tech", "technology",
+    "unsolved", "unexplained",
+}
+
 _YEAR_RE = re.compile(r"\b(1[0-9]{3}|20[0-9]{2})\b")
 
 
@@ -47,10 +57,13 @@ def _tokens(text):
 
 
 def abstract_text(source):
-    """Rebuild an OpenAlex abstract from its inverted index.
-
-    Returns "" when the source carries no abstract_inverted_index.
-    """
+    """Return a provider abstract, rebuilding OpenAlex inverted indexes when needed."""
+    plain = source.get("abstract") or source.get("snippet") or source.get("description")
+    if isinstance(plain, (list, tuple)):
+        plain = " ".join(str(part) for part in plain)
+    if isinstance(plain, str) and plain.strip():
+        plain = html.unescape(re.sub(r"<[^>]+>", " ", plain))
+        return re.sub(r"\s+", " ", plain).strip()
     index = source.get("abstract_inverted_index") or {}
     if not isinstance(index, dict) or not index:
         return ""
@@ -98,7 +111,10 @@ def score_source(source, query):
 
     # 1. Query-term overlap with title (full credit) and abstract
     #    (half credit), out of _TERM_MAX.
-    query_terms = _tokens(query)
+    # Score against episode-specific terms only. Generic channel-niche words
+    # such as "history" and "mystery" are deliberately excluded.
+    query_terms = [term for term in _tokens(query)
+                   if term not in _GENERIC_TOPIC_TERMS]
     title_tokens = set(_tokens(title))
     abstract_tokens = set(_tokens(abstract_text(source)))
     if query_terms:
@@ -109,8 +125,12 @@ def score_source(source, query):
             elif term in abstract_tokens:
                 credit += 0.5
         term_score = int(round(_TERM_MAX * credit / len(query_terms)))
+        if credit == 0:
+            reasons.append("no_topic_anchor_match")
     else:
+        # A broad niche query is not a usable evidence-search topic.
         term_score = 0
+        reasons.append("query_has_no_specific_topic_terms")
     components["term_overlap"] = term_score
     if term_score < _TERM_MAX // 2:
         reasons.append("low_term_overlap")
@@ -158,7 +178,10 @@ def filter_sources(sources, query, threshold=DEFAULT_THRESHOLD):
         result = score_source(source, query)
         source["relevance_score"] = result["score"]
         source["relevance_reasons"] = result["reasons"]
-        if not result["scorable"] or result["score"] >= threshold:
+        hard_reject = any(reason in result["reasons"] for reason in (
+            "no_topic_anchor_match", "query_has_no_specific_topic_terms"
+        ))
+        if not result["scorable"] or (not hard_reject and result["score"] >= threshold):
             kept.append(source)
         else:
             dropped.append({"source": source,

@@ -637,6 +637,16 @@ The generator refuses to pad a thin evidence file with generic historical
 filler. Every claim must carry an exact topic, and claims from one topic are
 never reused for another episode.
 
+Before rendering, the daily pipeline preflights the complete planned slate
+(one long video and the configured Shorts) against the reviewed ledger. If
+the ledger is empty/invalid, a topic has no matching reviewed claims, a
+required KNOWN shock hook is missing, or the reviewed material is too short,
+the run writes `data/production_gate.json`, preserves the research/review
+packet, and exits in the explicit `blocked_review_required` state without
+starting script, narration, or video rendering. This is a review hold, not a
+successful video render. After a person reviews the source records and adds
+topic-matched claims to `data/evidence_ledger.json`, rerun the workflow.
+
 ### QA and publication safety
 
 Historical QA now validates the full evidence ledger and confirms that script

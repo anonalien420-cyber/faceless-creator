@@ -28,5 +28,27 @@ class ReviewPacketTests(unittest.TestCase):
         self.assertEqual(packet["sources"][0]["review_notes"], "Checked catalogue item 12")
 
 
+    def test_packet_surfaces_relevance_and_candidate_claims(self):
+        research = {"sources": [{
+            "source_id": "s1", "title": "Great Pyramid record",
+            "url": "https://example.org/record", "provider": "OpenAlex",
+            "source_type": "academic", "relevance_score": 82,
+            "relevance_reasons": ["title_match"], "review_status": "UNREVIEWED",
+            "abstract": "Researchers measured a 30 metre void in the Great Pyramid."
+        }], "dropped_sources": [{
+            "source": {"source_id": "s2", "title": "Unrelated paper"},
+            "relevance_score": 10, "reasons": ["low_term_overlap"]
+        }], "relevance_threshold": 40}
+        packet = build_packet(research, {"sources": [], "claims": []}, "Great Pyramid")
+        row = packet["sources"][0]
+        self.assertEqual(row["source_type"], "academic")
+        self.assertEqual(row["relevance_score"], 82)
+        self.assertEqual(row["relevance_reasons"], ["title_match"])
+        self.assertEqual(len(packet["extracted_claims"]), 1)
+        self.assertFalse(packet["extracted_claims"][0]["include_in_script"])
+        markdown = render_markdown(packet)
+        self.assertIn("Relevance score: 82", markdown)
+        self.assertIn("Filtered-out discovery candidates", markdown)
+
 if __name__ == "__main__":
     unittest.main()

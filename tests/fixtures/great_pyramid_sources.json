@@ -1,0 +1,62 @@
+{
+  "topic": "Great Pyramid mystery",
+  "query": "Pyramid void muons",
+  "fixture_note": "Mixed fixture: one real Nature bibliographic record with a short excerpt, plus explicitly synthetic records used only to test pipeline wiring. Synthetic text is not historical evidence.",
+  "sources": [
+    {
+      "source_id": "nature_2017",
+      "provider": "OpenAlex",
+      "title": "Discovery of a big void in Khufu’s Pyramid by observation of cosmic-ray muons",
+      "url": "https://www.nature.com/articles/nature24647",
+      "doi": "10.1038/nature24647",
+      "publication": "Nature",
+      "publication_year": 2017,
+      "work_type": "article",
+      "source_type": "academic",
+      "review_status": "UNREVIEWED",
+      "notes": "",
+      "abstract": "This constitutes the first major inner structure found in the Great Pyramid since the nineteenth century."
+    },
+    {
+      "source_id": "synthetic_primary",
+      "provider": "Synthetic fixture",
+      "title": "Great Pyramid archival measurement record",
+      "url": "https://archive.example.org/great-pyramid-fixture",
+      "publication": "Synthetic archival test fixture",
+      "publication_year": 2020,
+      "work_type": "original record",
+      "source_type": "primary",
+      "review_status": "UNREVIEWED",
+      "notes": "",
+      "abstract": "Synthetic test fixture: researchers measured a 30 metre void above the Grand Gallery inside the Great Pyramid during a controlled survey. Synthetic test fixture: the void was detected using cosmic ray muons and mapped against the known internal spaces of the Great Pyramid. Synthetic test fixture: three detector systems independently confirmed the same Great Pyramid anomaly across separate observation periods. Synthetic test fixture: researchers reported that the purpose of the Great Pyramid void remains unknown despite the repeated measurements. Synthetic test fixture: later analysis compared the Great Pyramid void with the Grand Gallery dimensions and documented the measured difference for future review."
+    },
+    {
+      "source_id": "synthetic_academic",
+      "provider": "Crossref",
+      "title": "Pyramid research record",
+      "url": "https://journal.example.com/great-pyramid-fixture",
+      "doi": "10.5555/synthetic.gp.001",
+      "publication": "Synthetic Journal of Archaeological Methods",
+      "publication_year": 2021,
+      "work_type": "journal-article",
+      "source_type": "academic",
+      "review_status": "UNREVIEWED",
+      "notes": "",
+      "abstract": "Synthetic test fixture: researchers measured a 30 metre void above the Grand Gallery inside the Great Pyramid during a controlled survey. Synthetic test fixture: the void was detected using cosmic ray muons and mapped against the known internal spaces of the Great Pyramid. Synthetic test fixture: three detector systems independently confirmed the same Great Pyramid anomaly across separate observation periods. Synthetic test fixture: researchers reported that the purpose of the Great Pyramid void remains unknown despite the repeated measurements. Synthetic test fixture: later analysis compared the Great Pyramid void with the Grand Gallery dimensions and documented the measured difference for future review."
+    },
+    {
+      "source_id": "irrelevant_finance",
+      "provider": "Crossref",
+      "title": "Financial fraud and market speculation",
+      "url": "https://finance.example.net/paper",
+      "doi": "10.5555/finance.001",
+      "publication": "Synthetic Finance Review",
+      "publication_year": null,
+      "work_type": "journal-article",
+      "source_type": "other",
+      "review_status": "UNREVIEWED",
+      "notes": "",
+      "abstract": "A synthetic fixture about financial markets."
+    }
+  ]
+}

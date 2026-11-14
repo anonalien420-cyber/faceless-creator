@@ -1,0 +1,183 @@
+{
+  "schema_version": 2,
+  "topic": "The Great Pyramid's Hidden Voids: What Modern Scans Actually Found",
+  "reviewer": "Human reviewer (explicit confirmation in ChatGPT)",
+  "reviewed_at": "2026-11-13",
+  "sources": [
+    {
+      "source_id": "gp_src_001",
+      "title": "Discovery of a big void in Khufu’s Pyramid by observation of cosmic-ray muons",
+      "url": "https://www.nature.com/articles/nature24647",
+      "publication": "Nature 552, 386–390 (2017), DOI 10.1038/nature24647",
+      "publication_year": 2017,
+      "source_type": "academic",
+      "review_status": "APPROVED",
+      "notes": "Human-approved. Supports a large void above the Grand Gallery with minimum length 30 m, detected using three muon technologies and independent analyses. Its intended purpose is unknown; call it a void, not a chamber, room, tomb, or treasure space."
+    },
+    {
+      "source_id": "gp_src_002",
+      "title": "Precise characterization of a corridor-shaped structure in Khufu’s Pyramid by observation of cosmic-ray muons",
+      "url": "https://www.nature.com/articles/s41467-023-36351-0",
+      "publication": "Nature Communications 14, Article 1144 (2023), DOI 10.1038/s41467-023-36351-0",
+      "publication_year": 2023,
+      "source_type": "academic",
+      "review_status": "APPROVED",
+      "notes": "Human-approved. Supports a separate North Face Corridor behind the Chevron, approximately 2.02 m wide, 2.18 m high, and 9.06 m long. Its original function is unknown and it must not be conflated with the Big Void."
+    },
+    {
+      "source_id": "gp_src_003",
+      "title": "Les papyrus de la mer Rouge I. Le journal de Merer",
+      "url": "https://www.orient-mediterranee.com/wp-content/uploads/2022/04/1705_tallet.pdf",
+      "publication": "Pierre Tallet, IFAO, MIFAO 136 (2017), ISBN 9782724707069; Papyrus B, sections BI–BIV, printed pp. 150–151",
+      "publication_year": 2017,
+      "source_type": "archival",
+      "review_status": "APPROVED",
+      "notes": "Human-approved. The published translation records Merer's team transporting fine limestone from Tura toward Akhet-Khufu. This is evidence of stone transport, not a complete account of pyramid engineering, all block movement, or the full workforce. Preserve fragmentary brackets and uncertainty."
+    },
+    {
+      "source_id": "gp_src_004",
+      "title": "The Lost City of the Pyramids (Heit el-Ghurab)",
+      "url": "https://aeraweb.org/projects/lost-city/",
+      "publication": "Ancient Egypt Research Associates (AERA), excavation project record",
+      "source_type": "institutional",
+      "review_status": "APPROVED",
+      "notes": "Human-approved. Supports a 4th Dynasty settlement exceeding 7 hectares with workshops, industrial yards, bakeries, kitchens, warehouses, houses, and administrative spaces. AERA links it to the Giza pyramid complexes and says Khufu's link is probable, not certain."
+    },
+    {
+      "source_id": "gp_src_005",
+      "title": "Some Notes on the Graffiti Written on the Cover Stones from the Second Boat Pit of Khufu",
+      "url": "https://www.jstage.jst.go.jp/article/jorient/59/1/59_2/_article/-char/en",
+      "publication": "Takahashi and Nishisaka, Bulletin of the Society for Near Eastern Studies in Japan 59(1), 2–13 (2016), DOI 10.5356/jorient.59.1_2",
+      "publication_year": 2016,
+      "source_type": "academic",
+      "review_status": "APPROVED",
+      "notes": "Human-approved as a source for an attributed scholarly interpretation only. The authors propose that graffiti may reflect different stages or work groups in stone transport. Preserve uncertainty and attribution. Not used to support a canonical claim yet because the current ledger validator requires two distinct approved sources for a DEBATED claim."
+    },
+    {
+      "source_id": "gp_src_006",
+      "title": "AERA Annual Report 2023–2024: The Great Pyramid Scanning Project",
+      "url": "https://aeraweb.org/wp-content/uploads/2025/03/AERA_2024.pdf",
+      "publication": "Ancient Egypt Research Associates, Annual Report 2023–2024 (published 2025), printed pp. 8–9",
+      "publication_year": 2025,
+      "source_type": "institutional",
+      "review_status": "APPROVED",
+      "notes": "Human-approved. Supports ongoing documentation of bedrock features around Khufu's complex, including postholes, lever sockets, and quarry channels. The report describes an ongoing survey, not a complete or settled reconstruction of the construction method. Correct reference is printed pp. 8–9, not p. 7."
+    },
+    {
+      "source_id": "gp_src_007",
+      "title": "The Great Pyramid",
+      "url": "https://egymonuments.gov.eg/monuments/the-great-pyramid/",
+      "publication": "Egyptian Ministry of Tourism and Antiquities, Discover Egypt's Monuments",
+      "source_type": "official_record",
+      "review_status": "APPROVED",
+      "notes": "Human-approved for contextual baseline only. The 10–20 year construction duration is an estimate, and the official page says the exact construction method is not entirely certain. Do not use this page as specialist proof of disputed engineering details."
+    }
+  ],
+  "claims": [
+    {
+      "claim_id": "gp_claim_001",
+      "text": "Muon radiography identified a large void above the Grand Gallery with a minimum length of 30 metres, and three different muon detection technologies independently supported its detection.",
+      "status": "KNOWN",
+      "source_ids": [
+        "gp_src_001"
+      ],
+      "reviewed_by": "Human reviewer (explicit confirmation in ChatGPT)",
+      "reviewed_at": "2026-11-13",
+      "debate_summary": "",
+      "sequence": 1,
+      "section_title": "The Big Void",
+      "include_in_script": true,
+      "shock_hook": true,
+      "period": "Old Kingdom, reign of Khufu",
+      "location": "Great Pyramid of Giza, Egypt",
+      "clothing": "",
+      "architecture": "Great Pyramid; void above the Grand Gallery",
+      "objects": "Muon detectors; pyramid masonry",
+      "topic": "The Great Pyramid's Hidden Voids: What Modern Scans Actually Found"
+    },
+    {
+      "claim_id": "gp_claim_002",
+      "text": "A separate corridor-shaped void behind the North Face Chevron was characterized at approximately 9.06 metres long, 2.02 metres wide, and 2.18 metres high; its original function is unknown.",
+      "status": "KNOWN",
+      "source_ids": [
+        "gp_src_002"
+      ],
+      "reviewed_by": "Human reviewer (explicit confirmation in ChatGPT)",
+      "reviewed_at": "2026-11-13",
+      "debate_summary": "",
+      "sequence": 2,
+      "section_title": "A Second Hidden Structure",
+      "include_in_script": true,
+      "shock_hook": false,
+      "period": "Old Kingdom, reign of Khufu",
+      "location": "North Face of the Great Pyramid of Giza, Egypt",
+      "clothing": "",
+      "architecture": "North Face Chevron and corridor-shaped void",
+      "objects": "Muon detectors",
+      "topic": "The Great Pyramid's Hidden Voids: What Modern Scans Actually Found"
+    },
+    {
+      "claim_id": "gp_claim_003",
+      "text": "The published Wadi el-Jarf logbook records Inspector Merer's team transporting limestone from Tura toward Akhet-Khufu while the Great Pyramid was under construction.",
+      "status": "KNOWN",
+      "source_ids": [
+        "gp_src_003"
+      ],
+      "reviewed_by": "Human reviewer (explicit confirmation in ChatGPT)",
+      "reviewed_at": "2026-11-13",
+      "debate_summary": "",
+      "sequence": 3,
+      "section_title": "The Paper Trail",
+      "include_in_script": true,
+      "shock_hook": false,
+      "period": "Old Kingdom, reign of Khufu",
+      "location": "Wadi el-Jarf, Tura, and Giza, Egypt",
+      "clothing": "",
+      "architecture": "River transport route and Great Pyramid construction site",
+      "objects": "Wadi el-Jarf papyri; limestone blocks; boats",
+      "topic": "The Great Pyramid's Hidden Voids: What Modern Scans Actually Found"
+    },
+    {
+      "claim_id": "gp_claim_004",
+      "text": "Heit el-Ghurab was a large 4th Dynasty settlement with workshops, bakeries, warehouses, and administrative spaces; AERA links it to the Giza pyramid complexes and describes its connection to Khufu as probable.",
+      "status": "KNOWN",
+      "source_ids": [
+        "gp_src_004"
+      ],
+      "reviewed_by": "Human reviewer (explicit confirmation in ChatGPT)",
+      "reviewed_at": "2026-11-13",
+      "debate_summary": "",
+      "sequence": 4,
+      "section_title": "The Settlement Behind the Monument",
+      "include_in_script": true,
+      "shock_hook": false,
+      "period": "4th Dynasty, Old Kingdom",
+      "location": "Heit el-Ghurab, Giza, Egypt",
+      "clothing": "",
+      "architecture": "Settlement, workshops, bakeries, warehouses, administrative spaces",
+      "objects": "Archaeological settlement remains",
+      "topic": "The Great Pyramid's Hidden Voids: What Modern Scans Actually Found"
+    },
+    {
+      "claim_id": "gp_claim_006",
+      "text": "AERA's ongoing survey documents bedrock features around Khufu's pyramid, including postholes, lever sockets, and quarry channels, which offer clues about construction operations but do not establish a complete building method.",
+      "status": "KNOWN",
+      "source_ids": [
+        "gp_src_006"
+      ],
+      "reviewed_by": "Human reviewer (explicit confirmation in ChatGPT)",
+      "reviewed_at": "2026-11-13",
+      "debate_summary": "",
+      "sequence": 5,
+      "section_title": "Clues in the Bedrock",
+      "include_in_script": true,
+      "shock_hook": false,
+      "period": "Old Kingdom, reign of Khufu; modern survey 2023–2024",
+      "location": "Bedrock around the Great Pyramid of Giza, Egypt",
+      "clothing": "",
+      "architecture": "Bedrock, quarry channels, pyramid complex",
+      "objects": "Postholes; lever sockets; quarry channels",
+      "topic": "The Great Pyramid's Hidden Voids: What Modern Scans Actually Found"
+    }
+  ]
+}

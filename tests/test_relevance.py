@@ -134,20 +134,20 @@ class DoiNormalizationTests(unittest.TestCase):
 
 class SourceTypeTests(unittest.TestCase):
     def test_assign_source_type_per_provider(self):
-        loc = {"provider": "Library of Congress", "source_priority": "institutional_or_primary"}
+        loc = {"provider": "Library of Congress"}
         self.assertEqual(research.assign_source_type(loc), "archival")
-        ia = {"provider": "Internet Archive", "source_priority": "institutional_or_primary"}
+        ia = {"provider": "Internet Archive"}
         self.assertEqual(research.assign_source_type(ia), "archival")
-        journal = {"provider": "OpenAlex", "source_priority": "academic_publication"}
+        journal = {"provider": "OpenAlex", "publication": "Journal of Ancient History",
+                   "work_type": "article"}
         self.assertEqual(research.assign_source_type(journal), "academic")
-        gov = {"provider": "Crossref", "source_priority": "institutional_or_primary"}
-        self.assertEqual(research.assign_source_type(gov), "institutional")
-        unknown = {"provider": "Crossref", "source_priority": "scholarly_candidate"}
+        gov = {"provider": "Crossref", "url": "https://records.example.gov/report"}
+        self.assertEqual(research.assign_source_type(gov), "official_record")
+        unknown = {"provider": "Crossref", "url": "https://unknown.example.org/item"}
         self.assertEqual(research.assign_source_type(unknown), "other")
-        # Discovery never promotes a candidate to primary/official_record.
+        # Discovery metadata never assigns the primary classification.
         for row in (loc, ia, journal, gov, unknown):
-            self.assertNotIn(research.assign_source_type(row),
-                             ("primary", "official_record"))
+            self.assertNotEqual(research.assign_source_type(row), "primary")
 
     @patch("src.research.search_internet_archive", return_value=[])
     @patch("src.research.search_library_of_congress", return_value=[{
@@ -190,6 +190,44 @@ class RelevanceTests(unittest.TestCase):
         nature = score_source(dict(NATURE_OPENALEX, source_type="academic"), QUERY)
         self.assertEqual(nature["score"], 80)
 
+    def test_generic_channel_words_do_not_make_unrelated_sources_relevant(self):
+        unrelated = {
+            "provider": "OpenAlex",
+            "title": "Parallel-plate avalanche counters for heavy-ion beam tracking: History and mysteries",
+            "publication_year": 2024,
+            "source_type": "academic",
+            "abstract": "A study of detector systems for heavy-ion physics.",
+        }
+        result = score_source(unrelated, "The Great Pyramid Mystery: The Oldest Cover-Up In History")
+        self.assertIn("no_topic_anchor_match", result["reasons"])
+        kept, dropped = filter_sources([unrelated],
+            "The Great Pyramid Mystery: The Oldest Cover-Up In History")
+        self.assertEqual(kept, [])
+        self.assertEqual(len(dropped), 1)
+
+    def test_broad_channel_niche_is_not_accepted_as_research_topic(self):
+        unrelated = {
+            "provider": "Internet Archive",
+            "title": "VOA Global English",
+            "publication_year": 2019,
+            "source_type": "archival",
+        }
+        result = score_source(unrelated, "history mysteries investigated with modern tech")
+        self.assertIn("query_has_no_specific_topic_terms", result["reasons"])
+        kept, dropped = filter_sources([unrelated],
+            "history mysteries investigated with modern tech")
+        self.assertEqual(kept, [])
+        self.assertEqual(len(dropped), 1)
+
+    def test_great_pyramid_topic_anchor_keeps_relevant_source(self):
+        relevant = dict(NATURE_OPENALEX, source_type="academic")
+        kept, dropped = filter_sources(
+            [relevant], "The Great Pyramid Mystery: The Oldest Cover-Up In History")
+        self.assertEqual(len(kept), 1)
+        self.assertEqual(dropped, [])
+
+    def test_threshold_default_is_40(self):
+        self.assertEqual(DEFAULT_THRESHOLD, 40)
     def test_threshold_default_is_40(self):
         self.assertEqual(DEFAULT_THRESHOLD, 40)
 
@@ -266,6 +304,45 @@ class VerificationFlagTests(unittest.TestCase):
         self.assertFalse(claim["needs_review"])
         self.assertTrue(report["passed"])
 
+
+
+    def test_verification_reports_low_relevance_as_warning_only(self):
+        ledger = self._ledger(["primary", "academic"])
+        ledger["sources"][0]["relevance_score"] = 39
+        ledger["sources"][1]["relevance_score"] = 82
+        report = verify_ledger(ledger)
+        claim = report["claims"][0]
+        self.assertEqual(claim["minimum_linked_relevance_score"], 39)
+        self.assertEqual(claim["linked_sources_below_relevance_threshold"], 1)
+        self.assertEqual(claim["errors"], [])
+        self.assertTrue(any("relevance triage threshold" in w for w in claim["warnings"]))
+        self.assertEqual(claim["status"], "KNOWN")
+
+    def test_verification_uses_configured_relevance_threshold(self):
+        ledger = self._ledger(["primary"])
+        ledger["sources"][0]["relevance_score"] = 45
+        default = verify_ledger(ledger)
+        strict = verify_ledger(ledger, relevance_threshold=50)
+        self.assertEqual(default["claims"][0]["linked_sources_below_relevance_threshold"], 0)
+        self.assertEqual(strict["claims"][0]["linked_sources_below_relevance_threshold"], 1)
+        self.assertEqual(strict["claims"][0]["errors"], [])
+
+    def test_plain_crossref_abstract_is_used_for_relevance(self):
+        source = {
+            "provider": "Crossref", "title": "A research paper",
+            "publication_year": 2020, "source_type": "academic",
+            "abstract": "The Great Pyramid void was measured using muon imaging."
+        }
+        self.assertIn("Great Pyramid void", abstract_text(source))
+        self.assertGreater(score_source(source, "Great Pyramid void")["score"], 60)
+
+    def test_archival_snippet_contributes_to_relevance(self):
+        source = {
+            "provider": "Library of Congress", "title": "Catalogue entry",
+            "source_type": "archival", "publication_year": 1920,
+            "snippet": "Great Pyramid void survey records a chamber above the Grand Gallery."
+        }
+        self.assertGreater(score_source(source, "Great Pyramid void")["score"], 60)
 
 if __name__ == "__main__":
     unittest.main()

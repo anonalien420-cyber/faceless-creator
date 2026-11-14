@@ -1,0 +1,115 @@
+{
+  "schema_version": 1,
+  "topic": "AI Tech Mystery: When Cuneiform Met Modern Slang",
+  "status": "REVIEW_REQUIRED",
+  "framing_note": "Research supports AI-assisted transliteration, OCR, and Akkadian-to-English translation experiments. It does not show that ancient cuneiform texts contain modern slang or that AI translations are authoritative without expert review. Any modern-slang version must be clearly labelled as a creative adaptation, not a literal translation.",
+  "sources": [
+    {
+      "source_id": "cun_src_001",
+      "title": "Translating Akkadian to English with neural machine translation",
+      "authors": "Gai Gutherz et al.",
+      "publication": "PNAS Nexus 2(5), pgad096",
+      "date": "2023-05-02",
+      "doi": "10.1093/pnasnexus/pgad096",
+      "url": "https://pmc.ncbi.nlm.nih.gov/articles/PMC10153418/",
+      "status": "UNREVIEWED",
+      "review_anchor": "Abstract; methods; results; limitations and supplementary material",
+      "relevance": "Presents neural machine translation for Akkadian from cuneiform Unicode glyphs and transliteration to English. Reports BLEU4 scores of 36.52 and 37.47 for the two tasks and stronger performance on short/medium sentences.",
+      "limitations": "BLEU is an automatic similarity metric, not a guarantee of a correct translation. The authors describe human-in-the-loop correction and limitations by sentence length."
+    },
+    {
+      "source_id": "cun_src_002",
+      "title": "Reading Akkadian cuneiform using natural language processing",
+      "authors": "Shai Gordin et al.",
+      "publication": "PLOS ONE 15(10): e0240511",
+      "date": "2020-10-28",
+      "doi": "10.1371/journal.pone.0240511",
+      "url": "https://journals.plos.org/plosone/article?id=10.1371/journal.pone.0240511",
+      "status": "UNREVIEWED",
+      "review_anchor": "Abstract; methods; evaluation; error analysis",
+      "relevance": "Presents NLP methods for automatic transliteration and segmentation of Unicode cuneiform glyphs; reports accuracy up to 97% for that specific task.",
+      "limitations": "The reported 97% is for transliteration/segmentation, not end-to-end translation into English or modern slang."
+    },
+    {
+      "source_id": "cun_src_003",
+      "title": "CuReD: Deep Learning Optical Character Recognition for Cuneiform Text Editions and Legacy Materials",
+      "authors": "Shai Gordin et al.",
+      "publication": "Proceedings of the 1st Workshop on Machine Learning for Ancient Languages (ML4AL 2024), pp. 130–140",
+      "date": "2024-08",
+      "doi": "10.18653/v1/2024.ml4al-1.14",
+      "url": "https://aclanthology.org/2024.ml4al-1.14/",
+      "status": "UNREVIEWED",
+      "review_anchor": "Abstract; dataset description; evaluation; PDF pp. 130–140",
+      "relevance": "Describes a human-in-the-loop deep-learning OCR pipeline for digitizing scanned transliterations of cuneiform texts, with character error rates of 9% on clean data and 11% on representative scans.",
+      "limitations": "The pipeline reads scanned editions/transliterations, not raw clay tablets directly. Character error rate is not translation accuracy."
+    },
+    {
+      "source_id": "cun_src_004",
+      "title": "Machine Learning for Ancient Languages: A Survey",
+      "authors": "Thea Sommerschield et al.",
+      "publication": "Computational Linguistics 49(3)",
+      "date": "2023",
+      "url": "https://submissions.cljournal.org/index.php/cljournal/article/view/2307",
+      "status": "UNREVIEWED",
+      "review_anchor": "Survey taxonomy and sections on digitization, restoration, translation, and decipherment",
+      "relevance": "Surveys machine-learning tasks in ancient-text scholarship and emphasizes interdisciplinary collaboration between humanities specialists and machine-learning researchers.",
+      "limitations": "A survey is field context, not direct validation of a particular translation model."
+    }
+  ],
+  "candidate_claims": [
+    {
+      "claim_id": "cun_claim_001",
+      "text": "A 2023 study presented neural machine-translation models for Akkadian-to-English translation from cuneiform Unicode glyphs and transliteration.",
+      "source_ids": [
+        "cun_src_001"
+      ],
+      "suggested_status": "KNOWN",
+      "review_status": "PENDING",
+      "include_in_script": false
+    },
+    {
+      "claim_id": "cun_claim_002",
+      "text": "The 2023 Akkadian translation study reported BLEU4 scores of 36.52 and 37.47 for its two translation tasks and identified stronger performance on short and medium-length sentences.",
+      "source_ids": [
+        "cun_src_001"
+      ],
+      "suggested_status": "KNOWN",
+      "review_status": "PENDING",
+      "include_in_script": false
+    },
+    {
+      "claim_id": "cun_claim_003",
+      "text": "A 2020 study reported up to 97% accuracy for automatic transliteration and segmentation of standard Unicode cuneiform glyphs into words.",
+      "source_ids": [
+        "cun_src_002"
+      ],
+      "suggested_status": "KNOWN",
+      "review_status": "PENDING",
+      "include_in_script": false
+    },
+    {
+      "claim_id": "cun_claim_004",
+      "text": "A 2024 project developed a human-in-the-loop OCR pipeline for scanned cuneiform text editions and reported 9% character error on clean data and 11% on representative scans.",
+      "source_ids": [
+        "cun_src_003"
+      ],
+      "suggested_status": "KNOWN",
+      "review_status": "PENDING",
+      "include_in_script": false
+    }
+  ],
+  "unsupported_claims": [
+    "The AI system can reliably translate every cuneiform tablet without expert review.",
+    "The original Akkadian texts contain modern slang.",
+    "A 97% transliteration/segmentation accuracy result means 97% translation accuracy.",
+    "OCR of scanned transliterations is the same as reading a photograph of an unprocessed clay tablet."
+  ],
+  "reviewer_instructions": [
+    "Read each paper's methods, evaluation data, and limitations.",
+    "Keep transliteration, segmentation, OCR, and translation as distinct technical tasks.",
+    "Do not treat BLEU scores as human translation accuracy.",
+    "Use a human-in-the-loop caveat and describe the systems as research tools.",
+    "If modern slang is used in narration, label it as a humorous paraphrase/adaptation, never as a literal translation.",
+    "No claim enters the evidence ledger until a human reviewer approves the source and records an exact reference."
+  ]
+}

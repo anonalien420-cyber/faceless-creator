@@ -9,9 +9,13 @@ import json
 import os
 from datetime import datetime, timezone
 
+from src.claim_extraction import extract_claims
 
-def build_packet(research, ledger, topic):
+
+def build_packet(research, ledger, topic, extracted_claims=None):
     sources = research.get("sources", [])
+    if extracted_claims is None:
+        extracted_claims = extract_claims(sources, research.get("expanded_query") or topic)
     existing = {s.get("source_id"): s for s in ledger.get("sources", [])}
     rows = []
     for source in sources:
@@ -25,7 +29,9 @@ def build_packet(research, ledger, topic):
             "publication_year": source.get("publication_year"),
             "authors": source.get("authors", []),
             "provider": source.get("provider", ""),
-            "source_priority": source.get("source_priority", "scholarly_candidate"),
+            "source_type": source.get("source_type", "other"),
+            "relevance_score": source.get("relevance_score"),
+            "relevance_reasons": source.get("relevance_reasons", []),
             "review_status": canonical.get("review_status", source.get("review_status", "UNREVIEWED")),
             "review_notes": canonical.get("notes", ""),
             "review_decision": "PENDING",
@@ -35,7 +41,10 @@ def build_packet(research, ledger, topic):
         "topic": topic,
         "generated_at": datetime.now(timezone.utc).isoformat(),
         "discovery_warning": research.get("warning", "Discovery candidates are not verified evidence."),
+        "relevance_threshold": research.get("relevance_threshold", 40),
         "sources": rows,
+        "dropped_sources": research.get("dropped_sources", []),
+        "extracted_claims": extracted_claims,
         "claim_review_template": {
             "claim_id": "",
             "topic": topic,
@@ -56,6 +65,7 @@ def render_markdown(packet):
         "",
         f"**Episode topic:** {packet['topic']}",
         f"**Generated:** {packet['generated_at']}",
+        f"**Relevance triage threshold:** {packet.get('relevance_threshold', 40)} (ranking aid only)",
         "",
         "> Discovery results are leads, not verified evidence. No source or claim in this packet is approved.",
         "",
@@ -79,10 +89,45 @@ def render_markdown(packet):
             f"- Year: {source['publication_year'] or 'Not supplied'}",
             f"- Authors/contributors: {', '.join(source['authors']) if source['authors'] else 'Not supplied'}",
             f"- Discovery provider: {source['provider'] or 'Not supplied'}",
-            f"- Discovery priority: {source['source_priority']}",
+            f"- Canonical source type: {source['source_type']}",
+            f"- Relevance score: {source['relevance_score'] if source['relevance_score'] is not None else 'Not scorable; human review required'}",
+            f"- Relevance reasons: {', '.join(source['relevance_reasons']) or 'No flags'}",
             f"- Current ledger status: {source['review_status']}",
             "- Reviewer decision: PENDING",
             "- Review notes (exact passage/page/catalogue reference and relevance):",
+            "",
+        ])
+    if packet.get("dropped_sources"):
+        lines.extend([
+            "## Filtered-out discovery candidates (audit trail)",
+            "",
+            "These candidates did not pass the configured discovery filters. They remain visible for audit and are not silently discarded.",
+            "",
+        ])
+        for dropped in packet["dropped_sources"]:
+            source = dropped.get("source", dropped)
+            lines.extend([
+                "- {} — {}".format(source.get("title", "(untitled)"),
+                                   dropped.get("reason") or ", ".join(dropped.get("reasons", [])) or "below threshold"),
+                "  - Relevance score: {}".format(dropped.get("relevance_score", "not scored")),
+                "  - Source ID: {}".format(source.get("source_id", "unknown")),
+                "",
+            ])
+    lines.extend([
+        "## Extracted candidate claims (UNREVIEWED)",
+        "",
+        "These are verbatim source sentences offered for reviewer triage only. They are not ledger claims and cannot enter a script.",
+        "",
+    ])
+    for claim in packet.get("extracted_claims", []):
+        lines.extend([
+            "- Candidate: {}".format(claim.get("claim_id")),
+            "  - Text: {}".format(claim.get("text")),
+            "  - Source IDs: {}".format(", ".join(claim.get("source_ids", []))),
+            "  - Suggested tier: {}".format(claim.get("suggested_status", "UNKNOWN")),
+            "  - Final tier: UNKNOWN (human decision required)",
+            "  - Include in script: false",
+            "  - Extraction: {}".format(claim.get("extraction_method")),
             "",
         ])
     lines.extend([
