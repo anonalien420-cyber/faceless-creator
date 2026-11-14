@@ -462,31 +462,43 @@ def main(argv=None):
                 "trends", log)
         with open("data/top5.json", encoding="utf-8") as fh:
             top5 = json.load(fh)["candidates"]
-        # Research is discovery only. Results are added to the evidence ledger
-        # as UNREVIEWED; no discovered source can become a factual claim
-        # without an explicit human review in the ledger.
+        # Research is discovery only. Search each planned episode by its
+        # actual topic (not the broad channel niche), and preserve a separate
+        # review packet for the long video and each Short. All discoveries
+        # remain UNREVIEWED; no source or claim is auto-approved.
         if "history" in niche.lower():
-            run_cmd([sys.executable, "-m", "src.research", "--query", niche,
-                     "--output", "data/research_sources.json"],
-                    "historical_research", log)
-            run_cmd([sys.executable, "-m", "src.source_archive", "--input",
-                     "data/research_sources.json", "--output",
-                     "data/research_sources_archived.json"],
-                    "historical_source_archive", log)
+            from src.script import topic_from_candidate
+            research_candidates = top5[:long_count + short_count]
+            os.makedirs("data/review_packets", exist_ok=True)
+            for index, candidate in enumerate(research_candidates, 1):
+                research_topic = topic_from_candidate(candidate)
+                suffix = "" if index == 1 else "_{:02d}-{}".format(
+                    index, slug(research_topic))
+                research_path = "data/research_sources{}.json".format(suffix)
+                archive_path = "data/research_sources_archived{}.json".format(suffix)
+                packet_md = ("data/review_packet.md" if index == 1 else
+                             "data/review_packets/{:02d}-{}.md".format(
+                                 index, slug(research_topic)))
+                packet_json = ("data/review_packet.json" if index == 1 else
+                               "data/review_packets/{:02d}-{}.json".format(
+                                   index, slug(research_topic)))
+                run_cmd([sys.executable, "-m", "src.research", "--query",
+                         research_topic, "--output", research_path],
+                        "historical_research:{}:{}".format(index, slug(research_topic)), log)
+                run_cmd([sys.executable, "-m", "src.source_archive", "--input",
+                         research_path, "--output", archive_path],
+                        "historical_source_archive:{}:{}".format(
+                            index, slug(research_topic)), log)
+                run_cmd([sys.executable, "-m", "src.review_packet",
+                         "--input", research_path,
+                         "--ledger", "data/evidence_ledger.json",
+                         "--topic", research_topic,
+                         "--output", packet_md,
+                         "--json-output", packet_json],
+                        "historical_review_packet:{}:{}".format(
+                            index, slug(research_topic)), log)
             # Metadata verification is a separate report, never an automatic
             # source approval or truth score. The evidence ledger remains the gate.
-            # Create a human-readable review packet for the lead episode.
-            # It contains discovery candidates only; it never approves a
-            # source or invents a factual claim.
-            research_topic = (top5[0].get("title") or top5[0].get("topic")
-                              or niche) if top5 else niche
-            run_cmd([sys.executable, "-m", "src.review_packet",
-                     "--input", "data/research_sources.json",
-                     "--ledger", "data/evidence_ledger.json",
-                     "--topic", research_topic,
-                     "--output", "data/review_packet.md",
-                     "--json-output", "data/review_packet.json"],
-                    "historical_review_packet", log)
             if os.path.exists("data/evidence_ledger.json"):
                 run_cmd([sys.executable, "-m", "src.verification", "--ledger",
                          "data/evidence_ledger.json", "--output",
