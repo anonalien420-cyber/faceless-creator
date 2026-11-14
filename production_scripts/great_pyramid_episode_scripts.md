@@ -121,7 +121,7 @@ Researchers did not identify it as a tomb, treasure room, or secret chamber. Its
 
 That is the real mystery. Modern physics helped reveal a structure hidden inside one of the world's most studied monuments, but the scan did not magically explain why it is there.
 
-A discovery is not the same thing as an answer.
+A discovery is not the same thing as an answer. And that distinction is exactly why the finding matters.
 
 **End card:** “Follow the evidence. Deep Scan.”
 
@@ -154,7 +154,7 @@ That is a remarkable piece of evidence: a named work team, a real transport oper
 
 But keep the claim precise. The logbook does not explain every construction technique or how every block was lifted into place.
 
-It gives us a documented piece of the logistics behind the monument, not the entire engineering blueprint.
+It gives us a documented piece of the logistics behind the monument, not the entire engineering blueprint. One record can illuminate a route without explaining an entire building project.
 
 Sometimes the best historical discovery is a paper trail.
 
