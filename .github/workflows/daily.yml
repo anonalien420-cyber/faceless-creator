@@ -64,9 +64,10 @@ jobs:
             data/review_queue.md
             data/review_packet.md
             data/review_packet.json
+            data/review_packets/**
             data/production_gate.json
-            data/research_sources.json
-            data/research_sources_archived.json
+            data/research_sources*.json
+            data/research_sources_archived*.json
             data/evidence_ledger.json
             data/verification_report.json
             data/scripts_long.json
