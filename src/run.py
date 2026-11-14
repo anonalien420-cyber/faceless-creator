@@ -345,6 +345,57 @@ def write_review_queue(outputs, niche, config, args, seo_entries, thumb_map):
     print(f"Review queue -> data/review_queue.md ({len(outputs)} video(s))")
 
 
+
+def evaluate_historical_production_gate(niche, long_candidates, short_candidates, ledger):
+    """Preflight every planned history-mystery script before any rendering.
+
+    Discovery candidates are not evidence. A run with missing, invalid, or
+    topic/format-incomplete human review returns a durable blocked report and
+    skips production instead of crashing halfway through the script stage.
+    """
+    if "history" not in (niche or "").lower():
+        return {"required": False, "status": "ready", "topics": [], "blockers": []}
+
+    from src.documentary import build_documentary
+    from src.evidence import reviewed_claims
+    from src.script import topic_from_candidate
+
+    try:
+        claims = reviewed_claims(ledger)
+    except (ValueError, TypeError, KeyError) as exc:
+        reason = "Evidence ledger is not publishable: {}".format(exc)
+        return {"required": True, "status": "blocked_review_required",
+                "topics": [], "blockers": [reason]}
+
+    topics, blockers = [], []
+    if not claims:
+        blockers.append(
+            "No human-reviewed evidence claims exist yet. Review sources and "
+            "claims in data/review_packet.md, then update data/evidence_ledger.json."
+        )
+
+    for fmt, candidates in (("long", long_candidates), ("short", short_candidates)):
+        for candidate in candidates:
+            topic = topic_from_candidate(candidate)
+            item = {"format": fmt, "topic": topic, "status": "ready"}
+            try:
+                build_documentary(topic, fmt, ledger)
+            except (ValueError, TypeError, KeyError) as exc:
+                item["status"] = "blocked_review_required"
+                item["reason"] = str(exc)
+                blockers.append("{} [{}]: {}".format(fmt, topic, exc))
+            topics.append(item)
+
+    return {
+        "required": True,
+        "status": "blocked_review_required" if blockers else "ready",
+        "reviewed_claim_count": len(claims),
+        "topics": topics,
+        "blockers": blockers,
+        "policy": "No candidate source or extracted claim is auto-approved; rendering requires human-reviewed, topic-matched claims and a reviewed KNOWN shock hook.",
+    }
+
+
 def main(argv=None):
     parser = argparse.ArgumentParser()
     parser.add_argument("--config", default="config.yaml")
@@ -433,6 +484,29 @@ def main(argv=None):
             json.dump(long_cands, fh, indent=2)
         with open("data/top5_shorts.json", "w", encoding="utf-8") as fh:
             json.dump(short_cands, fh, indent=2)
+
+        # Preflight the complete historical slate before generating any scripts,
+        # narration, or video. A review gap is a normal blocked state, not a crash.
+        if "history" in niche.lower():
+            from src.evidence import load_ledger
+            production_gate = evaluate_historical_production_gate(
+                niche, long_cands, short_cands, load_ledger("data/evidence_ledger.json"))
+            with open("data/production_gate.json", "w", encoding="utf-8") as fh:
+                json.dump(production_gate, fh, indent=2, ensure_ascii=False)
+            if production_gate["status"] != "ready":
+                detail = "; ".join(production_gate["blockers"])
+                log_step(log, "production_gate", "BLOCKED_REVIEW_REQUIRED", detail)
+                log["status"] = "blocked_review_required"
+                log["finished_at"] = datetime.now(timezone.utc).isoformat()
+                with open("data/run_log.json", "w", encoding="utf-8") as fh:
+                    json.dump(log, fh, indent=2)
+                print(
+                    "Research and review packet completed; rendering skipped. "
+                    "Human evidence review is required. See data/production_gate.json "
+                    "and data/review_packet.md."
+                )
+                return 0
+
         run_cmd([sys.executable, "-m", "src.script", "--input", "data/top5_long.json",
                  "--output", "data/scripts_long.json", "--format", "long",
                  "--count", str(long_count)], "scripts:long", log)
