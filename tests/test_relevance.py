@@ -190,6 +190,44 @@ class RelevanceTests(unittest.TestCase):
         nature = score_source(dict(NATURE_OPENALEX, source_type="academic"), QUERY)
         self.assertEqual(nature["score"], 80)
 
+    def test_generic_channel_words_do_not_make_unrelated_sources_relevant(self):
+        unrelated = {
+            "provider": "OpenAlex",
+            "title": "Parallel-plate avalanche counters for heavy-ion beam tracking: History and mysteries",
+            "publication_year": 2024,
+            "source_type": "academic",
+            "abstract": "A study of detector systems for heavy-ion physics.",
+        }
+        result = score_source(unrelated, "The Great Pyramid Mystery: The Oldest Cover-Up In History")
+        self.assertIn("no_topic_anchor_match", result["reasons"])
+        kept, dropped = filter_sources([unrelated],
+            "The Great Pyramid Mystery: The Oldest Cover-Up In History")
+        self.assertEqual(kept, [])
+        self.assertEqual(len(dropped), 1)
+
+    def test_broad_channel_niche_is_not_accepted_as_research_topic(self):
+        unrelated = {
+            "provider": "Internet Archive",
+            "title": "VOA Global English",
+            "publication_year": 2019,
+            "source_type": "archival",
+        }
+        result = score_source(unrelated, "history mysteries investigated with modern tech")
+        self.assertIn("query_has_no_specific_topic_terms", result["reasons"])
+        kept, dropped = filter_sources([unrelated],
+            "history mysteries investigated with modern tech")
+        self.assertEqual(kept, [])
+        self.assertEqual(len(dropped), 1)
+
+    def test_great_pyramid_topic_anchor_keeps_relevant_source(self):
+        relevant = dict(NATURE_OPENALEX, source_type="academic")
+        kept, dropped = filter_sources(
+            [relevant], "The Great Pyramid Mystery: The Oldest Cover-Up In History")
+        self.assertEqual(len(kept), 1)
+        self.assertEqual(dropped, [])
+
+    def test_threshold_default_is_40(self):
+        self.assertEqual(DEFAULT_THRESHOLD, 40)
     def test_threshold_default_is_40(self):
         self.assertEqual(DEFAULT_THRESHOLD, 40)
 
