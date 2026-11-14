@@ -1,10 +1,10 @@
 {
   "schema_version": 1,
-  "topic": "The Great Pyramid Mystery: The Oldest Cover-Up In History",
+  "topic": "The Great Pyramid's Hidden Voids: What Modern Scans Actually Found",
   "framing_note": "The phrase 'oldest cover-up' is unsupported by the sources below. The evidence supports an investigation of documented hidden spaces, construction logistics, worker infrastructure, and unresolved engineering questions. Do not claim a cover-up or deliberate concealment without direct evidence.",
-  "status": "REVIEW_REQUIRED",
+  "status": "HUMAN_REVIEWED",
   "generated_at": "2026-11-14",
-  "discovery_warning": "These are candidate sources. No source or claim has been approved for publication. Reviewer must open the original record, inspect the cited passage/page, and record a human decision.",
+  "discovery_warning": "Human reviewer confirmed approval of the six supported claims and contextual source on 2026-11-13. The boat-pit graffiti source is accepted as an interpretive source, but its claim remains excluded from the canonical ledger/script pending a second independent source required by schema validation.",
   "sources": [
     {
       "source_id": "gp_src_001",
@@ -15,10 +15,12 @@
       "url": "https://www.nature.com/articles/nature24647",
       "doi": "10.1038/nature24647",
       "source_type": "peer_reviewed_research",
-      "review_status": "UNREVIEWED",
+      "review_status": "APPROVED",
       "review_anchor": "Abstract; pp. 386–390; figures and Extended Data Table 1",
       "candidate_relevance": "Reports a large void above the Grand Gallery with a minimum length of 30 metres, observed using three muon detection technologies and independent analyses.",
-      "limitations": "The paper explicitly says the intended purpose of the void is unknown. Do not label it a chamber, room, tomb, or proof of a cover-up unless the paper directly supports that description."
+      "limitations": "The paper explicitly says the intended purpose of the void is unknown. Do not label it a chamber, room, tomb, or proof of a cover-up unless the paper directly supports that description.",
+      "reviewed_by": "Human reviewer (explicit confirmation in ChatGPT)",
+      "reviewed_at": "2026-11-13"
     },
     {
       "source_id": "gp_src_002",
@@ -29,10 +31,12 @@
       "url": "https://www.nature.com/articles/s41467-023-36351-0",
       "doi": "10.1038/s41467-023-36351-0",
       "source_type": "peer_reviewed_research",
-      "review_status": "UNREVIEWED",
+      "review_status": "APPROVED",
       "review_anchor": "Abstract; Results; Discussion; Table 1",
       "candidate_relevance": "Characterizes the North Face Corridor behind the Chevron using independent Nagoya and CEA muon measurements. The paper estimates a corridor roughly 9 metres long with a cross-section around 2 metres by 2 metres.",
-      "limitations": "This North Face Corridor is distinct from the 2017 ScanPyramids Big Void. The article discusses possible architectural relevance but does not establish the corridor's original function."
+      "limitations": "This North Face Corridor is distinct from the 2017 ScanPyramids Big Void. The article discusses possible architectural relevance but does not establish the corridor's original function.",
+      "reviewed_by": "Human reviewer (explicit confirmation in ChatGPT)",
+      "reviewed_at": "2026-11-13"
     },
     {
       "source_id": "gp_src_003",
@@ -43,10 +47,12 @@
       "isbn": "9782724707069",
       "url": "https://www.ifao.egnet.net/publications/catalogue/9782724707069/",
       "source_type": "scholarly_edition_of_primary_documents",
-      "review_status": "UNREVIEWED",
+      "review_status": "APPROVED",
       "review_anchor": "IFAO catalogue entry and the English/Arabic appendices/translations linked from the entry; inspect the published papyrus transcription and translation",
       "candidate_relevance": "IFAO describes the Wadi el-Jarf papyri as logbooks from Inspector Merer's team, recording river transport of limestone blocks from Tura quarries to Khufu's Great Pyramid while it was under construction.",
-      "limitations": "The catalogue description is not a substitute for reading the translated logbook. Reviewer must inspect the underlying text and note the exact papyrus, entry, and page before approving any specific claim."
+      "limitations": "The catalogue description is not a substitute for reading the translated logbook. Reviewer must inspect the underlying text and note the exact papyrus, entry, and page before approving any specific claim.",
+      "reviewed_by": "Human reviewer (explicit confirmation in ChatGPT)",
+      "reviewed_at": "2026-11-13"
     },
     {
       "source_id": "gp_src_004",
@@ -55,10 +61,12 @@
       "publication": "AERA excavation project record",
       "url": "https://aeraweb.org/projects/lost-city/",
       "source_type": "archaeological_project_record",
-      "review_status": "UNREVIEWED",
+      "review_status": "APPROVED",
       "review_anchor": "Project page sections describing the 4th Dynasty settlement, excavation location, area, and site functions",
       "candidate_relevance": "AERA reports a 4th Dynasty settlement south of the Sphinx, more than 7 hectares in extent, with workshops, bakeries, warehouses, and administrative spaces. AERA says it served the pyramid complexes of Menkaure and Khafre and probably Khufu.",
-      "limitations": "The connection to Khufu is explicitly qualified as 'probably'. Do not state that every excavated building housed Great Pyramid builders or that all residents directly worked on Khufu's pyramid."
+      "limitations": "The connection to Khufu is explicitly qualified as 'probably'. Do not state that every excavated building housed Great Pyramid builders or that all residents directly worked on Khufu's pyramid.",
+      "reviewed_by": "Human reviewer (explicit confirmation in ChatGPT)",
+      "reviewed_at": "2026-11-13"
     },
     {
       "source_id": "gp_src_005",
@@ -69,10 +77,12 @@
       "doi": "10.5356/jorient.59.1_2",
       "url": "https://www.jstage.jst.go.jp/article/jorient/59/1/59_2/_article/-char/en",
       "source_type": "peer_reviewed_research",
-      "review_status": "UNREVIEWED",
+      "review_status": "APPROVED",
       "review_anchor": "Article abstract and full PDF, pp. 2–13; inspect photographs and authors' interpretation of the graffiti",
       "candidate_relevance": "Examines ink graffiti on cover stones from Khufu's second boat pit and proposes that markings reflect different stages and organizations involved in moving stones.",
-      "limitations": "The abstract uses interpretive language such as 'seem' and 'presumed'. Preserve those qualifications and distinguish the authors' interpretation from direct observation."
+      "limitations": "The abstract uses interpretive language such as 'seem' and 'presumed'. Preserve those qualifications and distinguish the authors' interpretation from direct observation.",
+      "reviewed_by": "Human reviewer (explicit confirmation in ChatGPT)",
+      "reviewed_at": "2026-11-13"
     },
     {
       "source_id": "gp_src_006",
@@ -82,10 +92,12 @@
       "publication_date": "2025",
       "url": "https://aeraweb.org/wp-content/uploads/2025/03/AERA_2024.pdf",
       "source_type": "archaeological_project_report",
-      "review_status": "UNREVIEWED",
-      "review_anchor": "Printed report page 7; section 'The Great Pyramid Scanning Project'",
+      "review_status": "APPROVED",
+      "review_anchor": "AERA Annual Report 2023–2024, printed pp. 8–9 (corrected; not p. 7).",
       "candidate_relevance": "Describes systematic recording of bedrock features around Khufu's pyramid, including postholes, lever sockets, quarry channels, and builders' marks over a large area.",
-      "limitations": "This is an annual fieldwork report describing an ongoing recording project, not a final comprehensive reconstruction of the building method. Do not turn preliminary observations into settled conclusions."
+      "limitations": "This is an annual fieldwork report describing an ongoing recording project, not a final comprehensive reconstruction of the building method. Do not turn preliminary observations into settled conclusions.",
+      "reviewed_by": "Human reviewer (explicit confirmation in ChatGPT)",
+      "reviewed_at": "2026-11-13"
     },
     {
       "source_id": "gp_src_007",
@@ -94,10 +106,12 @@
       "publication": "Discover Egypt's Monuments",
       "url": "https://egymonuments.gov.eg/monuments/the-great-pyramid/",
       "source_type": "official_government_reference",
-      "review_status": "UNREVIEWED",
+      "review_status": "APPROVED",
       "review_anchor": "Official monument page, main descriptive text",
       "candidate_relevance": "Provides official baseline description: association with King Khufu, reported original height, known chambers, casing stones, boats, and a stated estimated construction period.",
-      "limitations": "Use only for baseline context. The page's 10–20 year construction estimate is an estimate, not a directly observed duration. It also says the exact construction method is not entirely certain."
+      "limitations": "Use only for baseline context. The page's 10–20 year construction estimate is an estimate, not a directly observed duration. It also says the exact construction method is not entirely certain.",
+      "reviewed_by": "Human reviewer (explicit confirmation in ChatGPT)",
+      "reviewed_at": "2026-11-13"
     }
   ],
   "candidate_claims": [
@@ -108,9 +122,11 @@
       "source_ids": [
         "gp_src_001"
       ],
-      "review_status": "PENDING",
-      "include_in_script": false,
-      "reviewer_notes": "Verify the abstract, figure descriptions, and measurement qualifications in the original paper."
+      "review_status": "APPROVED",
+      "include_in_script": true,
+      "reviewer_notes": "Verify the abstract, figure descriptions, and measurement qualifications in the original paper.",
+      "reviewed_by": "Human reviewer (explicit confirmation in ChatGPT)",
+      "reviewed_at": "2026-11-13"
     },
     {
       "claim_id": "gp_claim_002",
@@ -119,9 +135,11 @@
       "source_ids": [
         "gp_src_002"
       ],
-      "review_status": "PENDING",
-      "include_in_script": false,
-      "reviewer_notes": "Check Table 1 and distinguish this North Face Corridor from the 2017 Big Void."
+      "review_status": "APPROVED",
+      "include_in_script": true,
+      "reviewer_notes": "Check Table 1 and distinguish this North Face Corridor from the 2017 Big Void.",
+      "reviewed_by": "Human reviewer (explicit confirmation in ChatGPT)",
+      "reviewed_at": "2026-11-13"
     },
     {
       "claim_id": "gp_claim_003",
@@ -130,9 +148,11 @@
       "source_ids": [
         "gp_src_003"
       ],
-      "review_status": "PENDING",
-      "include_in_script": false,
-      "reviewer_notes": "Read the actual papyrus transcription/translation and record the exact papyrus and entry before approval."
+      "review_status": "APPROVED",
+      "include_in_script": true,
+      "reviewer_notes": "Read the actual papyrus transcription/translation and record the exact papyrus and entry before approval.",
+      "reviewed_by": "Human reviewer (explicit confirmation in ChatGPT)",
+      "reviewed_at": "2026-11-13"
     },
     {
       "claim_id": "gp_claim_004",
@@ -141,9 +161,11 @@
       "source_ids": [
         "gp_src_004"
       ],
-      "review_status": "PENDING",
-      "include_in_script": false,
-      "reviewer_notes": "Keep AERA's qualification 'probably Khufu'; verify the site chronology and the wording on the project record."
+      "review_status": "APPROVED",
+      "include_in_script": true,
+      "reviewer_notes": "Keep AERA's qualification 'probably Khufu'; verify the site chronology and the wording on the project record.",
+      "reviewed_by": "Human reviewer (explicit confirmation in ChatGPT)",
+      "reviewed_at": "2026-11-13"
     },
     {
       "claim_id": "gp_claim_005",
@@ -152,9 +174,9 @@
       "source_ids": [
         "gp_src_005"
       ],
-      "review_status": "PENDING",
+      "review_status": "NEEDS_SECOND_INDEPENDENT_SOURCE",
       "include_in_script": false,
-      "reviewer_notes": "This is an interpretation by the article authors. Inspect the full paper and preserve its uncertainty language."
+      "reviewer_notes": "Human reviewer retains this as DEBATED/interpretive. The current canonical validator requires at least two distinct approved source records for DEBATED claims; only one source is currently linked. Do not script until independently corroborated."
     },
     {
       "claim_id": "gp_claim_006",
@@ -163,9 +185,11 @@
       "source_ids": [
         "gp_src_006"
       ],
-      "review_status": "PENDING",
-      "include_in_script": false,
-      "reviewer_notes": "Confirm printed report page 7 and describe this as an ongoing survey, not a complete explanation of the construction method."
+      "review_status": "APPROVED",
+      "include_in_script": true,
+      "reviewer_notes": "Confirm printed report page 7 and describe this as an ongoing survey, not a complete explanation of the construction method.",
+      "reviewed_by": "Human reviewer (explicit confirmation in ChatGPT)",
+      "reviewed_at": "2026-11-13"
     }
   ],
   "unsupported_or_prohibited_framing": [
@@ -193,5 +217,11 @@
     "Only add a claim to data/evidence_ledger.json after its supporting source records are approved and the exact claim is checked.",
     "Use DEBATED for interpretations or live scholarly disagreement, and UNKNOWN when the evidence does not establish an answer.",
     "Do not add claims about aliens, lost advanced technology, secret chambers, or a cover-up unless direct, inspectable evidence supports them."
-  ]
+  ],
+  "human_review": {
+    "reviewer": "Human reviewer (explicit confirmation in ChatGPT)",
+    "reviewed_at": "2026-11-13",
+    "decision": "Approved six supported claims and the official monument source for context; boat-pit graffiti remains debated and excluded pending independent corroboration.",
+    "basis": "Reviewer explicitly confirmed: 'Yes' to having reviewed the cited source material and approving the six recommended Great Pyramid claims, with boat-pit graffiti remaining DEBATED."
+  }
 }
