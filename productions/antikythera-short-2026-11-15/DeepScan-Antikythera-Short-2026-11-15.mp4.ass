@@ -1,0 +1,35 @@
+[Script Info]
+ScriptType: v4.00+
+PlayResX: 1080
+PlayResY: 1920
+
+[V4+ Styles]
+Format: Name, Fontname, Fontsize, PrimaryColour, BackColour, Bold, Alignment, MarginL, MarginR, MarginV, BorderStyle, Outline
+Style: Default,DejaVu Sans,72,&H00FFFFFF,&H80000000,-1,2,60,60,400,1,5
+
+[Events]
+Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
+Dialogue: 0,0:00:00.00,0:00:02.86,Default,,0,0,0,,A geared bronze machine that predicted eclipses
+Dialogue: 0,0:00:02.86,0:00:05.72,Default,,0,0,0,,existed in the ancient world about two
+Dialogue: 0,0:00:05.72,0:00:08.59,Default,,0,0,0,,thousand years ago. Sponge divers found the
+Dialogue: 0,0:00:08.59,0:00:11.45,Default,,0,0,0,,wreck off Antikythera in 1900, recovered the
+Dialogue: 0,0:00:11.45,0:00:14.32,Default,,0,0,0,,corroded lump in 1901, and its fragments
+Dialogue: 0,0:00:14.32,0:00:17.18,Default,,0,0,0,,are now held at the National Archaeological
+Dialogue: 0,0:00:17.18,0:00:20.05,Default,,0,0,0,,Museum in Athens. In 1902 a gear
+Dialogue: 0,0:00:20.05,0:00:22.91,Default,,0,0,0,,was spotted inside the corroded lump, and
+Dialogue: 0,0:00:22.91,0:00:25.78,Default,,0,0,0,,the museum's Valerios Stais studied it. What
+Dialogue: 0,0:00:25.78,0:00:28.64,Default,,0,0,0,,survives is 82 fragments containing 30 bronze
+Dialogue: 0,0:00:28.64,0:00:31.51,Default,,0,0,0,,gear wheels. The mechanism was built around
+Dialogue: 0,0:00:31.51,0:00:34.37,Default,,0,0,0,,100 BCE, give or take thirty years.
+Dialogue: 0,0:00:34.37,0:00:37.24,Default,,0,0,0,,Nothing comparably complex appears again for about
+Dialogue: 0,0:00:37.24,0:00:40.10,Default,,0,0,0,,1,400 years, until the great clocks of
+Dialogue: 0,0:00:40.10,0:00:42.97,Default,,0,0,0,,medieval cathedrals. What remains unknown: No inscription
+Dialogue: 0,0:00:42.97,0:00:45.83,Default,,0,0,0,,on the mechanism names its builder, and
+Dialogue: 0,0:00:45.83,0:00:48.70,Default,,0,0,0,,no ancient text describes the workshop that
+Dialogue: 0,0:00:48.70,0:00:51.56,Default,,0,0,0,,made it or the person who paid
+Dialogue: 0,0:00:51.56,0:00:54.43,Default,,0,0,0,,for it. The evidence is what we
+Dialogue: 0,0:00:54.43,0:00:57.29,Default,,0,0,0,,have. The unanswered questions are what remain.
+Dialogue: 0,0:00:57.29,0:01:00.16,Default,,0,0,0,,What do you think happened? What does
+Dialogue: 0,0:01:00.16,0:01:03.02,Default,,0,0,0,,the record actually support?
+Dialogue: 0,0:01:03.00,0:01:05.80,Default,,0,0,0,,Like and subscribe
+Dialogue: 0,0:01:05.80,0:01:07.63,Default,,0,0,0,,for more!

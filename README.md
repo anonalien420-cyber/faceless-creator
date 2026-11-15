@@ -102,6 +102,15 @@ it picks a fast upbeat royalty-free pop-style track, not a random slow
 one. The match (profile → chosen track → why) is logged to
 `data/run_log.json`.
 
+**Mix levels and bed length:** the mix uses ffmpeg `amix` with
+`normalize=0`, so the narration stays at full level and the bed stays
+at exactly its configured relative volume (e.g. 0.06) — the old
+`amix` default halved both inputs (~6 dB quieter). The bed is looped
+(`-stream_loop -1`) with the mix cut at the narration's end
+(`duration=first`), so a bed shorter than the narration (the in-house
+bed is 64s) repeats to cover the whole narration instead of cutting
+out mid-video.
+
 **Copyright rule, enforced in code:** do NOT download or use the actual
 trending songs from TikTok/YouTube — that draws Content ID claims and
 takedowns. The match is style/tempo/mood-alikeness with a royalty-free
@@ -246,8 +255,9 @@ file you paste from YouTube Studio
 **Never invent performance numbers:** videos with no stats are listed
 as "no data yet" and are not scored.
 
-What it auto-changes (safe bounds only, applied to `config.yaml`,
-logged, and reversible via `data/review_history.json` before/after):
+What it computes (recommendations only, in `data/review_adjustments.json`
+and `data/weekly_review.json` — **it never writes `config.yaml`**; apply
+any adjustment to `config.yaml` by hand after reviewing it):
 - Niche ranking: +20 demand bonus for the winning niche next run.
 - Hook style: `review_preferred_hook_style` = top performers' style.
 - Length: `review_preferred_length_seconds` = top performers' median,
@@ -620,7 +630,11 @@ Crossref.
 
 History-mystery script generation now calls `src.documentary` and refuses to
 write a script unless the ledger validates and includes a reviewed KNOWN
-claim explicitly marked `shock_hook: true`. Each script section carries claim
+claim explicitly marked `shock_hook: true`. The daily run wires this in
+explicitly: for a history-mystery niche, `src/run.py` passes
+`--style history_mystery --ledger data/evidence_ledger.json` to the
+`scripts:long` / `scripts:short` steps, so a real-topic end-to-end run
+goes through the documentary package, not the generic template builders. Each script section carries claim
 IDs and source IDs. The documentary package includes scene-by-scene image and
 animation prompts with period, location, clothing, architecture, objects,
 lighting, camera movement, and atmosphere fields. Missing historical details

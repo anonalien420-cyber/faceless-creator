@@ -1,0 +1,112 @@
+{
+  "video": "productions/antikythera-short-2026-11-15/DeepScan-Antikythera-Short-2026-11-15.mp4",
+  "overall": "pass",
+  "checks": [
+    {
+      "check": "file_exists",
+      "status": "pass",
+      "detail": "79243966 bytes"
+    },
+    {
+      "check": "resolution",
+      "status": "pass",
+      "detail": "1080x1920 (want 1080x1920 for short)"
+    },
+    {
+      "check": "frame_rate",
+      "status": "pass",
+      "detail": "30.00 fps (want 30)"
+    },
+    {
+      "check": "duration_matches_narration",
+      "status": "pass",
+      "detail": "video 67.6s vs narration 67.6s (tolerance 2.0s)"
+    },
+    {
+      "check": "audio_present",
+      "status": "pass",
+      "detail": "1 audio stream(s)"
+    },
+    {
+      "check": "audio_not_silent",
+      "status": "pass",
+      "detail": "mean -25.4 dB, max -8.4 dB"
+    },
+    {
+      "check": "audio_not_clipping",
+      "status": "pass",
+      "detail": "max_volume -8.4 dB (clipping above -0.5 dB)"
+    },
+    {
+      "check": "no_long_black_stretches",
+      "status": "pass",
+      "detail": "0 black stretch(es) >2s"
+    },
+    {
+      "check": "no_long_silent_stretches",
+      "status": "pass",
+      "detail": "0 silent stretch(es) >2s"
+    },
+    {
+      "check": "title_card_not_black",
+      "status": "pass",
+      "detail": "first 3s are not black"
+    },
+    {
+      "check": "captions_present",
+      "status": "pass",
+      "detail": "productions/antikythera-short-2026-11-15/DeepScan-Antikythera-Short-2026-11-15.mp4.ass (2510 bytes)"
+    },
+    {
+      "check": "accuracy_evidence_ledger_valid",
+      "status": "pass",
+      "detail": "ledger validates"
+    },
+    {
+      "check": "accuracy_historical_metadata_verification",
+      "status": "pass",
+      "detail": "date/source-diversity metadata checks passed"
+    },
+    {
+      "check": "accuracy_claim_ids_in_ledger",
+      "status": "pass",
+      "detail": "all script claim IDs exist in the ledger"
+    },
+    {
+      "check": "accuracy_script_matches_ledger",
+      "status": "pass",
+      "detail": "script text and claim references match the reviewed ledger"
+    },
+    {
+      "check": "accuracy_sources_filled",
+      "status": "pass",
+      "detail": "5 source(s) listed"
+    },
+    {
+      "check": "accuracy_sections_tagged",
+      "status": "pass",
+      "detail": "7 section(s), all tiered KNOWN/DEBATED/UNKNOWN"
+    },
+    {
+      "check": "accuracy_known_has_source",
+      "status": "pass",
+      "detail": "KNOWN sections are backed by filled sources"
+    },
+    {
+      "check": "accuracy_ending_open_question",
+      "status": "pass",
+      "detail": "ending asks an open viewer question ('What do you think happened?')"
+    },
+    {
+      "check": "accuracy_shock_hook_sourced",
+      "status": "pass",
+      "detail": "shock hook is KNOWN-tier with a filled source"
+    },
+    {
+      "check": "accuracy_description_sources_valid",
+      "status": "pass",
+      "detail": "5 description source(s): all have a valid URL or are explicitly flagged no-public-URL"
+    }
+  ],
+  "fixes_applied": []
+}

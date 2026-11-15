@@ -172,6 +172,32 @@ def legacy_music_file(config, music_arg):
     return ""
 
 
+def mix_command(narration, music_path, output, music_volume):
+    """ffmpeg argv mixing a music bed under narration.
+
+    Level fix (production-readiness issue 4): ffmpeg's ``amix``
+    defaults to ``normalize=1``, which divides the summed signal by
+    the number of inputs — halving BOTH inputs (~6 dB quieter mix).
+    ``normalize=0`` keeps each input at its own level, so the
+    narration stays at full level and the bed stays at exactly the
+    configured relative volume (e.g. 0.06) in narration-silent gaps.
+
+    Looping fix (same issue): the bed is looped indefinitely
+    (``-stream_loop -1`` on the music input) and ``amix`` is told
+    ``duration=first``, so a bed shorter than the narration (the
+    in-house bed is 64s) repeats to cover the whole narration
+    instead of cutting out mid-video. The mix still ends exactly
+    at the narration's end; nothing after it is kept.
+    """
+    filt = (
+        f"[1:a]volume={music_volume}[music];"
+        "[0:a][music]amix=inputs=2:duration=first:dropout_transition=0:normalize=0"
+    )
+    return ["ffmpeg", "-y", "-i", narration, "-stream_loop", "-1",
+            "-i", music_path, "-filter_complex", filt,
+            "-c:a", "libmp3lame", output]
+
+
 def append_run_log(step, detail):
     try:
         path = "data/run_log.json"
@@ -265,13 +291,10 @@ def main(argv=None):
     if not shutil.which("ffmpeg"):
         print("ERROR: ffmpeg is required to mix music.", file=sys.stderr)
         return 1
-    filt = (
-        f"[1:a]volume={args.music_volume}[music];"
-        "[0:a][music]amix=inputs=2:duration=first:dropout_transition=0"
-    )
+    # Mix via mix_command: amix normalize=0 (no ~6 dB drop) with the
+    # bed looped to cover narration longer than the bed.
     subprocess.run(
-        ["ffmpeg", "-y", "-i", args.narration, "-i", music,
-         "-filter_complex", filt, "-c:a", "libmp3lame", args.output],
+        mix_command(args.narration, music, args.output, args.music_volume),
         check=True,
     )
     print(f"Mixed -> {args.output} (music bed at volume {args.music_volume})")

@@ -10,7 +10,7 @@ import os
 from datetime import datetime, timezone
 
 
-def build_packet(research, ledger, topic):
+def build_packet(research, ledger, topic, extracted_claims=None):
     sources = research.get("sources", [])
     existing = {s.get("source_id"): s for s in ledger.get("sources", [])}
     rows = []
@@ -30,12 +30,31 @@ def build_packet(research, ledger, topic):
             "review_notes": canonical.get("notes", ""),
             "review_decision": "PENDING",
         })
+    # Extracted-claim candidates (Phase 2D, src/claim_extraction.py).
+    # Included only when the caller supplies them; they are editable
+    # templates, never approvals -- blank reviewer fields,
+    # include_in_script False, exactly like the blank claim template.
+    extracted = []
+    for candidate in extracted_claims or []:
+        if not isinstance(candidate, dict):
+            continue
+        extracted.append({
+            "text": candidate.get("text", ""),
+            "suggested_status": candidate.get("suggested_status", "UNKNOWN"),
+            "extraction_method": candidate.get("extraction_method", ""),
+            "source_ids": list(candidate.get("source_ids", [])),
+            "review_status": "UNREVIEWED",
+            "reviewed_by": "",
+            "reviewed_at": "",
+            "include_in_script": False,
+        })
     return {
         "schema_version": 1,
         "topic": topic,
         "generated_at": datetime.now(timezone.utc).isoformat(),
         "discovery_warning": research.get("warning", "Discovery candidates are not verified evidence."),
         "sources": rows,
+        "extracted_claims": extracted,
         "claim_review_template": {
             "claim_id": "",
             "topic": topic,
@@ -83,6 +102,22 @@ def render_markdown(packet):
             f"- Current ledger status: {source['review_status']}",
             "- Reviewer decision: PENDING",
             "- Review notes (exact passage/page/catalogue reference and relevance):",
+            "",
+        ])
+    lines.extend([
+        "## Extracted claim candidates",
+        "",
+        "Machine-extracted sentences from the abstracts of sources that passed relevance filtering. These are candidates only: each text is a verbatim sentence from its source abstract, each is UNREVIEWED, and none is approved. A reviewer must confirm or rewrite each one, set its final tier, and fill in reviewer identity and time before it can enter the evidence ledger.",
+        "",
+    ])
+    for candidate in packet.get("extracted_claims", []):
+        lines.extend([
+            f"- Text: {candidate['text']}",
+            f"- Suggested status: {candidate['suggested_status']} (suggestion only; the reviewer sets the final tier)",
+            f"- Extraction method: {candidate['extraction_method']}",
+            f"- Supporting source IDs: {', '.join(candidate['source_ids']) or '(none)'}",
+            "- Reviewer decision: PENDING",
+            "- Reviewer notes:",
             "",
         ])
     lines.extend([

@@ -15,10 +15,12 @@ Inputs (real numbers only, never invented):
   published_date}. See data/video_stats.example.json (EXAMPLE only).
 - Videos with no stats are listed as "no data yet" and are NOT scored.
 
-Outputs: data/weekly_review.md + data/weekly_review.json, and
-data/review_history.json (before/after, for reversibility).
+Outputs: data/weekly_review.md + data/weekly_review.json,
+data/review_history.json (before/after, for reversibility), and
+data/review_adjustments.json (the computed adjustments as
+recommendations — see below).
 
-Auto-corrections (SAFE BOUNDS ONLY, applied to config.yaml, logged):
+Auto-corrections (SAFE BOUNDS ONLY) are COMPUTED, NOT APPLIED:
 - Niche: +20 demand bonus for the winning niche in the next ranking
   (config review_preferred_niche). It nudges ranking, it does not
   delete or ban any niche.
@@ -31,6 +33,13 @@ Auto-corrections (SAFE BOUNDS ONLY, applied to config.yaml, logged):
 - Peak window: shift peak windows by at most 60 minutes toward the
   winning publish hours (config review_peak_shift_minutes, clamped
   to [-60, +60]; scheduler.py applies it).
+
+This module NEVER writes config.yaml (fix for production-readiness
+issue 1, 2026-11-15): the computed adjustments are written to
+data/review_adjustments.json only, and a human applies any of them
+to config.yaml by hand after reading the review. The review_* keys
+remain valid config keys (read by music.py / scheduler.py /
+script.py / trends.py) — they are just no longer written here.
 
 NEVER (this module does not do any of these, by design):
 - Delete videos, change a video's privacy after publishing, change
@@ -199,7 +208,17 @@ def clamp(value, low, high):
 
 
 def apply_adjustments(config_path, shared, top):
-    """Write safe-bounded adjustments into config.yaml, return before/after."""
+    """Compute safe-bounded adjustments from the top performers.
+
+    Returns (before, after, applied) where before/after are the
+    review_* values currently in config.yaml vs the computed new
+    values. This function READS config.yaml only — it never writes
+    it (production-readiness issue 1). The caller writes the
+    computed adjustments to data/review_adjustments.json as
+    recommendations; a human applies any of them to config.yaml
+    by hand. Kept under this name so existing callers/tests keep
+    working; nothing here "applies" anything to the config file.
+    """
     config = load_config(config_path)
     before = {key: config.get(key, "") for key in REVIEW_KEYS}
     after = dict(before)
@@ -229,24 +248,6 @@ def apply_adjustments(config_path, shared, top):
     if hours:
         shift = int(clamp(round((statistics.median(hours) - 18) * 60), -60, 60))
         after["review_peak_shift_minutes"] = shift
-    else:
-        shift = 0
-    # Rewrite config.yaml: replace existing review_* lines, append the rest.
-    with open(config_path, encoding="utf-8") as fh:
-        lines = fh.readlines()
-    kept = [ln for ln in lines
-            if not any(ln.startswith(key + ":") for key in REVIEW_KEYS)]
-    if kept and not kept[-1].endswith("\n"):
-        kept[-1] += "\n"
-    kept.append("\n# --- Auto-review adjustments (written by src/review.py) ---\n")
-    kept.append("# Reversible: see data/review_history.json before/after values.\n")
-    for key in REVIEW_KEYS:
-        value = after[key]
-        if value == "" or value is None:
-            continue
-        kept.append(f"{key}: {value}\n")
-    with open(config_path, "w", encoding="utf-8") as fh:
-        fh.writelines(kept)
     applied = [f"{k}: {before[k]!r} -> {after[k]!r}"
                for k in REVIEW_KEYS if before[k] != after[k]]
     return before, after, applied
@@ -259,6 +260,9 @@ def main(argv=None):
     parser.add_argument("--output", default="data/weekly_review.md")
     parser.add_argument("--json-output", default="data/weekly_review.json")
     parser.add_argument("--history", default="data/review_history.json")
+    parser.add_argument("--adjustments", default="data/review_adjustments.json",
+                        help="Computed adjustments, as recommendations only. "
+                             "config.yaml is never written by this module.")
     args = parser.parse_args(argv)
 
     videos = load_youtube_stats() or load_manual_stats(args.stats)
@@ -284,6 +288,17 @@ def main(argv=None):
 
     before, after, applied = (({}, {}, [])
                               if not scored else apply_adjustments(args.config, shared, top))
+    # Adjustments are recommendations only: written to a data/ file,
+    # never to config.yaml. A human applies any of them by hand.
+    os.makedirs(os.path.dirname(args.adjustments) or ".", exist_ok=True)
+    with open(args.adjustments, "w", encoding="utf-8") as fh:
+        json.dump({"generated_at": datetime.now(timezone.utc).isoformat(),
+                   "before": before, "after": after,
+                   "adjustments": applied,
+                   "note": "Recommendations only — config.yaml was NOT "
+                           "modified. Apply any adjustment to config.yaml "
+                           "by hand after reviewing it."},
+                  fh, indent=2)
     report = {
         "generated_at": datetime.now(timezone.utc).isoformat(),
         "videos_considered": len(pool),
@@ -329,11 +344,12 @@ def main(argv=None):
         for title in report["no_data"]:
             lines.append(f"- {title}")
     lines.append("")
-    lines.append("## Auto-corrections applied (safe bounds only)")
+    lines.append("## Adjustments computed (recommendations only — NOT written to config.yaml)")
     for item in applied:
         lines.append(f"- {item}")
     if not applied:
         lines.append("- None (no scored data, or top traits already matched config).")
+    lines.append("- To apply one, edit config.yaml by hand; see data/review_adjustments.json.")
     lines.append("")
     lines.append("## Recommendations for you (NOT auto-applied)")
     for rec in recommendations:
@@ -356,7 +372,7 @@ def main(argv=None):
     with open(args.history, "w", encoding="utf-8") as fh:
         json.dump(history, fh, indent=2)
     print(f"Weekly review -> {args.output} ({len(scored)} scored, "
-          f"{len(applied)} adjustments applied)")
+          f"{len(applied)} adjustments computed, none written to config.yaml)")
     return 0
 
 

@@ -62,10 +62,11 @@ DEFAULTS = {
 }
 
 # Keys that are NOT in DEFAULTS but are legitimate in config.yaml:
-# src/review.py writes these review_* adjustments into config.yaml and
-# src/music.py / src/scheduler.py / src/script.py read them back.
-# They are whitelisted here so a post-review config.yaml does not trip
-# the unknown-key warning below.
+# src/review.py used to write these review_* adjustments into
+# config.yaml; since 2026-11-15 it writes them to
+# data/review_adjustments.json instead. The keys remain whitelisted
+# here so an older post-review config.yaml does not trip the
+# unknown-key warning below.
 KNOWN_EXTRA_KEYS = frozenset({
     "review_preferred_niche",
     "review_preferred_hook_style",

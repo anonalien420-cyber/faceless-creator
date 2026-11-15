@@ -1,0 +1,17 @@
+{
+  "audio": "productions/antikythera-short-2026-11-15/final-audio.mp3",
+  "duration_s": 67.626,
+  "method": "0.25s Hann windows, hop 0.125s; suspect = one bin >60% of 300-3000 Hz band energy at >-50 dBFS, sustained >=3 windows",
+  "suspect_windows": 9,
+  "sustained_events": [
+    {
+      "start_t": 53.0,
+      "end_t": 53.375,
+      "windows": 4,
+      "peak_freq_hz": 440.0,
+      "db": -46.5
+    }
+  ],
+  "peak_440hz_bin_db": 31.6,
+  "result": "FAIL (1 sustained pure-tone event(s))"
+}

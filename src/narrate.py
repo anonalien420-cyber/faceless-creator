@@ -42,6 +42,34 @@ try:
 except ImportError:
     from config import load_config
 
+# Sane narration-speed bounds (production-readiness issue 5). Speeds
+# outside this range are a config/CLI mistake, not a creative choice:
+# below 0.5x the narration drags past every format's duration budget,
+# above 2.0x it is unintelligible. Reject loudly, never clamp silently
+# (a silent clamp would ship audio at a speed nobody asked for).
+MIN_SPEED = 0.5
+MAX_SPEED = 2.0
+
+
+def validate_speed(speed):
+    """Return float(speed) if it is a sane narration speed, else raise.
+
+    Raises ValueError for non-numeric, non-finite, or out-of-range
+    values, naming the allowed range.
+    """
+    try:
+        value = float(speed)
+    except (TypeError, ValueError):
+        raise ValueError(
+            "Invalid narration speed {!r}: must be a number between "
+            "{} and {}.".format(speed, MIN_SPEED, MAX_SPEED)) from None
+    import math
+    if not math.isfinite(value) or not MIN_SPEED <= value <= MAX_SPEED:
+        raise ValueError(
+            "Invalid narration speed {}: must be between {} and {} "
+            "(got {}).".format(speed, MIN_SPEED, MAX_SPEED, value))
+    return value
+
 
 def slug(text):
     text = re.sub(r"[^a-z0-9]+", "-", text.lower()).strip("-")
@@ -56,6 +84,7 @@ def humanize_text(text, pause_ms=350, speed=1.0):
     - Plain version uses extra punctuation spacing so even non-SSML
       engines get some pacing instead of a flat monotone stream.
     """
+    validate_speed(speed)
     sentences = re.split(r"(?<=[.!?])\s+", text.strip())
     if not sentences:
         return text, text
@@ -121,6 +150,7 @@ def narrate_kokoro(text, voice, output, speed):
     it looks like a Kokoro voice, otherwise Kokoro's default is used."""
     from kokoro import KPipeline
     import soundfile as sf
+    validate_speed(speed)
     kokoro_voice = voice if re.match(r"^[ab][fm]_", voice or "") else "af_heart"
     # Kokoro's language pipeline must match the voice's accent: British
     # voices (bm_/bf_) use the British pipeline ("b"), American voices
@@ -194,7 +224,12 @@ def main(argv=None):
     config = load_config(args.config)
     voice = args.voice or config.get("narrator_voice", "en-US-ChristopherNeural")
     tier = (args.tier or config.get("narrator_tier", "free") or "free").lower()
-    speed = args.speed or float(config.get("narrator_speed", 1.0) or 1.0)
+    try:
+        speed = validate_speed(
+            args.speed or float(config.get("narrator_speed", 1.0) or 1.0))
+    except ValueError as exc:
+        print(f"ERROR: {exc}", file=sys.stderr)
+        return 1
     pause_ms = args.pause_ms or int(config.get("narrator_pause_ms", 350) or 350)
     with open(args.input, encoding="utf-8") as fh:
         scripts = json.load(fh)

@@ -1,0 +1,254 @@
+[
+  {
+    "topic": "The 2,000-Year-Old Object That Shouldn't Exist",
+    "format": "short",
+    "style": "history_mystery",
+    "hook": "A geared bronze machine that predicted eclipses existed in the ancient world about two thousand years ago.",
+    "shock_hook": {
+      "text": "A geared bronze machine that predicted eclipses existed in the ancient world about two thousand years ago.",
+      "tier": "KNOWN",
+      "source": {
+        "title": "Antikythera mechanism",
+        "url": "https://www.britannica.com/topic/Antikythera-mechanism",
+        "publication": "Encyclopaedia Britannica",
+        "publication_year": 2009,
+        "notes": "Checked 2026-11-15 against the live article (published 2009-02-19, updated 2026-09-17). Confirms: recovered 1901 from a trading ship that sank in the first half of the 1st century BCE near Antikythera; manufacture dated to 100 BCE, give or take 30 years; fragments contain 30 gear wheels; no other geared mechanism of such complexity until medieval cathedral clocks a millennium later; shoebox-sized case; Greek inscriptions indicating the astronomical/calendrical purpose; front dial Sun/Moon in the zodiac and half-silvered Moon-phase ball; back dials Metonic 235 lunations over 19 years, four-year Panhellenic Games dial, Saros 18.2-year eclipse cycle; inscriptions imply a possible planetary display but nearly all the relevant parts are missing. Does NOT mention Stais, the 1902 gear spotting, the 82-fragment count, the 223-tooth gear, or the 2005 X-ray CT work, so it is never the sole source for those claims."
+      }
+    },
+    "sections": [
+      {
+        "title": "The anomaly",
+        "tier": "KNOWN",
+        "text": "A geared bronze machine that predicted eclipses existed in the ancient world about two thousand years ago.",
+        "claim_ids": [
+          "antikythera_01"
+        ],
+        "source_ids": [
+          "src_britannica",
+          "src_nature2006"
+        ]
+      },
+      {
+        "title": "The dive",
+        "tier": "KNOWN",
+        "text": "Sponge divers found the wreck off Antikythera in 1900, recovered the corroded lump in 1901, and its fragments are now held at the National Archaeological Museum in Athens.",
+        "claim_ids": [
+          "antikythera_02"
+        ],
+        "source_ids": [
+          "src_britannica",
+          "src_nature2006",
+          "src_nam"
+        ]
+      },
+      {
+        "title": "The dive",
+        "tier": "KNOWN",
+        "text": "In 1902 a gear was spotted inside the corroded lump, and the museum's Valerios Stais studied it.",
+        "claim_ids": [
+          "antikythera_03"
+        ],
+        "source_ids": [
+          "src_thesea"
+        ]
+      },
+      {
+        "title": "The anomaly revealed",
+        "tier": "KNOWN",
+        "text": "What survives is 82 fragments containing 30 bronze gear wheels.",
+        "claim_ids": [
+          "antikythera_04"
+        ],
+        "source_ids": [
+          "src_nature2006",
+          "src_scirep2021",
+          "src_britannica"
+        ]
+      },
+      {
+        "title": "The anomaly revealed",
+        "tier": "KNOWN",
+        "text": "The mechanism was built around 100 BCE, give or take thirty years.",
+        "claim_ids": [
+          "antikythera_05"
+        ],
+        "source_ids": [
+          "src_britannica",
+          "src_nature2006"
+        ]
+      },
+      {
+        "title": "The forgotten era",
+        "tier": "KNOWN",
+        "text": "Nothing comparably complex appears again for about 1,400 years, until the great clocks of medieval cathedrals.",
+        "claim_ids": [
+          "antikythera_09"
+        ],
+        "source_ids": [
+          "src_britannica",
+          "src_nature2006"
+        ]
+      },
+      {
+        "title": "The forgotten era",
+        "tier": "UNKNOWN",
+        "text": "What remains unknown: No inscription on the mechanism names its builder, and no ancient text describes the workshop that made it or the person who paid for it.",
+        "claim_ids": [
+          "antikythera_10"
+        ],
+        "source_ids": []
+      }
+    ],
+    "chapters": [
+      "The anomaly",
+      "The dive",
+      "The dive",
+      "The anomaly revealed",
+      "The anomaly revealed",
+      "The forgotten era",
+      "The forgotten era"
+    ],
+    "text": "A geared bronze machine that predicted eclipses existed in the ancient world about two thousand years ago. Sponge divers found the wreck off Antikythera in 1900, recovered the corroded lump in 1901, and its fragments are now held at the National Archaeological Museum in Athens. In 1902 a gear was spotted inside the corroded lump, and the museum's Valerios Stais studied it. What survives is 82 fragments containing 30 bronze gear wheels. The mechanism was built around 100 BCE, give or take thirty years. Nothing comparably complex appears again for about 1,400 years, until the great clocks of medieval cathedrals. What remains unknown: No inscription on the mechanism names its builder, and no ancient text describes the workshop that made it or the person who paid for it. The evidence is what we have. The unanswered questions are what remain. What do you think happened? What does the record actually support?",
+    "cta": "The evidence is what we have. The unanswered questions are what remain. What do you think happened? What does the record actually support?",
+    "word_count": 151,
+    "claim_ids": [
+      "antikythera_01",
+      "antikythera_02",
+      "antikythera_03",
+      "antikythera_04",
+      "antikythera_05",
+      "antikythera_09",
+      "antikythera_10"
+    ],
+    "sources": [
+      {
+        "title": "Antikythera mechanism",
+        "url": "https://www.britannica.com/topic/Antikythera-mechanism",
+        "publication": "Encyclopaedia Britannica",
+        "publication_year": 2009,
+        "notes": "Checked 2026-11-15 against the live article (published 2009-02-19, updated 2026-09-17). Confirms: recovered 1901 from a trading ship that sank in the first half of the 1st century BCE near Antikythera; manufacture dated to 100 BCE, give or take 30 years; fragments contain 30 gear wheels; no other geared mechanism of such complexity until medieval cathedral clocks a millennium later; shoebox-sized case; Greek inscriptions indicating the astronomical/calendrical purpose; front dial Sun/Moon in the zodiac and half-silvered Moon-phase ball; back dials Metonic 235 lunations over 19 years, four-year Panhellenic Games dial, Saros 18.2-year eclipse cycle; inscriptions imply a possible planetary display but nearly all the relevant parts are missing. Does NOT mention Stais, the 1902 gear spotting, the 82-fragment count, the 223-tooth gear, or the 2005 X-ray CT work, so it is never the sole source for those claims."
+      },
+      {
+        "title": "Decoding the ancient Greek astronomical calculator known as the Antikythera Mechanism",
+        "url": "https://doi.org/10.1038/nature05357",
+        "publication": "Nature",
+        "publication_year": 2006,
+        "notes": "Freeth et al., Nature 444, 587-591 (2006), published 30 November 2006. Checked 2026-11-15. Confirms: unique Greek geared device constructed around the end of the second century BC; discovered in 1901 in a Roman shipwreck; technically more complex than any known device for at least a millennium afterwards; high-resolution X-ray tomography of the surviving fragments, doubling the number of deciphered inscriptions; mechanism predicted lunar and solar eclipses on the basis of Babylonian arithmetic-progression cycles; 223 is the Saros eclipse cycle; lettering dated to the second half of the second century BC, implying construction 150-100 BC; Figure 1 caption: the 82 fragments that survive in the National Archaeological Museum in Athens; case of uncertain overall size 315 x 190 x 100 mm."
+      },
+      {
+        "title": "Collection of Metalwork",
+        "url": "https://www.namuseum.gr/en/permanent_exhibition/erga-metallotechnias/",
+        "publication": "National Archaeological Museum, Athens - Collection of Metalwork",
+        "publication_year": null,
+        "notes": "The museum's own collection page, checked 2026-11-15. Confirms the Antikythera Mechanism (inventory X15087) is held in the Collection of Metalwork, Room 38, among the finds from the Shipwreck of Antikythera, and calls it the most significant scientific instrument of antiquity. Used here as the archival anchor that the surviving fragments are held at the National Archaeological Museum in Athens. It does not state dates, gear counts, or the 1902 spotting, so it is never the sole source for those claims."
+      },
+      {
+        "title": "Antikythera Mechanism Discovery: How It Was Decoded",
+        "url": "https://thesea.org/antikythera-mechanism-one-amazing-discovery/",
+        "publication": "The Sea",
+        "publication_year": null,
+        "notes": "Secondary explainer, checked 2026-11-15. Used ONLY for the two facts none of the four description sources state: (1) on 17 May 1902 the museum's director, archaeologist Valerios Stais, saw a gearwheel embedded in a broken piece of the corroded lump; (2) the wooden case is estimated at about 34 by 18 by 9 centimetres, roughly the size of a large shoebox. It is a secondary source, so the claims it supports are flagged as single-secondary-source KNOWN claims and carry this note rather than a stronger citation."
+      },
+      {
+        "title": "A Model of the Cosmos in the ancient Greek Antikythera Mechanism",
+        "url": "https://doi.org/10.1038/s41598-021-84310-w",
+        "publication": "Scientific Reports",
+        "publication_year": 2021,
+        "notes": "Freeth et al., Scientific Reports 11, 5821 (2021), published 12 March 2021, UCL Antikythera Research Team. Checked 2026-11-15. Confirms: mechanism challenged researchers since its discovery in 1901; now split into 82 fragments, only a third of the original survives, including 30 corroded bronze gearwheels; Microfocus X-ray Computed Tomography (X-ray CT) in 2005 of the 82 fragments; the front remained deeply controversial due to loss of physical evidence; the paper builds a new model of a cosmos display (nine concentric rings: Moon, Nodes, Mercury, Venus, Sun, Mars, Jupiter, Saturn, Date) that matches the surviving evidence. It is a model, not a recovered object, which is why the cosmos-display claim is tiered DEBATED."
+      }
+    ],
+    "evidence_ledger_version": 1,
+    "scenes": [
+      {
+        "scene": 1,
+        "claim_ids": [
+          "antikythera_01"
+        ],
+        "source_ids": [
+          "src_britannica",
+          "src_nature2006"
+        ],
+        "visual_type": "AI reconstruction: interpretive reconstruction, NOT historical footage",
+        "image_prompt": "Historically grounded interpretive reconstruction, clearly illustrative and not archival. Period: c. 100 BCE, Hellenistic Greece. Location: Antikythera, Greece. Clothing: do not invent clothing details; use neutral silhouettes. Architecture: show only documented architectural features. Objects: corroded bronze gearwork, wooden case. Lighting: restrained documentary chiaroscuro, physically plausible natural light. Atmosphere: serious, mysterious, evidence-led. Avoid invented insignia, text, symbols, anachronisms, fantasy elements, or presenting this image as an authentic photograph.",
+        "animation_prompt": "Slow documentary camera push-in with subtle parallax and restrained environmental motion. Preserve the depicted period details. Do not add new objects, people, events, or actions not established by the cited claim. Maintain the label 'AI reconstruction' in production metadata."
+      },
+      {
+        "scene": 2,
+        "claim_ids": [
+          "antikythera_02"
+        ],
+        "source_ids": [
+          "src_britannica",
+          "src_nature2006",
+          "src_nam"
+        ],
+        "visual_type": "AI reconstruction: interpretive reconstruction, NOT historical footage",
+        "image_prompt": "Historically grounded interpretive reconstruction, clearly illustrative and not archival. Period: 1900-1901. Location: Off Antikythera, Greece; National Archaeological Museum, Athens. Clothing: do not invent clothing details; use neutral silhouettes. Architecture: show only documented architectural features. Objects: sponge divers, Roman-era merchant ship, corroded bronze lump. Lighting: restrained documentary chiaroscuro, physically plausible natural light. Atmosphere: serious, mysterious, evidence-led. Avoid invented insignia, text, symbols, anachronisms, fantasy elements, or presenting this image as an authentic photograph.",
+        "animation_prompt": "Slow documentary camera push-in with subtle parallax and restrained environmental motion. Preserve the depicted period details. Do not add new objects, people, events, or actions not established by the cited claim. Maintain the label 'AI reconstruction' in production metadata."
+      },
+      {
+        "scene": 3,
+        "claim_ids": [
+          "antikythera_03"
+        ],
+        "source_ids": [
+          "src_thesea"
+        ],
+        "visual_type": "AI reconstruction: interpretive reconstruction, NOT historical footage",
+        "image_prompt": "Historically grounded interpretive reconstruction, clearly illustrative and not archival. Period: 1902. Location: National Archaeological Museum, Athens. Clothing: do not invent clothing details; use neutral silhouettes. Architecture: show only documented architectural features. Objects: corroded bronze lump with an embedded gear wheel. Lighting: restrained documentary chiaroscuro, physically plausible natural light. Atmosphere: serious, mysterious, evidence-led. Avoid invented insignia, text, symbols, anachronisms, fantasy elements, or presenting this image as an authentic photograph.",
+        "animation_prompt": "Slow documentary camera push-in with subtle parallax and restrained environmental motion. Preserve the depicted period details. Do not add new objects, people, events, or actions not established by the cited claim. Maintain the label 'AI reconstruction' in production metadata."
+      },
+      {
+        "scene": 4,
+        "claim_ids": [
+          "antikythera_04"
+        ],
+        "source_ids": [
+          "src_nature2006",
+          "src_scirep2021",
+          "src_britannica"
+        ],
+        "visual_type": "AI reconstruction: interpretive reconstruction, NOT historical footage",
+        "image_prompt": "Historically grounded interpretive reconstruction, clearly illustrative and not archival. Period: c. 100 BCE, Hellenistic Greece. Location: National Archaeological Museum, Athens. Clothing: do not invent clothing details; use neutral silhouettes. Architecture: show only documented architectural features. Objects: 82 bronze fragments, 30 gear wheels. Lighting: restrained documentary chiaroscuro, physically plausible natural light. Atmosphere: serious, mysterious, evidence-led. Avoid invented insignia, text, symbols, anachronisms, fantasy elements, or presenting this image as an authentic photograph.",
+        "animation_prompt": "Slow documentary camera push-in with subtle parallax and restrained environmental motion. Preserve the depicted period details. Do not add new objects, people, events, or actions not established by the cited claim. Maintain the label 'AI reconstruction' in production metadata."
+      },
+      {
+        "scene": 5,
+        "claim_ids": [
+          "antikythera_05"
+        ],
+        "source_ids": [
+          "src_britannica",
+          "src_nature2006"
+        ],
+        "visual_type": "AI reconstruction: interpretive reconstruction, NOT historical footage",
+        "image_prompt": "Historically grounded interpretive reconstruction, clearly illustrative and not archival. Period: c. 100 BCE. Location: Antikythera, Greece. Clothing: do not invent clothing details; use neutral silhouettes. Architecture: show only documented architectural features. Objects: bronze geared mechanism. Lighting: restrained documentary chiaroscuro, physically plausible natural light. Atmosphere: serious, mysterious, evidence-led. Avoid invented insignia, text, symbols, anachronisms, fantasy elements, or presenting this image as an authentic photograph.",
+        "animation_prompt": "Slow documentary camera push-in with subtle parallax and restrained environmental motion. Preserve the depicted period details. Do not add new objects, people, events, or actions not established by the cited claim. Maintain the label 'AI reconstruction' in production metadata."
+      },
+      {
+        "scene": 6,
+        "claim_ids": [
+          "antikythera_09"
+        ],
+        "source_ids": [
+          "src_britannica",
+          "src_nature2006"
+        ],
+        "visual_type": "AI reconstruction: interpretive reconstruction, NOT historical footage",
+        "image_prompt": "Historically grounded interpretive reconstruction, clearly illustrative and not archival. Period: c. 100 BCE to 14th century. Location: Europe. Clothing: do not invent clothing details; use neutral silhouettes. Architecture: medieval cathedral clocks. Objects: bronze geared mechanism, cathedral clockwork. Lighting: restrained documentary chiaroscuro, physically plausible natural light. Atmosphere: serious, mysterious, evidence-led. Avoid invented insignia, text, symbols, anachronisms, fantasy elements, or presenting this image as an authentic photograph.",
+        "animation_prompt": "Slow documentary camera push-in with subtle parallax and restrained environmental motion. Preserve the depicted period details. Do not add new objects, people, events, or actions not established by the cited claim. Maintain the label 'AI reconstruction' in production metadata."
+      },
+      {
+        "scene": 7,
+        "claim_ids": [
+          "antikythera_10"
+        ],
+        "source_ids": [],
+        "visual_type": "AI reconstruction: interpretive reconstruction, NOT historical footage",
+        "image_prompt": "Historically grounded interpretive reconstruction, clearly illustrative and not archival. Period: c. 100 BCE, Hellenistic Greece. Location: Antikythera, Greece. Clothing: do not invent clothing details; use neutral silhouettes. Architecture: show only documented architectural features. Objects: bronze geared mechanism, Greek inscriptions. Lighting: restrained documentary chiaroscuro, physically plausible natural light. Atmosphere: serious, mysterious, evidence-led. Avoid invented insignia, text, symbols, anachronisms, fantasy elements, or presenting this image as an authentic photograph.",
+        "animation_prompt": "Slow documentary camera push-in with subtle parallax and restrained environmental motion. Preserve the depicted period details. Do not add new objects, people, events, or actions not established by the cited claim. Maintain the label 'AI reconstruction' in production metadata."
+      }
+    ],
+    "visual_disclaimer": "All generated visuals are interpretive AI reconstructions, never authentic historical footage."
+  }
+]

@@ -71,6 +71,27 @@ def _download(base, item, output):
     return output
 
 
+def scene_fingerprint(prompt, workflow_hash, media_type, claim_ids, source_ids):
+    """Fingerprint binding a generated visual to its evidence.
+
+    Includes the scene's claim_ids and source_ids (sorted, so order
+    does not matter) as well as the prompt, workflow hash and media
+    type. Without the IDs, a visual generated for one set of claims
+    would cache-hit for a different set of claims with the same
+    prompt and silently attach to the wrong evidence; visual_qa
+    would catch the mismatch loudly, but the fingerprint must not
+    let it happen in the first place.
+    """
+    material = "\n".join([
+        prompt,
+        workflow_hash,
+        media_type,
+        ",".join(sorted(str(c) for c in (claim_ids or []))),
+        ",".join(sorted(str(s) for s in (source_ids or []))),
+    ])
+    return hashlib.sha256(material.encode("utf-8")).hexdigest()
+
+
 def generate_scene(scene, workflow, base_url, outdir, media_type="image",
                    timeout=600, poll_interval=2):
     if media_type not in ("image", "video"):
@@ -143,7 +164,9 @@ def generate_script_assets(script, workflow_path, base_url, outdir,
     manifest = []
     for scene in script.get("scenes", []):
         prompt = scene.get("image_prompt" if media_type == "image" else "animation_prompt", "")
-        fingerprint = hashlib.sha256((prompt + workflow_hash + media_type).encode("utf-8")).hexdigest()
+        fingerprint = scene_fingerprint(
+            prompt, workflow_hash, media_type,
+            scene.get("claim_ids", []), scene.get("source_ids", []))
         cached = previous.get(str(scene.get("scene")))
         if (cached and cached.get("fingerprint") == fingerprint
                 and os.path.exists(cached.get("path", ""))

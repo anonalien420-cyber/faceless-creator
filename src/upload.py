@@ -14,11 +14,27 @@ import sys
 
 
 def plan(video, title, description, privacy, publish_at=None):
-    out = {"video": video, "title": title, "description": description,
-           "privacyStatus": privacy, "categoryId": "27"}
+    # Scheduled publishing is disabled: reject publish_at loudly
+    # instead of silently ignoring it (or scheduling it).
     if publish_at:
-        out["publishAt"] = publish_at
-    return out
+        raise ValueError(
+            "Scheduled publishing is disabled: publish_at={!r} was "
+            "supplied but this pipeline never schedules a publish. "
+            "Upload unlisted and publish manually in YouTube Studio."
+            .format(publish_at))
+    return {"video": video, "title": title, "description": description,
+            "privacyStatus": privacy, "categoryId": "27"}
+
+
+def _save_token(creds, path="token.json"):
+    """Write refreshed OAuth credentials with owner-only permissions.
+
+    A freshly written token.json must be mode 600: the plain open()
+    write used to leave it at umask-default permissions.
+    """
+    with open(path, "w", encoding="utf-8") as fh:
+        fh.write(creds.to_json())
+    os.chmod(path, 0o600)
 
 
 def upload(video, title, description, privacy, publish_at=None, tags=None):
@@ -49,16 +65,9 @@ def upload(video, title, description, privacy, publish_at=None, tags=None):
         else:
             flow = InstalledAppFlow.from_client_secrets_file("client_secrets.json", scopes)
             creds = flow.run_local_server(port=0)
-        with open("token.json", "w", encoding="utf-8") as fh:
-            fh.write(creds.to_json())
+        _save_token(creds)
     youtube = build("youtube", "v3", credentials=creds)
     status = {"privacyStatus": privacy}
-    if publish_at:
-        # Scheduled publishing requires private + publishAt; YouTube
-        # flips it public at publishAt. Never combine publishAt with
-        # an immediate public status — the API rejects that.
-        status["privacyStatus"] = "private"
-        status["publishAt"] = publish_at
     snippet = {"title": title, "description": description, "categoryId": "27"}
     if tags:
         snippet["tags"] = tags

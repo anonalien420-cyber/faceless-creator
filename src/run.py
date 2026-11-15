@@ -65,6 +65,37 @@ def slug(text):
     return re.sub(r"[^a-z0-9]+", "-", text.lower()).strip("-") or "script"
 
 
+def is_history_mystery_niche(niche):
+    """True when the run's niche is the history-mystery channel niche
+    (same predicate src/script.py uses for style auto-detection)."""
+    lowered = (niche or "").lower()
+    return "history" in lowered and "myster" in lowered
+
+
+def script_command(fmt, input_file, output_file, count, niche):
+    """argv for one scripts step of the daily run.
+
+    For a history-mystery run the documentary path is wired in
+    explicitly: ``--style history_mystery --ledger
+    data/evidence_ledger.json``. src/script.py then builds every
+    script through src/documentary.py (evidence-led, reviewed
+    claims only, no generic filler) instead of its generic
+    template builders. For any other niche the flags are omitted
+    and src/script.py keeps its previous behaviour (auto-detect
+    from config); passing ``--style general`` there would make
+    script.py refuse the run, because the locked first niche in
+    config.yaml is history-mystery — that pre-existing
+    auto-detection quirk is out of scope here, so it is left alone.
+    """
+    cmd = [sys.executable, "-m", "src.script", "--input", input_file,
+           "--output", output_file, "--format", fmt,
+           "--count", str(count)]
+    if is_history_mystery_niche(niche):
+        cmd += ["--style", "history_mystery", "--ledger",
+                "data/evidence_ledger.json"]
+    return cmd
+
+
 def choose_niche(config, trends_input):
     """One niche per run: explicit --niche wins, else the top-ranked
     niche that actually has candidates, else the first configured niche.
@@ -433,12 +464,12 @@ def main(argv=None):
             json.dump(long_cands, fh, indent=2)
         with open("data/top5_shorts.json", "w", encoding="utf-8") as fh:
             json.dump(short_cands, fh, indent=2)
-        run_cmd([sys.executable, "-m", "src.script", "--input", "data/top5_long.json",
-                 "--output", "data/scripts_long.json", "--format", "long",
-                 "--count", str(long_count)], "scripts:long", log)
-        run_cmd([sys.executable, "-m", "src.script", "--input", "data/top5_shorts.json",
-                 "--output", "data/scripts_shorts.json", "--format", "short",
-                 "--count", str(short_count)], "scripts:short", log)
+        run_cmd(script_command("long", "data/top5_long.json",
+                               "data/scripts_long.json", long_count, niche),
+                "scripts:long", log)
+        run_cmd(script_command("short", "data/top5_shorts.json",
+                               "data/scripts_shorts.json", short_count, niche),
+                "scripts:short", log)
         for fmt, scripts_file in (("long", "data/scripts_long.json"),
                                   ("short", "data/scripts_shorts.json")):
             outputs, qa_reports = build_format(log, fmt, scripts_file,

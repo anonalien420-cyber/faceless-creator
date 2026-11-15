@@ -204,7 +204,7 @@ def make_ass(script_text, duration, path, width=1080, height=1920, fontsize=72):
              "Alignment, MarginL, MarginR, MarginV, BorderStyle, Outline",
              f"Style: Default,DejaVu Sans,{fontsize},&H00FFFFFF,&H80000000,-1,2,60,60,400,1,5",
              "", "[Events]",
-             "Format: Layer, Start, End, Style, Text"]
+             "Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text"]
     for i, text in enumerate(chunks):
         start, end = i * per, (i + 1) * per
 
@@ -217,6 +217,29 @@ def make_ass(script_text, duration, path, width=1080, height=1920, fontsize=72):
     with open(path, "w", encoding="utf-8") as fh:
         fh.write("\n".join(lines))
     return path
+
+
+def _fit_fontsize(text, max_width, start_size, font_name="DejaVuSans-Bold.ttf"):
+    """Largest fontsize <= start_size whose rendered width fits max_width.
+
+    Found 2026-11-15 on the first real Antikythera run: the title card
+    drew the 45-character topic at 72pt, wider than the 1080px frame,
+    so the title was cut off at both edges in the first 3 seconds.
+    Measured with Pillow when available (Bold metrics are wider than
+    the regular face drawtext uses, so the fit is conservative);
+    otherwise falls back to a ~0.62em average-glyph-width estimate.
+    """
+    try:
+        from PIL import ImageFont
+        size = start_size
+        while size > 8:
+            if ImageFont.truetype(font_name, size).getlength(text) <= max_width:
+                return size
+            size -= 2
+        return size
+    except Exception:
+        return max(8, min(start_size,
+                          int(max_width / max(1, len(text) * 0.62))))
 
 
 def _write_drawtext_file(directory, name, text):
@@ -275,11 +298,21 @@ def build_video(script, audio_path, output, visuals=None, duration=None,
     interrupt = 25.0 if width > height else 10.0
     import math as _math
     chunk_count = max(1, _math.ceil(duration / interrupt))
-    chunk = duration / chunk_count
+    # xfade overlap fix (found 2026-11-15 on the first real Antikythera
+    # run): joining n segments of `chunk` with (n-1) fades of FADE
+    # produces n*chunk - (n-1)*FADE seconds of video, NOT n*chunk.
+    # With chunk = duration / chunk_count the joined video came out
+    # (n-1)*FADE short (63.03s of narration rendered as a 60.03s
+    # video) and `-shortest` cut the tail of the narration off.
+    # Lengthen each segment so the joined video is exactly `duration`.
+    chunk = ((duration + (chunk_count - 1) * FADE) / chunk_count
+             if chunk_count > 1 else duration)
     # Dynamic text is read from files with expansion disabled.
+    title_text = script["topic"].title()[:60]
+    title_size = _fit_fontsize(title_text, width - 80, fontsize)
     overlay = [
         f"drawbox=x=0:y={height - 50}:w='{width}*t/{duration:.2f}':h=12:color=yellow@0.9:t=fill",
-        f"drawtext=textfile={_drawtext_path(title)}:expansion=none:font=DejaVu Sans:fontsize={fontsize}:fontcolor=white:"
+        f"drawtext=textfile={_drawtext_path(title)}:expansion=none:font=DejaVu Sans:fontsize={title_size}:fontcolor=white:"
         f"borderw=3:bordercolor=black:x=(w-text_w)/2:y=200:enable='lt(t,3)'",
         f"ass={ass_path}",
     ]
