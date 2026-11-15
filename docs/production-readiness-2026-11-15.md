@@ -190,8 +190,10 @@ CI on the new head, independent reviewer, upload-policy approval.
 
 ## 5. Push + CI
 
-(To be filled in by the coordinator after the push: commit SHAs,
-CI run result on the new head.)
+- Push landed 2026-11-15T20:53:00Z in a single commit:
+  **`b3b9764cc3bbe0c9a60c8cff028446e11ade9317`** — "Deep Scan production finish pass (2026-11-15): real Antikythera ledger + claim extraction + pipeline hardening + real Short with QA" (37 files; branch head verified, `data/evidence_ledger.json` blob SHA matches the local file). PR #1 head is now `b3b9764c`, still OPEN + DRAFT. Push route: connector `push-files` (one commit); no workflow files were in the push list, so the `workflows`-permission 403 did not apply.
+- CI on the new head: PASS — run #236 (https://github.com/anonalien420-cyber/faceless-creator/actions/runs/43760546192), workflow "Deep Scan tests" (`.github/workflows/deep-scan-tests.yml`), triggered by the PR synchronize event; the single `tests` job succeeded in 3m 3s with every step green (pip-audit, bandit, compileall, full test suite, FFmpeg smoke tests, synthetic E2E test, credential-file check). Checks: https://github.com/anonalien420-cyber/faceless-creator/pull/1/checks. Only annotations are a non-failing Node.js 20 deprecation warning and an ubuntu-latest migration notice. (Checked 2026-11-15 22:07 UTC.)
+- Local suite is 187/187 OK, which is the same suite CI runs (plus pip-audit, bandit, compileall, the ffmpeg smoke test, and the synthetic E2E test — all of which passed on the previous head 66df04f, run #173).
 
 ## 6. Files changed in this pass (local tree)
 
