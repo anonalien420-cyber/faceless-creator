@@ -9,6 +9,7 @@ import contextlib
 import io
 import json
 import os
+import subprocess
 import sys
 import tempfile
 import types
@@ -55,6 +56,14 @@ class HumanizeTests(unittest.TestCase):
         _, plain = narrate.humanize_text("Hello, world. Goodbye, world.")
         self.assertIn(", ... ", plain)
         self.assertIn(". ... ", plain)
+
+    def test_plain_version_pauses_after_question_and_colon(self):
+        # Closing questions and colon lead-ins need a beat too — the
+        # earlier version only paused after commas and periods.
+        _, plain = narrate.humanize_text(
+            "What do you think happened? What remains unknown: the builder.")
+        self.assertIn("? ... ", plain)
+        self.assertIn(": ... ", plain)
 
     def test_slug(self):
         self.assertEqual(narrate.slug("The Cottingley Fairies!"), "the-cottingley-fairies")
@@ -116,6 +125,12 @@ def _install_kokoro_stubs():
         return out
 
     numpy.concatenate = fake_concatenate
+
+    def fake_zeros(shape, dtype=None):
+        return [0.0] * int(shape)
+
+    numpy.zeros = fake_zeros
+    numpy.float32 = float
     sys.modules["kokoro"] = kokoro
     sys.modules["soundfile"] = soundfile
     sys.modules["numpy"] = numpy
@@ -165,6 +180,134 @@ class KokoroVoiceGateTests(unittest.TestCase):
         FakePipeline.audio_chunks = []
         with self.assertRaises(RuntimeError):
             narrate.narrate_kokoro("Hello world.", "bm_george", self._out(), 0.9)
+
+
+class SentencePausesTests(unittest.TestCase):
+    """sentence_pauses(): targeted beats for Kokoro (hook + closing
+    questions). Only these two beats are lengthened."""
+
+    def test_hook_pause_after_first_sentence(self):
+        pauses = narrate.sentence_pauses(
+            "A geared bronze machine predicted eclipses. Sponge divers "
+            "found the wreck. The evidence is what we have.")
+        self.assertEqual(pauses, {0: 0.3})
+
+    def test_question_pause_between_closing_questions(self):
+        pauses = narrate.sentence_pauses(
+            "The evidence is what we have. What do you think happened? "
+            "What does the record actually support?")
+        self.assertEqual(pauses, {0: 0.3, 1: 0.2})
+
+    def test_single_sentence_gets_no_pause(self):
+        self.assertEqual(narrate.sentence_pauses("Hello world."), {})
+
+    def test_non_question_second_sentence_gets_no_question_pause(self):
+        pauses = narrate.sentence_pauses(
+            "First sentence here. Second sentence follows.")
+        self.assertEqual(pauses, {0: 0.3})
+
+    def test_custom_pause_values(self):
+        pauses = narrate.sentence_pauses(
+            "Hook here. What happened? What next?",
+            hook_pause=0.5, question_pause=0.1)
+        self.assertEqual(pauses, {0: 0.5, 1: 0.1})
+
+
+class KokoroSingleCallTests(unittest.TestCase):
+    """narrate_kokoro makes ONE pipeline call over the whole text (the
+    v1 behaviour). A per-sentence variant was tried 2026-11-16 and
+    reverted: it made Kokoro speak ~20% slower (80.4s vs 63.0s for the
+    same 151 words). Pacing beats are inserted after synthesis instead
+    (see InsertSilenceTests)."""
+
+    def setUp(self):
+        FakePipeline.instances = []
+        FakePipeline.audio_chunks = [[0.1, -0.1, 0.2, 0.0]]
+        self._saved = {name: sys.modules.get(name)
+                       for name in ("kokoro", "soundfile", "numpy")}
+        _install_kokoro_stubs()
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+
+    def tearDown(self):
+        for name, mod in self._saved.items():
+            if mod is None:
+                sys.modules.pop(name, None)
+            else:
+                sys.modules[name] = mod
+
+    def _out(self):
+        return os.path.join(self.tmp.name, "out.wav")
+
+    def test_single_call_with_full_text(self):
+        narrate.narrate_kokoro("Hello world. Goodbye world.", "bm_george",
+                               self._out(), 0.9)
+        pipe = FakePipeline.instances[-1]
+        self.assertEqual(len(pipe.calls), 1)
+        self.assertEqual(pipe.calls[0]["text"], "Hello world. Goodbye world.")
+
+    def test_ellipsis_markers_passed_through_unchanged(self):
+        # The "..." pause markers are inert for Kokoro (probe,
+        # 2026-11-15) and are left in the text, exactly as v1 did.
+        narrate.narrate_kokoro("Hello, ... world. Goodbye world.",
+                               "bm_george", self._out(), 0.9)
+        pipe = FakePipeline.instances[-1]
+        self.assertEqual(pipe.calls[0]["text"],
+                         "Hello, ... world. Goodbye world.")
+
+
+def _read_wav_samples(path):
+    """Decode an audio file to mono float32 samples via ffmpeg."""
+    import numpy as np
+    raw = subprocess.run(
+        ["ffmpeg", "-v", "error", "-i", path, "-ac", "1", "-ar", "24000",
+         "-f", "f32le", "-"],
+        capture_output=True, check=True).stdout
+    return np.frombuffer(raw, dtype=np.float32)
+
+
+class InsertSilenceTests(unittest.TestCase):
+    """insert_silence(): exact silence inserted at measured times."""
+
+    def test_inserts_silence_and_preserves_tail(self):
+        import numpy as np
+        with tempfile.TemporaryDirectory() as tmp:
+            src = os.path.join(tmp, "src.wav")
+            # 2s of constant tone (all 0.5) at 24 kHz.
+            tone = np.full(48000, 0.5, dtype=np.float32)
+            import soundfile as sf
+            sf.write(src, tone, 24000)
+            out = os.path.join(tmp, "out.mp3")
+            new_dur = narrate.insert_silence(src, out, [(1.0, 0.5)])
+            self.assertAlmostEqual(new_dur, 2.5, places=2)
+            samples = _read_wav_samples(out)
+            self.assertAlmostEqual(len(samples) / 24000, 2.5, delta=0.1)
+            # 0-1.0s tone, 1.0-1.5s silence, 1.5-2.5s tone (mp3 is
+            # lossy, so use tolerant thresholds, not exact zeros).
+            self.assertGreater(np.mean(np.abs(samples[2400:21600])), 0.2)
+            self.assertLess(np.max(np.abs(samples[26400:33600])), 0.05)
+            self.assertGreater(np.mean(np.abs(samples[38400:57600])), 0.2)
+
+    def test_multiple_pauses_accumulate(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            src = os.path.join(tmp, "src.wav")
+            write_wav(src, seconds=2.0)
+            out = os.path.join(tmp, "out.mp3")
+            new_dur = narrate.insert_silence(src, out,
+                                             [(0.5, 0.3), (1.5, 0.2)])
+            self.assertAlmostEqual(new_dur, 2.5, places=2)
+
+    def test_empty_pauses_and_non_positive_duration_fail(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            src = os.path.join(tmp, "src.wav")
+            write_wav(src, seconds=1.0)
+            out = os.path.join(tmp, "out.mp3")
+            with self.assertRaises(ValueError):
+                narrate.insert_silence(src, out, [])
+            with self.assertRaises(ValueError):
+                narrate.insert_silence(src, out, [(0.5, 0.0)])
+            with self.assertRaises(ValueError):
+                narrate.insert_silence(src, out, [(0.5, -0.1)])
 
 
 class LocalTierFallbackTests(unittest.TestCase):
