@@ -187,17 +187,208 @@ def resolve_visuals(raw_entries, min_resolution):
     return accepted, rejected
 
 
-def make_ass(script_text, duration, path, width=1080, height=1920, fontsize=72):
-    words = script_text.split()
-    chunks, chunk = [], []
-    for word in words:
-        chunk.append(word)
-        if len(chunk) >= 7:
-            chunks.append(" ".join(chunk))
-            chunk = []
-    if chunk:
-        chunks.append(" ".join(chunk))
-    per = duration / max(len(chunks), 1)
+def _norm_token(word):
+    """Lowercased alphanumeric form of a word for comparison."""
+    return re.sub(r"[^a-z0-9]", "", word.lower())
+
+
+_ONES = {"zero": 0, "one": 1, "two": 2, "three": 3, "four": 4, "five": 5,
+         "six": 6, "seven": 7, "eight": 8, "nine": 9, "ten": 10,
+         "eleven": 11, "twelve": 12, "thirteen": 13, "fourteen": 14,
+         "fifteen": 15, "sixteen": 16, "seventeen": 17, "eighteen": 18,
+         "nineteen": 19}
+_TENS = {"twenty": 20, "thirty": 30, "forty": 40, "fifty": 50,
+         "sixty": 60, "seventy": 70, "eighty": 80, "ninety": 90}
+_SCALES = {"hundred": 100, "thousand": 1000, "million": 1000000}
+
+
+def _number_value(word):
+    """Numeric value of a number word or a digit token, else None.
+
+    Used to align script words with ASR tokens: the script says
+    "two thousand" where the transcript hears the digits "2,000".
+    """
+    norm = _norm_token(word)
+    if norm.isdigit():
+        return int(norm)
+    if norm in _ONES:
+        return _ONES[norm]
+    if norm in _TENS:
+        return _TENS[norm]
+    if norm in _SCALES:
+        return _SCALES[norm]
+    return None
+
+
+def _canonical_tokens(words):
+    """Collapse a word list into canonical tokens for alignment.
+
+    Consecutive number words ("two", "thousand") collapse into one
+    integer token (2000); every other word becomes its normalized
+    string. Returns (tokens, spans) where spans[i] is the list of
+    original word indices covered by tokens[i].
+    """
+    tokens, spans = [], []
+    i = 0
+    while i < len(words):
+        value = _number_value(words[i])
+        if value is not None:
+            # Accumulate a number phrase: "two thousand" -> 2000,
+            # "one hundred" -> 100. Standard small-number algorithm.
+            total, current = 0, 0
+            start = i
+            while i < len(words):
+                value = _number_value(words[i])
+                if value is None:
+                    break
+                if value in (100, 1000, 1000000):
+                    current = (current or 1) * value
+                    if value >= 1000:
+                        total += current
+                        current = 0
+                else:
+                    current += value
+                i += 1
+            tokens.append(total + current)
+            spans.append(list(range(start, i)))
+        else:
+            tokens.append(_norm_token(words[i]))
+            spans.append([i])
+            i += 1
+    return tokens, spans
+
+
+def align_script_to_timings(script_words, timed):
+    """Assign a (start, end) to every script word from ASR word timings.
+
+    `timed` is a list of (start, end, word) triples from a transcription
+    of the actual spoken narration. The script words are the correct
+    written forms; the timings are the spoken reality. Alignment is by
+    difflib on canonical tokens (numbers collapse, so "two thousand"
+    aligns with "2,000"), and mismatched blocks (e.g. a name the ASR
+    misheard) share the block's timed span evenly. Returns a list of
+    (start, end, script_word) triples in script order.
+    """
+    import difflib
+    if not script_words or not timed:
+        return []
+    script_tokens, script_spans = _canonical_tokens(script_words)
+    timed_words = [w for _, _, w in timed]
+    timed_tokens, timed_spans = _canonical_tokens(timed_words)
+    # Timed tokens are already merged digit groups ("2,000" -> 2000);
+    # _canonical_tokens handles them because _number_value reads digits.
+    matcher = difflib.SequenceMatcher(a=script_tokens, b=timed_tokens,
+                                      autojunk=False)
+    result = [None] * len(script_words)
+
+    def timed_span(first, last):
+        """(start, end) covering timed canonical tokens first..last."""
+        if first > last:
+            return None
+        start = timed[timed_spans[first][0]][0]
+        end = timed[timed_spans[last][-1]][1]
+        return (start, end)
+
+    def fill(script_lo, script_hi, span):
+        """Split `span` evenly across script words script_lo..script_hi."""
+        if span is None:
+            return
+        start, end = span
+        count = script_hi - script_lo
+        if count <= 0:
+            return
+        per = (end - start) / count
+        for k in range(count):
+            result[script_lo + k] = (start + k * per, start + (k + 1) * per)
+
+    last_end = 0.0
+    for tag, i1, i2, j1, j2 in matcher.get_opcodes():
+        if tag == "equal":
+            for a, b in zip(range(i1, i2), range(j1, j2)):
+                span = timed_span(b, b)
+                fill(script_spans[a][0],
+                     script_spans[a][-1] + 1, span)
+                last_end = span[1]
+        elif tag == "replace":
+            span = timed_span(j1, j2 - 1)
+            words_lo = script_spans[i1][0]
+            words_hi = script_spans[i2 - 1][-1] + 1
+            fill(words_lo, words_hi, span)
+            if span:
+                last_end = span[1]
+        elif tag == "delete":
+            # Script words the ASR did not emit: give them the gap
+            # between the neighbouring timed tokens.
+            words_lo = script_spans[i1][0]
+            words_hi = script_spans[i2 - 1][-1] + 1
+            next_start = (timed[timed_spans[j1][0]][0]
+                          if j1 < len(timed_spans) else last_end + 0.3)
+            fill(words_lo, words_hi, (last_end, next_start))
+        # "insert": extra ASR tokens with no script word — ignore them.
+    # Any word still unassigned (should not happen) gets the last end.
+    for idx, entry in enumerate(result):
+        if entry is None:
+            result[idx] = (last_end, last_end + 0.2)
+    return [(result[i][0], result[i][1], script_words[i])
+            for i in range(len(script_words))]
+
+
+def make_ass(script_text, duration, path, width=1080, height=1920, fontsize=72,
+             word_timings=None, extra_captions=None):
+    """Write an .ass subtitle file.
+
+    Without word_timings (legacy callers): uniform 7-word chunks
+    evenly spaced over `duration`, as before.
+    With word_timings — a list of (start, end, word) from a
+    transcription of the actual spoken narration — captions follow the
+    spoken words under the kinetic typography preset: at most 3 words
+    per frame, UPPERCASE, DejaVu Sans Bold (the Montserrat-Black
+    mapping). The caption TEXT always comes from the script (correct
+    written forms); only the TIMING comes from the transcription.
+    `extra_captions` is a list of (start, end, text) appended after
+    the body captions (e.g. the subscribe close, rendered as a
+    separate clip after the body).
+    """
+    if word_timings:
+        aligned = align_script_to_timings(script_text.split(), word_timings)
+        chunks = []
+        frame = []
+        for start, end, word in aligned:
+            frame.append((start, end, word))
+            if len(frame) >= 3:
+                chunks.append(frame)
+                frame = []
+        if frame:
+            chunks.append(frame)
+        timed_chunks = []
+        for frame in chunks:
+            start = max(0.0, frame[0][0] - 0.03)
+            end = frame[-1][1] + 0.05
+            text = " ".join(w for _, _, w in frame).upper()
+            timed_chunks.append((start, end, text))
+        # Clamp overlaps: a frame must end before the next one starts.
+        for i in range(len(timed_chunks) - 1):
+            start, end, text = timed_chunks[i]
+            next_start = timed_chunks[i + 1][0]
+            if end > next_start - 0.01:
+                timed_chunks[i] = (start, next_start - 0.01, text)
+        chunks = [(s, e, t) for (s, e, t) in timed_chunks]
+    else:
+        words = script_text.split()
+        raw, chunk = [], []
+        for word in words:
+            chunk.append(word)
+            if len(chunk) >= 7:
+                raw.append(" ".join(chunk))
+                chunk = []
+        if chunk:
+            raw.append(" ".join(chunk))
+        per = duration / max(len(raw), 1)
+        chunks = [(i * per, (i + 1) * per, text)
+                  for i, text in enumerate(raw)]
+    if extra_captions:
+        chunks.extend((float(s), float(e), str(t))
+                      for (s, e, t) in extra_captions)
     lines = ["[Script Info]", "ScriptType: v4.00+", f"PlayResX: {width}", f"PlayResY: {height}",
              "", "[V4+ Styles]",
              "Format: Name, Fontname, Fontsize, PrimaryColour, BackColour, Bold, "
@@ -205,9 +396,7 @@ def make_ass(script_text, duration, path, width=1080, height=1920, fontsize=72):
              f"Style: Default,DejaVu Sans,{fontsize},&H00FFFFFF,&H80000000,-1,2,60,60,400,1,5",
              "", "[Events]",
              "Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text"]
-    for i, text in enumerate(chunks):
-        start, end = i * per, (i + 1) * per
-
+    for start, end, text in chunks:
         def fmt(t):
             h, rem = divmod(int(t), 3600)
             m, s = divmod(rem, 60)
@@ -263,11 +452,18 @@ def _fill_filter(width, height):
 
 def build_video(script, audio_path, output, visuals=None, duration=None,
                 bitrate="10M", min_resolution=1080, width=1080, height=1920,
-                end_card_text="Subscribe for the next one"):
+                end_card_text="Subscribe for the next one",
+                word_timings=None):
     """Render one video. Shorts default 1080x1920; long-form 1920x1080.
 
     `script` is a dict with text/topic/hook (see script.py). Captions are
     written to output + ".ass" (QA also checks that path).
+
+    `word_timings` (optional): a list of (start, end, word) triples from
+    a transcription of the ACTUAL narration audio. When given, captions
+    follow the spoken words (see align_script_to_timings); when omitted
+    the legacy uniform chunking is used, so existing callers are
+    unaffected.
 
     Retention pacing (see README "Retention editing"):
     - First 3 seconds: title card + hook line on screen immediately,
@@ -287,7 +483,7 @@ def build_video(script, audio_path, output, visuals=None, duration=None,
     ass_path = output + ".ass"
     fontsize = 72 if height > width else 54
     make_ass(script["text"], duration, ass_path, width=width, height=height,
-             fontsize=fontsize)
+             fontsize=fontsize, word_timings=word_timings)
     drawtext_dir = tempfile.mkdtemp(prefix="deep_scan_drawtext_")
     title = _write_drawtext_file(drawtext_dir, "title", script["topic"].title()[:60])
     hook_text = (script.get("hook", "") or "").split(". ")[0][:80]
@@ -421,6 +617,11 @@ def main(argv=None):
                         help="short = 1080x1920 vertical; long = 1920x1080 16:9.")
     parser.add_argument("--end-card-text", default="Subscribe for the next one",
                         help="End-card CTA shown in the last 3 seconds (Shorts funnel: 'Watch the full video today').")
+    parser.add_argument("--word-timings", default="",
+                        help="JSON file of [start, end, word] triples from a "
+                        "transcription of the narration audio; captions are "
+                        "timed to the spoken words instead of uniform "
+                        "chunking. Applies to every script in --input.")
     parser.add_argument("--fetch-stock", action="store_true",
                         help="Fetch HD stock video clips (needs PEXELS_API_KEY or PIXABAY_API_KEY).")
     args = parser.parse_args(argv)
@@ -451,6 +652,11 @@ def main(argv=None):
     if not visuals:
         # Config order: stock video URLs first, then stock images.
         visuals = list(config.get("stock_video_urls") or []) + list(config.get("stock_image_urls") or [])
+    word_timings = None
+    if args.word_timings:
+        with open(args.word_timings, encoding="utf-8") as fh:
+            word_timings = [(float(s), float(e), str(w))
+                            for s, e, w in json.load(fh)]
     for script in scripts:
         slug = re.sub(r"[^a-z0-9]+", "-", script["topic"].lower()).strip("-") or "script"
         audio = os.path.join(args.audio_dir, f"{script['rank']:02d}-{slug}.mp3")
@@ -461,7 +667,8 @@ def main(argv=None):
         build_video(script, audio, output, visuals=selected_visuals or None,
                     bitrate=bitrate, min_resolution=min_resolution,
                     width=width, height=height,
-                    end_card_text=args.end_card_text)
+                    end_card_text=args.end_card_text,
+                    word_timings=word_timings)
     return 0
 
 
