@@ -198,6 +198,179 @@ def mix_command(narration, music_path, output, music_volume):
             "-c:a", "libmp3lame", output]
 
 
+# --- Loudness master (-14 LUFS / -1 dBTP) ---------------------------------
+# Why this exists (2026-11-16): the finished v2 Short measured
+# -26.35 LUFS / -9.62 dBTP — about 12 LUFS below the channel target —
+# because the mix used plain amix with no normalization and the video
+# mux used bare `-c:a aac`. QA only checked mean/max volume, never
+# integrated loudness or true peak on the finished file, so the quiet
+# video passed 21/21.
+#
+# Why gain + limiter, not loudnorm's linear mode: this material has a
+# ~17 dB crest factor (integrated -26.35 LUFS vs true peak -9.62
+# dBTP). loudnorm linear mode can only apply one constant gain, so it
+# must choose between the LUFS target and the TP cap — it cannot hit
+# both. A loudnorm-measured gain to the LUFS target plus a lookahead
+# limiter on the transient peaks can: the limiter shaves only the
+# peaks, leaving the integrated loudness on target.
+#
+# AAC overshoot: the editing-engine previews measured -1.38 dBTP on
+# the mix but +2.85 dBTP on the muxed MP4, so the limiter is capped
+# 2 dB below the target (mix TP -3 dBTP) AND the muxed file itself is
+# re-measured — the loop below lowers the limiter further if the
+# encoded output still overshoots. The gate in src/qa.py measures the
+# finished MP4 the same way, so a file that passes here passes there.
+# Self-contained in the production path: no dependency on the
+# uncommitted src/sound_design.py engine work.
+
+TARGET_LUFS = -14.0
+TARGET_TP_DB = -1.0
+LUFS_TOLERANCE = 1.0
+# Pre-encode true-peak headroom: the limiter caps sample peaks this
+# far below the target TP, absorbing AAC encoding overshoot.
+MIX_TP_HEADROOM_DB = 2.0
+_LIMITER_ATTACK_MS = 5
+_LIMITER_RELEASE_MS = 50
+# Accept a normalized file when it sits inside the QA gate with
+# margin (gate allows LUFS +/-1.0 and TP <= -1.0).
+_ACCEPT_LUFS_MARGIN = 0.5
+_ACCEPT_TP_MARGIN = 0.2
+
+
+def measure_loudness(path):
+    """EBU R128 measurement of a finished file via ffmpeg loudnorm.
+
+    Returns {"input_i", "input_tp", "input_lra", "input_thresh"} as
+    floats (integrated LUFS, true peak dBTP, loudness range, gating
+    threshold). Raises RuntimeError if ffmpeg cannot measure the file
+    — a measurement failure must never read as "quiet" or "loud".
+    """
+    if not os.path.exists(path):
+        raise FileNotFoundError(path)
+    result = subprocess.run(
+        ["ffmpeg", "-v", "info", "-i", path, "-af",
+         "loudnorm=I=-14:TP=-1:LRA=11:print_format=json",
+         "-f", "null", "-"],
+        capture_output=True, text=True, timeout=300)
+    text = result.stderr or ""
+    start = text.find("{")
+    end = text.rfind("}")
+    if start < 0 or end <= start:
+        raise RuntimeError(f"loudnorm produced no JSON for {path}")
+    data = json.loads(text[start:end + 1])
+    return {"input_i": float(data["input_i"]),
+            "input_tp": float(data["input_tp"]),
+            "input_lra": float(data["input_lra"]),
+            "input_thresh": float(data["input_thresh"])}
+
+
+def loudness_ok(measured, target_lufs=TARGET_LUFS, target_tp_db=TARGET_TP_DB,
+                tolerance=LUFS_TOLERANCE):
+    """True only if integrated loudness is on target (within tolerance)
+    and true peak is at or under the cap. Returns (ok, detail)."""
+    lufs = measured["input_i"]
+    tp = measured["input_tp"]
+    ok = abs(lufs - target_lufs) <= tolerance and tp <= target_tp_db
+    detail = (f"integrated {lufs:.2f} LUFS "
+              f"(target {target_lufs:.0f} +/-{tolerance:.0f}), "
+              f"true peak {tp:.2f} dBTP (max {target_tp_db:.0f})")
+    return ok, detail
+
+
+def _has_video_stream(path):
+    result = subprocess.run(
+        ["ffprobe", "-v", "quiet", "-print_format", "json",
+         "-show_streams", path],
+        capture_output=True, text=True, timeout=60)
+    if result.returncode != 0:
+        raise RuntimeError(f"ffprobe could not read {path}")
+    info = json.loads(result.stdout or "{}")
+    return any(s.get("codec_type") == "video"
+               for s in info.get("streams", []))
+
+
+def normalize_loudness(input_path, output_path, target_lufs=TARGET_LUFS,
+                       target_tp_db=TARGET_TP_DB,
+                       headroom_db=MIX_TP_HEADROOM_DB, max_attempts=3):
+    """Normalize finished audio to the channel loudness master.
+
+    Two-stage, self-verifying: (1) a loudnorm-measured gain lifts the
+    mix to the LUFS target; (2) a lookahead limiter caps sample peaks
+    at (target TP - headroom) dBFS so AAC encoding overshoot cannot
+    push the muxed true peak over the cap. The ENCODED output file is
+    re-measured each attempt; if it is still out of spec the gain is
+    corrected by the LUFS shortfall and/or the limiter is lowered, and
+    the pass repeats from the original input.
+
+    For an MP4 input the video stream is copied untouched — only the
+    audio is re-encoded (AAC 192k, faststart). For an audio-only input
+    the output codec follows the output extension (.mp3/.wav, else
+    AAC). Raises RuntimeError if it cannot converge within
+    max_attempts. Returns a report dict with the input/output
+    measurements and every attempt.
+    """
+    if not os.path.exists(input_path):
+        raise FileNotFoundError(input_path)
+    if not shutil.which("ffmpeg"):
+        raise RuntimeError("ffmpeg is required for loudness normalization")
+    measured_in = measure_loudness(input_path)
+    has_video = _has_video_stream(input_path)
+    gain_correction = 0.0
+    limiter_db = target_tp_db - headroom_db
+    attempts = []
+    for attempt in range(1, max_attempts + 1):
+        gain_db = target_lufs - measured_in["input_i"] + gain_correction
+        limit_linear = 10 ** (limiter_db / 20.0)
+        filt = (f"volume={gain_db:.2f}dB,"
+                f"alimiter=limit={limit_linear:.4f}:level=false:"
+                f"attack={_LIMITER_ATTACK_MS}:release={_LIMITER_RELEASE_MS}")
+        cmd = ["ffmpeg", "-y", "-v", "error", "-i", input_path,
+               "-af", filt]
+        if has_video:
+            cmd += ["-map", "0:v", "-c:v", "copy", "-map", "0:a",
+                    "-c:a", "aac", "-b:a", "192k",
+                    "-movflags", "+faststart"]
+        elif output_path.lower().endswith(".mp3"):
+            cmd += ["-c:a", "libmp3lame", "-b:a", "192k"]
+        elif output_path.lower().endswith(".wav"):
+            cmd += ["-c:a", "pcm_s16le"]
+        else:
+            cmd += ["-c:a", "aac", "-b:a", "192k"]
+        cmd.append(output_path)
+        result = subprocess.run(cmd, capture_output=True, text=True,
+                                timeout=600)
+        if result.returncode != 0:
+            raise RuntimeError(
+                "loudness normalize pass failed: "
+                f"{(result.stderr or '')[-500:]}")
+        measured_out = measure_loudness(output_path)
+        attempts.append({"attempt": attempt,
+                         "gain_db": round(gain_db, 2),
+                         "limiter_db": round(limiter_db, 2),
+                         "input_i": measured_out["input_i"],
+                         "input_tp": measured_out["input_tp"]})
+        lufs_ok = abs(measured_out["input_i"] - target_lufs) <= _ACCEPT_LUFS_MARGIN
+        tp_ok = measured_out["input_tp"] <= target_tp_db - _ACCEPT_TP_MARGIN
+        if lufs_ok and tp_ok:
+            return {"input": input_path, "output": output_path,
+                    "input_measured": measured_in,
+                    "output_measured": measured_out,
+                    "attempts": attempts,
+                    "target_lufs": target_lufs,
+                    "target_tp_db": target_tp_db}
+        # Next attempt: lift the gain by the LUFS shortfall (the
+        # limiter eats part of it) and lower the limiter if the muxed
+        # true peak still overshoots the cap.
+        gain_correction += target_lufs - measured_out["input_i"]
+        if measured_out["input_tp"] > target_tp_db - _ACCEPT_TP_MARGIN:
+            limiter_db -= (measured_out["input_tp"]
+                           - (target_tp_db - _ACCEPT_TP_MARGIN)) + 0.5
+    raise RuntimeError(
+        "loudness normalization did not converge in "
+        f"{max_attempts} attempts (last: {attempts[-1]}); "
+        f"input measured {measured_in}")
+
+
 def append_run_log(step, detail):
     try:
         path = "data/run_log.json"

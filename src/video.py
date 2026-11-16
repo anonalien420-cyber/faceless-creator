@@ -450,10 +450,41 @@ def _fill_filter(width, height):
             f"crop={width}:{height},fps=30,format=yuv420p")
 
 
+def _normalize_rendered_audio(output):
+    """Loudness-normalize a rendered MP4 in place (fail-soft).
+
+    The video stream is copied untouched; only the audio is
+    re-encoded to the -14 LUFS / -1 dBTP master (see src/music.py).
+    A failure here must never break the render itself — the QA
+    loudness gate is the fail-loud layer that refuses a quiet video.
+    """
+    try:
+        from src.music import normalize_loudness
+    except ImportError:
+        from music import normalize_loudness
+    if not os.path.exists(output):
+        return  # mocked / failed render left no file; nothing to normalize
+    tmp = output + ".loudnorm.mp4"
+    try:
+        report = normalize_loudness(output, tmp)
+        os.replace(tmp, output)
+        out = report["output_measured"]
+        print(f"Loudness normalized -> {output} "
+              f"({out['input_i']:.2f} LUFS, {out['input_tp']:.2f} dBTP)")
+    except Exception as exc:
+        if os.path.exists(tmp):
+            try:
+                os.remove(tmp)
+            except OSError:
+                pass
+        print(f"WARNING: loudness normalization failed ({exc}); "
+              f"keeping un-normalized render {output}", file=sys.stderr)
+
+
 def build_video(script, audio_path, output, visuals=None, duration=None,
                 bitrate="10M", min_resolution=1080, width=1080, height=1920,
                 end_card_text="Subscribe for the next one",
-                word_timings=None):
+                word_timings=None, normalize_loudness=True):
     """Render one video. Shorts default 1080x1920; long-form 1920x1080.
 
     `script` is a dict with text/topic/hook (see script.py). Captions are
@@ -464,6 +495,13 @@ def build_video(script, audio_path, output, visuals=None, duration=None,
     follow the spoken words (see align_script_to_timings); when omitted
     the legacy uniform chunking is used, so existing callers are
     unaffected.
+
+    `normalize_loudness` (default True): after rendering, normalize
+    the finished MP4's audio to -14 LUFS / -1 dBTP (video stream
+    copied untouched). Fail-soft — a normalization failure only warns
+    and the un-normalized render is kept; the QA loudness gate is
+    what refuses a quiet video. Pass False only for tests that need
+    the raw render.
 
     Retention pacing (see README "Retention editing"):
     - First 3 seconds: title card + hook line on screen immediately,
@@ -546,6 +584,8 @@ def build_video(script, audio_path, output, visuals=None, duration=None,
             _run_ffmpeg(cmd)
         finally:
             shutil.rmtree(drawtext_dir, ignore_errors=True)
+        if normalize_loudness:
+            _normalize_rendered_audio(output)
         print(f"Video -> {output} ({duration:.1f}s, {width}x{height}, gradient fallback)")
         return output
 
@@ -597,6 +637,8 @@ def build_video(script, audio_path, output, visuals=None, duration=None,
         _run_ffmpeg(cmd)
     finally:
         shutil.rmtree(drawtext_dir, ignore_errors=True)
+    if normalize_loudness:
+        _normalize_rendered_audio(output)
     kinds = ",".join(v["type"] for v in accepted)
     print(f"Video -> {output} ({duration:.1f}s, {width}x{height}, "
           f"{len(accepted)} visual(s) in {n} chunk(s): {kinds}, {bitrate})")

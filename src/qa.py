@@ -10,9 +10,14 @@ Checks (all local, no API):
 7. captions file present and non-empty (<video>.ass next to the MP4)
 8. title card present: the first 3 seconds are not black
 9. audio not clipping badly (max_volume above -0.5 dB)
+10. integrated loudness on the FINISHED MP4 (-14 LUFS +/-1, true peak
+    <= -1 dBTP, measured with ffmpeg loudnorm — mean/max volume alone
+    let the -26 LUFS v2 Short pass, so this gate measures the muxed
+    file itself)
 
 Auto-fixes (logged, one retry only):
-- too quiet audio -> re-mux with a volume gain
+- too quiet / off-target loudness audio -> loudness-normalize to
+  -14 LUFS / -1 dBTP (legacy volume-gain fallback if that fails)
 - clipping audio -> re-mux with a volume cut
 - missing/low-res visual or long black stretch -> re-render with the
   fallback animated gradient (via src.video build_video)
@@ -53,6 +58,11 @@ try:
     from src.video import build_video
 except ImportError:
     from video import build_video
+
+try:
+    from src.music import measure_loudness, loudness_ok, normalize_loudness
+except ImportError:
+    from music import measure_loudness, loudness_ok, normalize_loudness
 
 
 def run_cmd(cmd):
@@ -164,6 +174,18 @@ def check(video, narration=None, tolerance=2.0, scripts=None, script_text="",
         if maximum is not None:
             add("audio_not_clipping", maximum <= -0.5,
                 f"max_volume {maximum} dB (clipping above -0.5 dB)")
+        # Post-mux loudness gate (2026-11-16): the v2 Short measured
+        # mean -25.9 dB and still passed QA because nothing checked
+        # integrated loudness or true peak on the finished file. This
+        # measures the muxed MP4 itself — a quiet file fails here even
+        # when mean/max volume look fine.
+        try:
+            loud = measure_loudness(video)
+            ok, detail = loudness_ok(loud)
+            add("audio_loudness", ok, detail)
+        except Exception as exc:
+            add("audio_loudness", False,
+                f"loudness measurement failed: {exc}")
     black = detect(video, "blackdetect", "pix_th=0.10", 2.0)
     silent = detect(video, "silencedetect", "noise=-40dB", 2.0)
     add("no_long_black_stretches", not black,
@@ -372,15 +394,32 @@ def fix_and_recheck(video, checks, narration=None, script_text="", title="", fmt
     """Attempt one fix per failing check category, then re-run checks."""
     fixes = []
     failed = {c["check"] for c in checks if c["status"] == "fail"}
-    if "audio_not_silent" in failed or "audio_not_clipping" in failed:
-        mean, maximum = volumedetect(video)
-        if maximum is not None and maximum > -0.5:
-            if remux_gain(video, -3.0):
-                fixes.append("audio gain -3 dB (clipping fix)")
-        elif mean is not None and mean <= -45 and mean > -60:
-            gain = min(12.0, -25.0 - mean)
-            if remux_gain(video, gain):
-                fixes.append(f"audio gain +{gain:.1f} dB (too-quiet fix)")
+    if failed & {"audio_loudness", "audio_not_silent", "audio_not_clipping"}:
+        # Proper fix: normalize the finished file to the loudness
+        # master. The crude gain below cannot hit LUFS and TP together
+        # on high-crest-factor material (see src/music.py), so it is
+        # only a fallback when normalization itself fails.
+        normalized = False
+        try:
+            report = normalize_loudness(video, video + ".qa_loudnorm.mp4")
+            os.replace(video + ".qa_loudnorm.mp4", video)
+            out = report["output_measured"]
+            fixes.append(f"audio loudness normalized to "
+                         f"{out['input_i']:.2f} LUFS / "
+                         f"{out['input_tp']:.2f} dBTP")
+            normalized = True
+        except Exception as exc:
+            print(f"WARNING: QA loudness normalize failed ({exc}); "
+                  f"falling back to legacy gain fix", file=sys.stderr)
+        if not normalized:
+            mean, maximum = volumedetect(video)
+            if maximum is not None and maximum > -0.5:
+                if remux_gain(video, -3.0):
+                    fixes.append("audio gain -3 dB (clipping fix)")
+            elif mean is not None and mean <= -45 and mean > -60:
+                gain = min(12.0, -25.0 - mean)
+                if remux_gain(video, gain):
+                    fixes.append(f"audio gain +{gain:.1f} dB (too-quiet fix)")
     if (failed & {"resolution", "no_long_black_stretches", "captions_present",
                   "title_card_not_black"}) and script_text:
         # Re-render with fallback visuals (gradient) and fresh captions.
