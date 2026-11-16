@@ -1,0 +1,57 @@
+{
+  "topic": "The 2,000-Year-Old Object That Shouldn't Exist",
+  "claims_included": [
+    "antikythera_01",
+    "antikythera_02",
+    "antikythera_03",
+    "antikythera_04",
+    "antikythera_05",
+    "antikythera_09",
+    "antikythera_10"
+  ],
+  "claim_count_total": 12,
+  "sources": [
+    {
+      "source_id": "src_britannica",
+      "title": "Antikythera mechanism",
+      "url": "https://www.britannica.com/topic/Antikythera-mechanism",
+      "publication": "Encyclopaedia Britannica",
+      "review_status": "APPROVED"
+    },
+    {
+      "source_id": "src_nature2006",
+      "title": "Decoding the ancient Greek astronomical calculator known as the Antikythera Mechanism",
+      "url": "https://doi.org/10.1038/nature05357",
+      "publication": "Nature",
+      "review_status": "APPROVED"
+    },
+    {
+      "source_id": "src_scirep2021",
+      "title": "A Model of the Cosmos in the ancient Greek Antikythera Mechanism",
+      "url": "https://doi.org/10.1038/s41598-021-84310-w",
+      "publication": "Scientific Reports",
+      "review_status": "APPROVED"
+    },
+    {
+      "source_id": "src_nam",
+      "title": "Collection of Metalwork",
+      "url": "https://www.namuseum.gr/en/permanent_exhibition/erga-metallotechnias/",
+      "publication": "National Archaeological Museum, Athens - Collection of Metalwork",
+      "review_status": "APPROVED"
+    },
+    {
+      "source_id": "src_thesea",
+      "title": "Antikythera Mechanism Discovery: How It Was Decoded",
+      "url": "https://thesea.org/antikythera-mechanism-one-amazing-discovery/",
+      "publication": "The Sea",
+      "review_status": "APPROVED"
+    },
+    {
+      "source_id": "src_heritage2021",
+      "title": "The Antikythera Mechanism: The Prove of the Accuracy of the Astronomical Calculations Based on It",
+      "url": "https://doi.org/10.3390/heritage4040211",
+      "publication": "Heritage",
+      "review_status": "APPROVED"
+    }
+  ]
+}

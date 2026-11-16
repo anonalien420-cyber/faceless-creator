@@ -1,0 +1,24 @@
+{
+  "audio": "final-audio.mp3",
+  "duration_s": 68.224,
+  "method": "0.25s Hann windows, hop 0.125s; suspect = one bin >60% of 300-3000 Hz band energy at >-50 dBFS, sustained >=3 windows",
+  "suspect_windows": 20,
+  "sustained_events": [
+    {
+      "start_t": 22.5,
+      "end_t": 22.75,
+      "windows": 3,
+      "peak_freq_hz": 524.0,
+      "db": -36.6
+    },
+    {
+      "start_t": 53.125,
+      "end_t": 53.75,
+      "windows": 6,
+      "peak_freq_hz": 440.0,
+      "db": -33.5
+    }
+  ],
+  "peak_440hz_bin_db": 40.8,
+  "result": "FAIL (2 sustained pure-tone event(s))"
+}
