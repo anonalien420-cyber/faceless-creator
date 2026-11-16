@@ -106,6 +106,171 @@
       "check": "accuracy_description_sources_valid",
       "status": "pass",
       "detail": "5 description source(s): all have a valid URL or are explicitly flagged no-public-URL"
+    },
+    {
+      "check": "thumbnail_a_thumbnail_resolution",
+      "status": "pass",
+      "detail": "1280x720 (want 1280x720)"
+    },
+    {
+      "check": "thumbnail_a_thumbnail_aspect_ratio",
+      "status": "pass",
+      "detail": "aspect 1.778 (want 1.778)"
+    },
+    {
+      "check": "thumbnail_a_thumbnail_headline_word_count",
+      "status": "pass",
+      "detail": "2 word(s): 'PREDICTED ECLIPSES'"
+    },
+    {
+      "check": "thumbnail_a_thumbnail_headline_spelling",
+      "status": "pass",
+      "detail": "drawn headline == intended 'PREDICTED ECLIPSES'"
+    },
+    {
+      "check": "thumbnail_a_thumbnail_safe_margins",
+      "status": "pass",
+      "detail": "headline bbox [48, 418, 742, 664], wordmark bbox [48, 48, 350, 95]"
+    },
+    {
+      "check": "thumbnail_a_thumbnail_badge_zone_clear",
+      "status": "pass",
+      "detail": "headline does not enter the bottom-right badge zone"
+    },
+    {
+      "check": "thumbnail_a_thumbnail_mobile_text_size",
+      "status": "pass",
+      "detail": "headline cap height at 320px wide: 19.8px (want >= 10px)"
+    },
+    {
+      "check": "thumbnail_a_thumbnail_mobile_readability",
+      "status": "pass",
+      "detail": "headline-region stddev 99.0, bright-pixel fraction 0.25 at 320px wide"
+    },
+    {
+      "check": "thumbnail_a_thumbnail_branding_gold_accent",
+      "status": "pass",
+      "detail": "gold-pixel fraction in accent-rule area: 0.59"
+    },
+    {
+      "check": "thumbnail_a_thumbnail_branding_wordmark",
+      "status": "pass",
+      "detail": "gold-pixel fraction in wordmark area: 0.25"
+    },
+    {
+      "check": "thumbnail_a_thumbnail_claims_match_ledger",
+      "status": "pass",
+      "detail": "headline matches the grounding claim"
+    },
+    {
+      "check": "thumbnail_b_thumbnail_resolution",
+      "status": "pass",
+      "detail": "1280x720 (want 1280x720)"
+    },
+    {
+      "check": "thumbnail_b_thumbnail_aspect_ratio",
+      "status": "pass",
+      "detail": "aspect 1.778 (want 1.778)"
+    },
+    {
+      "check": "thumbnail_b_thumbnail_headline_word_count",
+      "status": "pass",
+      "detail": "4 word(s): 'NOTHING FOR 1,400 YEARS'"
+    },
+    {
+      "check": "thumbnail_b_thumbnail_headline_spelling",
+      "status": "pass",
+      "detail": "drawn headline == intended 'NOTHING FOR 1,400 YEARS'"
+    },
+    {
+      "check": "thumbnail_b_thumbnail_safe_margins",
+      "status": "pass",
+      "detail": "headline bbox [48, 418, 915, 664], wordmark bbox [48, 48, 350, 95]"
+    },
+    {
+      "check": "thumbnail_b_thumbnail_badge_zone_clear",
+      "status": "pass",
+      "detail": "headline does not enter the bottom-right badge zone"
+    },
+    {
+      "check": "thumbnail_b_thumbnail_mobile_text_size",
+      "status": "pass",
+      "detail": "headline cap height at 320px wide: 19.8px (want >= 10px)"
+    },
+    {
+      "check": "thumbnail_b_thumbnail_mobile_readability",
+      "status": "pass",
+      "detail": "headline-region stddev 101.9, bright-pixel fraction 0.25 at 320px wide"
+    },
+    {
+      "check": "thumbnail_b_thumbnail_branding_gold_accent",
+      "status": "pass",
+      "detail": "gold-pixel fraction in accent-rule area: 0.58"
+    },
+    {
+      "check": "thumbnail_b_thumbnail_branding_wordmark",
+      "status": "pass",
+      "detail": "gold-pixel fraction in wordmark area: 0.25"
+    },
+    {
+      "check": "thumbnail_b_thumbnail_claims_match_ledger",
+      "status": "pass",
+      "detail": "headline matches the grounding claim"
+    },
+    {
+      "check": "thumbnail_c_thumbnail_resolution",
+      "status": "pass",
+      "detail": "1280x720 (want 1280x720)"
+    },
+    {
+      "check": "thumbnail_c_thumbnail_aspect_ratio",
+      "status": "pass",
+      "detail": "aspect 1.778 (want 1.778)"
+    },
+    {
+      "check": "thumbnail_c_thumbnail_headline_word_count",
+      "status": "pass",
+      "detail": "3 word(s): 'WHO MADE IT?'"
+    },
+    {
+      "check": "thumbnail_c_thumbnail_headline_spelling",
+      "status": "pass",
+      "detail": "drawn headline == intended 'WHO MADE IT?'"
+    },
+    {
+      "check": "thumbnail_c_thumbnail_safe_margins",
+      "status": "pass",
+      "detail": "headline bbox [48, 541, 972, 664], wordmark bbox [48, 48, 350, 95]"
+    },
+    {
+      "check": "thumbnail_c_thumbnail_badge_zone_clear",
+      "status": "pass",
+      "detail": "headline does not enter the bottom-right badge zone"
+    },
+    {
+      "check": "thumbnail_c_thumbnail_mobile_text_size",
+      "status": "pass",
+      "detail": "headline cap height at 320px wide: 19.8px (want >= 10px)"
+    },
+    {
+      "check": "thumbnail_c_thumbnail_mobile_readability",
+      "status": "pass",
+      "detail": "headline-region stddev 99.8, bright-pixel fraction 0.26 at 320px wide"
+    },
+    {
+      "check": "thumbnail_c_thumbnail_branding_gold_accent",
+      "status": "pass",
+      "detail": "gold-pixel fraction in accent-rule area: 0.58"
+    },
+    {
+      "check": "thumbnail_c_thumbnail_branding_wordmark",
+      "status": "pass",
+      "detail": "gold-pixel fraction in wordmark area: 0.25"
+    },
+    {
+      "check": "thumbnail_c_thumbnail_claims_match_ledger",
+      "status": "pass",
+      "detail": "headline matches the grounding claim"
     }
   ],
   "fixes_applied": []

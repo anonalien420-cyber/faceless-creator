@@ -533,6 +533,57 @@ def main(argv=None):
         else:
             log_step(log, "thumbnails", "WARNING",
                      "Pillow/thumbnail module unavailable — no thumbnails generated")
+        # Documentary thumbnails: 3 cinematic 16:9 variations per video,
+        # grounded in the APPROVED evidence ledger (src/thumbnail_generator).
+        # Fail-soft by design: any error here logs a WARNING and the video
+        # render / QA outcome is unaffected.
+        try:
+            from src.thumbnail_generator import (
+                append_thumbnail_qa as _append_thumb_qa,
+            )
+            from src.thumbnail_generator import (
+                generate_documentary_thumbnails as _gen_doc_thumbs,
+            )
+            _ledger = None
+            if os.path.exists("data/evidence_ledger.json"):
+                with open("data/evidence_ledger.json", encoding="utf-8") as fh:
+                    _ledger = json.load(fh)
+            if _ledger is None:
+                log_step(log, "thumbnails_documentary", "WARNING",
+                         "no evidence ledger found — documentary thumbnails skipped")
+            else:
+                for item in all_outputs:
+                    script, video_path = item["script"], item["video"]
+                    outdir = os.path.dirname(video_path) or "."
+                    visuals_dir = os.path.join(outdir, "visuals")
+                    results = _gen_doc_thumbs(
+                        _ledger, script["topic"],
+                        script.get("title") or script["topic"],
+                        outdir, slug(script["topic"]), video=video_path,
+                        visuals_dir=visuals_dir if os.path.isdir(visuals_dir)
+                        else None, log=log)
+                    if results:
+                        thumb_map.setdefault("documentary", {})[script["topic"]] = [
+                            {"variant": r["variant"], "path": r["path"],
+                             "headline": r["headline"],
+                             "claim_id": r["claim_id"],
+                             "qa_overall": r["qa_overall"]} for r in results]
+                        with open("data/thumbnails.json", "w", encoding="utf-8") as fh:
+                            json.dump(thumb_map, fh, indent=2)
+                        if os.path.exists("data/qa_report.json"):
+                            _append_thumb_qa("data/qa_report.json", results)
+                        log_step(log, "thumbnails_documentary", "ok",
+                                 f"{len(results)} 16:9 variations for "
+                                 f"{slug(script['topic'])} "
+                                 f"(QA: {sum(1 for r in results if r['qa_overall'] == 'pass')}/"
+                                 f"{len(results)} pass)")
+                    else:
+                        log_step(log, "thumbnails_documentary", "WARNING",
+                                 f"no documentary thumbnails for "
+                                 f"{slug(script['topic'])} — video unaffected")
+        except Exception as exc:
+            log_step(log, "thumbnails_documentary", "WARNING",
+                     f"documentary thumbnail step failed ({exc}) — video unaffected")
         # SEO (titles, description, tags, pinned comment, thumbnails).
         run_cmd([sys.executable, "-m", "src.seo", "--long", "data/scripts_long.json",
                  "--short", "data/scripts_shorts.json", "--output", "data/seo.json",
