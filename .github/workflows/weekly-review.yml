@@ -27,7 +27,7 @@ jobs:
           python-version: "3.11"
       - name: Install Python deps
         run: pip install -r requirements.txt
-      - name: Weekly review (auto-corrects within safe bounds only)
+      - name: Weekly review (computes recommendations only — nothing is applied)
         run: |
           python -m src.review --stats data/video_stats.json \
             --config config.yaml \

@@ -76,6 +76,7 @@ jobs:
             data/compare.md
             data/run_log.json
             data/job_state.json
+            data/ffmpeg_diagnostics/**
             data/series_state.json
             data/generated_visuals/**
             data/thumbnails/**
