@@ -14,6 +14,15 @@ import sys
 
 
 def plan(video, title, description, privacy, publish_at=None):
+    # Defense in depth: plan() must enforce the same policy as
+    # upload() — unlisted only, never scheduled — so no caller can
+    # build a public/scheduled plan through this helper.
+    if privacy != "unlisted":
+        raise ValueError(
+            "Only unlisted uploads are permitted: privacy={!r} was "
+            "supplied but this pipeline never uploads public videos. "
+            "Upload unlisted and publish manually in YouTube Studio."
+            .format(privacy))
     # Scheduled publishing is disabled: reject publish_at loudly
     # instead of silently ignoring it (or scheduling it).
     if publish_at:

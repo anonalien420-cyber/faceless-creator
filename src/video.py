@@ -38,17 +38,45 @@ try:
 except ImportError:
     from config import load_config
 
+try:
+    from src.job_state import persist_diagnostic
+except ImportError:
+    from job_state import persist_diagnostic
+
 WIDTH, HEIGHT, FPS = 1080, 1920, 30
 FADE = 0.5  # seconds of crossfade between visual segments
 
 
-def _run_ffmpeg(cmd):
-    """Run FFmpeg and preserve its diagnostic output on failure."""
+def _run_ffmpeg(cmd, step=None):
+    """Run FFmpeg and preserve its diagnostic output on failure.
+
+    The COMPLETE stderr (or stdout, if stderr is empty) is persisted
+    verbatim to a file artifact
+    (data/ffmpeg_diagnostics/<step>-<timestamp>.log, overridable via
+    DEEP_SCAN_FFMPEG_DIAGNOSTICS_DIR) and the artifact path is named
+    in the raised error. The message itself keeps only the last
+    12,000 chars for readability — the full text is never discarded.
+    `step` labels the artifact; when omitted it is derived from the
+    output file (last argv element).
+    """
     result = subprocess.run(cmd, capture_output=True, text=True)
     if result.returncode != 0:
-        details = (result.stderr or result.stdout or "FFmpeg returned no diagnostic output").strip()
+        raw = result.stderr or result.stdout or "FFmpeg returned no diagnostic output"
+        details = raw.strip()
+        label = step
+        if not label and cmd:
+            label = os.path.splitext(os.path.basename(str(cmd[-1])))[0]
+        try:
+            artifact = persist_diagnostic(label or "ffmpeg", raw)
+        except OSError:
+            artifact = None
+        tail = details[-12000:]
+        if artifact:
+            raise RuntimeError(
+                f"FFmpeg failed with exit code {result.returncode}:\n"
+                f"full diagnostic saved to {artifact}\n{tail}")
         raise RuntimeError(
-            f"FFmpeg failed with exit code {result.returncode}:\n{details[-12000:]}")
+            f"FFmpeg failed with exit code {result.returncode}:\n{tail}")
     return result
 
 

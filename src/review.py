@@ -1,5 +1,6 @@
 """Weekly self-review: learn from the channel's own last 7 days, then
-correct the pipeline — within safe bounds only.
+compute recommendations — nothing is applied, and config.yaml is never
+written (see below).
 
 Inputs (real numbers only, never invented):
 - YouTube Data API, when token.json + client_secrets.json exist and the

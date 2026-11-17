@@ -2,8 +2,39 @@
 import json
 import os
 import random
+import re
 import time
 from datetime import datetime, timezone
+
+# Where complete subprocess diagnostics are persisted on failure.
+# FFmpeg stderr can run to tens of kilobytes; truncating it into
+# job_state.json / CI logs made the Nov 8 and Nov 16 failures
+# undiagnosable, so the full text is written to a file artifact and
+# only a reference + tail is kept in the state / log lines.
+DIAGNOSTICS_DIR = "data/ffmpeg_diagnostics"
+
+
+def _diagnostic_filename(step):
+    safe = re.sub(r"[^A-Za-z0-9._-]+", "-", str(step)).strip("-") or "step"
+    ts = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+    return f"{safe}-{ts}-{os.getpid()}.log"
+
+
+def persist_diagnostic(step, text, diagnostics_dir=None):
+    """Persist the COMPLETE diagnostic text to a file artifact.
+
+    Returns the artifact path. Never truncates: the full text is
+    written verbatim so a failure can be diagnosed after the run.
+    `diagnostics_dir` defaults to DEEP_SCAN_FFMPEG_DIAGNOSTICS_DIR
+    or data/ffmpeg_diagnostics (relative to the run's working dir).
+    """
+    directory = diagnostics_dir or os.environ.get(
+        "DEEP_SCAN_FFMPEG_DIAGNOSTICS_DIR", DIAGNOSTICS_DIR)
+    os.makedirs(directory, exist_ok=True)
+    path = os.path.join(directory, _diagnostic_filename(step))
+    with open(path, "w", encoding="utf-8") as fh:
+        fh.write(text)
+    return path
 
 
 class JobState:
@@ -48,17 +79,34 @@ def run_with_retries(command, step, state=None, attempts=3, backoff=2,
     runner = runner or subprocess.run
     attempts = max(1, min(int(attempts), 5))
     last = None
+    last_artifact = None
     for attempt in range(1, attempts + 1):
         last = runner(command, capture_output=True, text=True)
         if last.returncode == 0:
             if state:
                 state.record(step, "success", "attempt {}".format(attempt))
             return last
-        detail = "attempt {} exit {}: {}".format(
-            attempt, last.returncode, (last.stderr or last.stdout or "")[-1500:])
+        full = last.stderr or last.stdout or ""
+        try:
+            last_artifact = persist_diagnostic(
+                "{}-attempt{}".format(step, attempt), full)
+        except OSError:
+            last_artifact = None
+        if last_artifact:
+            detail = ("attempt {} exit {}: full diagnostic saved to {} "
+                      "(tail: {})".format(attempt, last.returncode,
+                                          last_artifact, full[-1200:]))
+        else:
+            detail = "attempt {} exit {}: {}".format(
+                attempt, last.returncode, full[-1500:])
         if state:
             state.record(step, "retrying" if attempt < attempts else "failed", detail)
         if attempt < attempts:
             sleep(min(30, backoff * (2 ** (attempt - 1)) + random.random()))
+    tail = (last.stderr or last.stdout or "unknown error")[-2000:]
+    if last_artifact:
+        raise RuntimeError("{} failed after {} attempt(s): full diagnostic "
+                           "saved to {}\n{}".format(
+                               step, attempts, last_artifact, tail))
     raise RuntimeError("{} failed after {} attempt(s): {}".format(
-        step, attempts, (last.stderr or last.stdout or "unknown error")[-2000:]))
+        step, attempts, tail))

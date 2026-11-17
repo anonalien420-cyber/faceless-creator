@@ -39,6 +39,11 @@ try:
 except ImportError:
     from qa import run_qa
 
+try:
+    from src.input_validation import validate_niche
+except ImportError:
+    from input_validation import validate_niche
+
 
 def log_step(log, name, status, detail=""):
     entry = {"step": name, "status": status, "detail": detail,
@@ -54,7 +59,24 @@ def run_cmd(cmd, step, log):
     try:
         result = run_with_retries(cmd, step, state=state, attempts=attempts)
     except RuntimeError as exc:
-        log_step(log, step, "FAILED", str(exc)[-4000:])
+        # run_with_retries persists the full diagnostic to a file
+        # artifact and names it in the exception; keep the artifact
+        # reference in the log line (the old [-4000:] truncation
+        # dropped it). If no artifact was persisted, persist the
+        # full exception text here as a fallback.
+        import re as _re
+        match = _re.search(r"full diagnostic saved to (\S+)", str(exc))
+        if match:
+            artifact = match.group(1)
+        else:
+            try:
+                from src.job_state import persist_diagnostic
+            except ImportError:
+                from job_state import persist_diagnostic
+            artifact = persist_diagnostic(step, str(exc))
+        log_step(log, step, "FAILED",
+                 "{} — full diagnostic saved to {}".format(
+                     str(exc)[-3500:], artifact))
         raise SystemExit("Step failed: {}".format(step))
     log_step(log, step, "ok", (result.stdout or "").strip().splitlines()[-1]
              if result.stdout.strip() else "")
@@ -260,7 +282,22 @@ def build_format(log, fmt, scripts, config, niche, args):
         video = os.path.join(video_dir, f"{name}.mp4")
         narration = os.path.join(mixed_dir, f"{name}.mp3")
         if not os.path.exists(video):
-            continue
+            if args.skip_video:
+                # --skip-video deliberately renders nothing: there is no
+                # render step to have failed. Log the skip visibly and
+                # carry on; the run summary reports 0 videos produced.
+                log_step(log, f"video:{fmt}:{name}", "skipped",
+                         f"no video rendered (--skip-video): {video}")
+                continue
+            # F1: a render step that produced no file must FAIL LOUDLY —
+            # never silently skip and report success for a missing video.
+            log_step(log, f"video:{fmt}:{name}", "FAILED",
+                     f"render produced no video file: {video}")
+            raise SystemExit(
+                f"Render produced no video file: {video} ({fmt}) — "
+                "refusing to continue with a missing output. Fix the "
+                "render and re-run; a run must never report success "
+                "with a video missing.")
         report_path = f"data/qa_report_{fmt}_{name}.json"
         ok = run_qa(video, narration=narration, script_text=script["text"],
                     title=script["topic"], report_path=report_path, fmt=fmt,
@@ -395,6 +432,17 @@ def main(argv=None):
     parser.add_argument("--short-count", type=int, default=0,
                         help="Override shorts_per_day (default from config).")
     args = parser.parse_args(argv)
+
+    # Reject flag-like niche values up front. A workflow_dispatch input
+    # is operator-controlled text, and a value starting with "--" could
+    # be parsed as a flag by a downstream module's argparse parser when
+    # the niche is passed on (there is deliberately NO --auto-public /
+    # --public / --publish-at-peak flag anywhere in this pipeline).
+    # Fail closed here, before the value reaches any subprocess.
+    try:
+        args.niche = validate_niche(args.niche)
+    except ValueError as exc:
+        parser.error(str(exc))
 
     config = load_config(args.config)
     if args.list_niches:
@@ -620,12 +668,21 @@ def main(argv=None):
         with open("data/run_log.json", "w", encoding="utf-8") as fh:
             json.dump(log, fh, indent=2)
         raise
+    # Report ACTUAL produced counts (videos rendered and QA-passed),
+    # not the config counts: a run that produced fewer videos than
+    # requested must say so, never claim "1 long-form + 2 Shorts".
+    n_long = sum(1 for o in all_outputs if o["format"] == "long")
+    n_short = sum(1 for o in all_outputs if o["format"] == "short")
     log["status"] = "ok"
+    log["videos_produced"] = len(all_outputs)
+    log["long_videos_produced"] = n_long
+    log["shorts_produced"] = n_short
     log["finished_at"] = datetime.now(timezone.utc).isoformat()
     with open("data/run_log.json", "w", encoding="utf-8") as fh:
         json.dump(log, fh, indent=2)
-    print(f"Run complete: {long_count} long-form + {short_count} Shorts. "
-          "Log: data/run_log.json")
+    print(f"Run complete: {n_long} long-form + {n_short} Shorts produced "
+          f"and QA-passed (requested: {long_count} long-form + "
+          f"{short_count} Shorts). Log: data/run_log.json")
     return 0
 
 

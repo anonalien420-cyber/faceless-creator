@@ -6,10 +6,14 @@ as literal lines under the upload-artifact step in daily.yml.
 No test performs a real upload: gate behaviour is exercised through
 src.upload.main() / src.upload.upload() with env vars patched.
 """
+import argparse
 import os
+import re
+import sys
 import unittest
 from unittest.mock import patch
 
+from src import run as run_module
 from src.upload import main as upload_main
 from src.upload import upload
 
@@ -87,6 +91,27 @@ class DailyArtifactCoverageTests(unittest.TestCase):
         self.assertIn("python -m src.run", text)
         self.assertNotIn("--upload", text)
 
+    def test_daily_workflow_has_no_publish_flags(self):
+        # The remaining publish flags must not appear anywhere in the
+        # workflow either (not as inputs, env, or CLI args).
+        text = read_daily_yml()
+        for flag in ("--publish-at-peak", "--publish-at"):
+            with self.subTest(flag=flag):
+                self.assertNotIn(flag, text)
+
+    def test_daily_workflow_sets_no_upload_env_vars(self):
+        # A scheduled run must not be able to upload even by accident:
+        # the workflow sets neither gate variable, so src/upload.py
+        # refuses any real upload (see UploadGateTests).
+        text = read_daily_yml()
+        self.assertNotIn("UPLOAD_ENABLED", text)
+        self.assertNotIn("HUMAN_REVIEW_APPROVED", text)
+
+    def test_daily_workflow_invokes_only_render_review(self):
+        text = read_daily_yml()
+        invoked = sorted(set(re.findall(r"python -m (src\.\w+)", text)))
+        self.assertEqual(invoked, ["src.run"])
+
 
 class UploadGateTests(unittest.TestCase):
     def test_main_refuses_when_both_env_vars_unset(self):
@@ -139,6 +164,34 @@ class UploadGateTests(unittest.TestCase):
             with self.assertRaises(ValueError):
                 upload("missing.mp4", "Test", "", "unlisted",
                        publish_at="2026-11-13T12:00:00Z")
+
+
+class ScheduledRunCannotUploadTests(unittest.TestCase):
+    """Trace the scheduled-run path end to end: daily.yml -> src/run.py
+    -> src/upload.py. daily.yml invokes `python -m src.run` with no
+    --upload flag and sets neither UPLOAD_ENABLED nor
+    HUMAN_REVIEW_APPROVED, so a scheduled run must reach src/upload.py
+    only as a --dry-run (and src/upload.py refuses a real upload
+    without both env vars — see UploadGateTests)."""
+
+    def test_upload_outputs_appends_dry_run_without_upload_flag(self):
+        captured = []
+        args = argparse.Namespace(upload=False)
+        outputs = [{"script": {"topic": "Test topic", "text": "hello world"},
+                    "video": "data/videos_short/01-test-topic.mp4",
+                    "format": "short"}]
+        with patch.object(run_module, "run_cmd",
+                          side_effect=lambda cmd, step, log: captured.append(cmd)):
+            run_module.upload_outputs({"started_at": "2026-11-17T00:00:00Z"},
+                                      outputs, "history mysteries", args)
+        self.assertEqual(len(captured), 1)
+        self.assertEqual(captured[0][:4],
+                         [sys.executable, "-m", "src.upload", "--video"])
+        self.assertIn("--dry-run", captured[0])
+        for flag in ("--public", "--auto-public",
+                     "--publish-at-peak", "--publish-at"):
+            with self.subTest(flag=flag):
+                self.assertNotIn(flag, captured[0])
 
 
 if __name__ == "__main__":

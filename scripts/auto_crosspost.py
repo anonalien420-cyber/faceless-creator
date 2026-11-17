@@ -11,6 +11,13 @@ fails loudly instead of posting anything. That is deliberate.
 Usage (called by .github/workflows/crosspost.yml, manual trigger only):
     python scripts/auto_crosspost.py --video-id RB38KIarTcg [--note "..."]
 
+    The workflow passes the id through the VIDEO_ID environment variable
+    instead (never interpolated into the workflow's `run:` shell line);
+    the script also accepts VIDEO_ID when --video-id is not given.
+    Either way the id is validated against the 11-character YouTube
+    shape (see src/input_validation.py) BEFORE any queue lookup or
+    API call, so a payload such as $(id) is refused outright.
+
 Queue file: data/crosspost_queue.json — a JSON list of entries:
     {"video_id": "RB38KIarTcg", "title": "...", "hook": "...",
      "platforms": ["facebook", "reddit"], "subreddit": "r/UnsolvedMysteries"}
@@ -35,6 +42,13 @@ import os
 import sys
 import urllib.parse
 import urllib.request
+
+# Repo root on sys.path so `src.input_validation` imports when this
+# script is run as `python scripts/auto_crosspost.py` (sys.path[0] is
+# then scripts/, not the repo root).
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+from src.input_validation import validate_video_id  # noqa: E402
 
 QUEUE_PATH = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
                           "data", "crosspost_queue.json")
@@ -143,9 +157,22 @@ def post_reddit(entry, text):
 
 
 def main(argv):
-    if "--video-id" not in argv:
-        fail("usage: auto_crosspost.py --video-id <youtube-id> [--note ...]")
-    video_id = argv[argv.index("--video-id") + 1]
+    # Video id from --video-id, else from the VIDEO_ID env var (the
+    # workflow's route: env, never interpolated into `run:`). The id is
+    # validated BEFORE any queue lookup or API call.
+    if "--video-id" in argv:
+        if argv.index("--video-id") + 1 >= len(argv):
+            fail("usage: auto_crosspost.py --video-id <youtube-id> [--note ...]")
+        video_id = argv[argv.index("--video-id") + 1]
+    elif os.environ.get("VIDEO_ID"):
+        video_id = os.environ["VIDEO_ID"]
+    else:
+        fail("usage: auto_crosspost.py --video-id <youtube-id> [--note ...] "
+             "(or set VIDEO_ID)")
+    try:
+        video_id = validate_video_id(video_id)
+    except ValueError as exc:
+        fail(str(exc))
     note = ""
     if "--note" in argv:
         note = argv[argv.index("--note") + 1]
