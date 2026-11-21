@@ -44,6 +44,14 @@ try:
 except ImportError:
     from input_validation import validate_niche
 
+try:
+    # Reuse the existing transcription helper (src/caption_treatments.py):
+    # faster-whisper via the tts_venv interpreter, audio decoded to
+    # 16 kHz mono float32 PCM with ffmpeg first. No new dependency.
+    from src.caption_treatments import get_word_timings
+except ImportError:
+    from caption_treatments import get_word_timings
+
 
 def log_step(log, name, status, detail=""):
     entry = {"step": name, "status": status, "detail": detail,
@@ -216,6 +224,44 @@ def _audio_duration(path):
         return 0.0
 
 
+def transcribe_narration(audio_path, timings_path, model="small"):
+    """Transcribe one mixed narration to a word-timings JSON file.
+
+    Uses faster-whisper (``model``, default "small" — the model the
+    v2 Short was transcribed with) with word timestamps, via the
+    existing src.caption_treatments.get_word_timings helper. Writes
+    [[start, end, word], ...] triples — the format src/video.py
+    --word-timings reads — and returns them.
+
+    FAILS LOUDLY (SystemExit) when transcription errors or produces
+    no words: production captions must never silently fall back to
+    unsynced timing. The transcription runs on the FINAL mixed audio
+    (narration + bed, the track the video actually carries), so the
+    timings match the rendered track with no analytic shifting — the
+    v2 Short transcribed the raw narration pre-mix and had to shift
+    timings after pacing inserts; transcribing the mixed track
+    removes that drift class entirely.
+    """
+    try:
+        timed = get_word_timings(audio_path, model=model)
+    except Exception as exc:
+        raise SystemExit(
+            f"Transcription FAILED for {audio_path}: {exc} — refusing "
+            "to render unsynced captions. Fix the audio/model and "
+            "re-run.")
+    triples = [[float(w["start"]), float(w["end"]), str(w["word"])]
+               for w in (timed or [])]
+    if not triples:
+        raise SystemExit(
+            f"Transcription produced NO words for {audio_path} — "
+            "refusing to render unsynced captions. Fix the audio and "
+            "re-run.")
+    os.makedirs(os.path.dirname(timings_path) or ".", exist_ok=True)
+    with open(timings_path, "w", encoding="utf-8") as fh:
+        json.dump(triples, fh, indent=2)
+    return triples
+
+
 def build_format(log, fmt, scripts, config, niche, args):
     """Narrate -> music -> video -> QA for one format. Returns a list of
     {script, video, narration, qa_report} for outputs that passed QA.
@@ -237,6 +283,19 @@ def build_format(log, fmt, scripts, config, niche, args):
                  os.path.join(audio_dir, f"{name}.mp3"), "--output", mixed,
                  "--top5", "data/top5.json"], f"music:{fmt}:{name}", log)
     if not args.skip_video:
+        # Phase 2: transcribe each mixed narration with faster-whisper
+        # (small, word timestamps) BEFORE the render. A failed or
+        # empty transcription raises SystemExit here — the run fails
+        # loudly instead of rendering unsynced captions. One JSON
+        # file per script: data/word_timings_<fmt>/{rank}-{slug}.json.
+        timings_dir = f"data/word_timings_{fmt}"
+        for script in items:
+            name = f"{script['rank']:02d}-{slug(script['topic'])}"
+            mixed = os.path.join(mixed_dir, f"{name}.mp3")
+            timings_path = os.path.join(timings_dir, f"{name}.json")
+            triples = transcribe_narration(mixed, timings_path)
+            log_step(log, f"transcribe:{fmt}:{name}", "ok",
+                     f"{len(triples)} words -> {timings_path}")
         visual_manifest = ""
         comfy_url = os.environ.get("COMFYUI_BASE_URL", "").strip()
         workflow_path = os.environ.get("COMFYUI_IMAGE_WORKFLOW", "").strip()
@@ -273,7 +332,10 @@ def build_format(log, fmt, scripts, config, niche, args):
                     else "Next episode tomorrow")
         run_cmd([sys.executable, "-m", "src.video", "--input", scripts,
                  "--audio-dir", mixed_dir, "--outdir", video_dir,
-                 "--format", fmt, "--end-card-text", end_card]
+                 "--format", fmt, "--end-card-text", end_card,
+                 "--word-timings-dir", timings_dir,
+                 "--require-word-timings",
+                 "--caption-preset", "documentary"]
                 + (["--visuals-file", visual_manifest] if visual_manifest else []),
                 f"video:{fmt}", log)
     qa_reports = []
@@ -299,9 +361,14 @@ def build_format(log, fmt, scripts, config, niche, args):
                 "render and re-run; a run must never report success "
                 "with a video missing.")
         report_path = f"data/qa_report_{fmt}_{name}.json"
+        # Phase 2: pass the word timings this run transcribed so QA
+        # verifies caption timing against the actual spoken audio
+        # (captions_timing), not just structure. Without this, QA
+        # would report timing-vs-audio as NOT verified.
+        timings_path = os.path.join(timings_dir, f"{name}.json")
         ok = run_qa(video, narration=narration, script_text=script["text"],
                     title=script["topic"], report_path=report_path, fmt=fmt,
-                    script=script)
+                    script=script, word_timings_path=timings_path)
         qa_reports.append(report_path)
         log_step(log, f"qa:{fmt}:{name}", "ok" if ok else "FAILED",
                  f"report {report_path}")

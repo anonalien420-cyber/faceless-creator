@@ -53,9 +53,15 @@ class SilentSkipTests(unittest.TestCase):
 
     @patch("src.run.run_cmd", return_value=NOOP_CMD)
     @patch("src.run.run_qa", return_value=True)
-    def test_missing_video_after_render_fails_loudly(self, _qa, _cmd):
+    @patch("src.run.transcribe_narration",
+           return_value=[(0.0, 0.5, "Some"), (0.5, 1.0, "script"),
+                         (1.0, 1.5, "text.")])
+    def test_missing_video_after_render_fails_loudly(self, _tr, _qa, _cmd):
         """(a) Render step mocked to produce no MP4: build_format must
-        exit non-zero (SystemExit) and log the missing file path."""
+        exit non-zero (SystemExit) and log the missing file path.
+        (Phase 2: the transcription step runs before the render, so it
+        is mocked here — its own failure mode is covered by
+        test_run_transcription.py.)"""
         scripts = os.path.join(self.tmp.name, "scripts_short.json")
         _scripts_file(scripts, [_one_script()])
         log = self._log()
@@ -117,9 +123,12 @@ class SilentSkipTests(unittest.TestCase):
 
     @patch("src.run.run_cmd", return_value=NOOP_CMD)
     @patch("src.run.run_qa", return_value=True)
-    def test_main_exits_nonzero_when_render_produces_no_video(self, _qa, _cmd):
+    @patch("src.run.transcribe_narration",
+           return_value=[(0.0, 0.5, "Topic"), (0.5, 1.0, "1")])
+    def test_main_exits_nonzero_when_render_produces_no_video(self, _tr, _qa, _cmd):
         """(a) end-to-end: a real render step (mocked, producing no MP4)
-        makes main() raise SystemExit and records FAILED in run_log.json."""
+        makes main() raise SystemExit and records FAILED in run_log.json.
+        (Phase 2: transcription is mocked as above.)"""
         self._stage_main_inputs()
         with self.assertRaises(SystemExit):
             main(["--niche", "history mysteries investigated with "

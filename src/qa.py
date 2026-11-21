@@ -14,6 +14,25 @@ Checks (all local, no API):
     <= -1 dBTP, measured with ffmpeg loudnorm — mean/max volume alone
     let the -26 LUFS v2 Short pass, so this gate measures the muxed
     file itself)
+11. captions cover the script (captions_cover_script): every script
+    word appears exactly once, in order — existence of an .ass file
+    is NOT enough (F4). FAILS when no script words are supplied:
+    a QA gate must not pass what it cannot verify. Callers that pass
+    script_text (src/run.py does) are unaffected.
+12. captions cover the narration duration (captions_cover_duration):
+    first event <= 0.5s, last event >= narration duration - 1.0s,
+    largest gap between events <= 2.0s.
+13. captions timing (captions_timing): with word timings, each event
+    within +/-0.25s of the corresponding words' times; without
+    timings, events must be monotonic/non-overlapping/inside the
+    duration, and the check records that timing-vs-audio was NOT
+    verified.
+14. real visuals present (real_visuals_present): the visual manifest
+    <video>.visuals.json (written by src/video.py build_video) must
+    exist and report real_seconds > 0 — a gradient-only render FAILS
+    (F3). A missing manifest also FAILS: visuals cannot be verified.
+15. visual coverage (visual_coverage): gradient_seconds must be
+    <= max(2.0s, 5% of the video duration).
 
 Auto-fixes (logged, one retry only):
 - too quiet / off-target loudness audio -> loudness-normalize to
@@ -63,6 +82,17 @@ try:
     from src.music import measure_loudness, loudness_ok, normalize_loudness
 except ImportError:
     from music import measure_loudness, loudness_ok, normalize_loudness
+
+try:
+    from src.caption_validation import (
+        check_cover_duration, check_cover_script, check_timing,
+        check_visual_manifest, load_visual_manifest, load_word_timings,
+        parse_ass)
+except ImportError:
+    from caption_validation import (
+        check_cover_duration, check_cover_script, check_timing,
+        check_visual_manifest, load_visual_manifest, load_word_timings,
+        parse_ass)
 
 
 def run_cmd(cmd):
@@ -116,9 +146,21 @@ def remux_gain(video, gain_db):
 
 
 def check(video, narration=None, tolerance=2.0, scripts=None, script_text="",
-          title="", fmt="short"):
+          title="", fmt="short", word_timings_path=None, script_words=None,
+          visual_manifest_path=None):
     """fmt: 'short' expects 1080x1920, 'long' expects 1920x1080."""
-    """Run all checks once. Returns (checks, fixes_needed)."""
+    """Run all checks once. Returns (checks, fixes_needed).
+
+    word_timings_path: optional path to a Whisper word-timings JSON
+    (list of [start, end, word] or [{word, start, end}]). When given,
+    captions_timing verifies each event against the spoken words;
+    otherwise it checks structure only and says so.
+    script_words: optional list of script words. Defaults to
+    script_text.split(); when neither is supplied,
+    captions_cover_script FAILS (cannot verify) rather than passing
+    silently. visual_manifest_path: optional path to the
+    <video>.visuals.json manifest; defaults to video + ".visuals.json".
+    """
     checks = []
 
     def add(name, passed, detail):
@@ -150,6 +192,7 @@ def check(video, narration=None, tolerance=2.0, scripts=None, script_text="",
         fps_value = 0
     add("frame_rate", abs(fps_value - 30) <= 0.5, f"{fps_value:.2f} fps (want 30)")
     duration = float(info.get("format", {}).get("duration", 0))
+    ndur = None
     if narration and os.path.exists(narration):
         narration_info = probe(narration)
         ndur = float(narration_info.get("format", {}).get("duration", 0)) if narration_info else 0
@@ -201,10 +244,87 @@ def check(video, narration=None, tolerance=2.0, scripts=None, script_text="",
     captions = video + ".ass"
     alt = os.path.splitext(video)[0] + ".ass"
     found = captions if os.path.exists(captions) else alt
-    if os.path.exists(found) and os.path.getsize(found) > 0:
+    ass_exists = os.path.exists(found) and os.path.getsize(found) > 0
+    if ass_exists:
         add("captions_present", True, f"{found} ({os.path.getsize(found)} bytes)")
     else:
         add("captions_present", False, f"{captions} missing or empty")
+    # --- F4: caption coverage + timing (existence alone never passes) ---
+    # Script words: explicit list wins, else script_text. When neither
+    # is supplied the coverage check FAILS (fail-closed): QA must not
+    # pass captions it cannot verify against a script.
+    words = list(script_words) if script_words else (
+        script_text.split() if script_text else None)
+    # Duration the captions must cover: the narration audio when given
+    # (the track the captions were timed against), else the video.
+    caption_duration = ndur if ndur else duration
+    duration_source = "narration" if ndur else "video"
+    if not ass_exists:
+        add("captions_cover_script", False,
+            f"{captions} missing or empty -- cannot verify caption coverage")
+        add("captions_cover_duration", False,
+            f"{captions} missing or empty -- cannot verify caption coverage")
+        add("captions_timing", False,
+            f"{captions} missing or empty -- cannot verify caption timing")
+    else:
+        try:
+            events = parse_ass(found)
+        except (ValueError, OSError) as exc:
+            events = None
+            add("captions_cover_script", False,
+                f"captions file {found} is unreadable: {exc}")
+            add("captions_cover_duration", False,
+                f"captions file {found} is unreadable: {exc}")
+            add("captions_timing", False,
+                f"captions file {found} is unreadable: {exc}")
+        if events is not None:
+            if not words:
+                add("captions_cover_script", False,
+                    "no script words supplied (no script_text/script_words) "
+                    "-- cannot verify caption coverage; refusing to pass "
+                    "unverified captions")
+            else:
+                passed, detail = check_cover_script(events, words)
+                add("captions_cover_script", passed, detail)
+            passed, detail = check_cover_duration(events, caption_duration)
+            add("captions_cover_duration", passed,
+                f"{detail} (duration from {duration_source} "
+                f"{caption_duration:.1f}s)")
+            timings = None
+            timings_error = None
+            if word_timings_path:
+                try:
+                    timings = load_word_timings(word_timings_path)
+                except (ValueError, OSError) as exc:
+                    timings_error = str(exc)
+            if timings_error:
+                add("captions_timing", False,
+                    f"word-timings file could not be loaded: {timings_error}")
+            elif not words:
+                # No script words: timing-vs-audio cannot be mapped.
+                add("captions_timing", False,
+                    "no script words supplied -- cannot map caption events "
+                    "to script words")
+            else:
+                passed, detail, _ = check_timing(events, words, timings,
+                                                 caption_duration)
+                add("captions_timing", passed, detail)
+    # --- F3: real visuals (visual manifest written by build_video) ---
+    manifest_path = visual_manifest_path or (video + ".visuals.json")
+    try:
+        manifest = load_visual_manifest(manifest_path)
+    except (FileNotFoundError, ValueError, OSError) as exc:
+        add("real_visuals_present", False,
+            f"visual manifest {manifest_path} missing or invalid: {exc} "
+            f"-- cannot verify any real visuals were used")
+        add("visual_coverage", False,
+            f"visual manifest {manifest_path} missing or invalid: {exc} "
+            f"-- cannot verify visual coverage")
+    else:
+        real_ok, real_detail, cov_ok, cov_detail = check_visual_manifest(
+            manifest, video_duration=duration)
+        add("real_visuals_present", real_ok, real_detail)
+        add("visual_coverage", cov_ok, cov_detail)
     return checks, []
 
 
@@ -390,7 +510,8 @@ def check_accuracy(script):
     return checks
 
 
-def fix_and_recheck(video, checks, narration=None, script_text="", title="", fmt="short", script=None):
+def fix_and_recheck(video, checks, narration=None, script_text="", title="", fmt="short", script=None,
+                    word_timings_path=None, script_words=None, visual_manifest_path=None):
     """Attempt one fix per failing check category, then re-run checks."""
     fixes = []
     failed = {c["check"] for c in checks if c["status"] == "fail"}
@@ -420,37 +541,70 @@ def fix_and_recheck(video, checks, narration=None, script_text="", title="", fmt
                 gain = min(12.0, -25.0 - mean)
                 if remux_gain(video, gain):
                     fixes.append(f"audio gain +{gain:.1f} dB (too-quiet fix)")
-    if (failed & {"resolution", "no_long_black_stretches", "captions_present",
-                  "title_card_not_black"}) and script_text:
+    # Caption failures are fixable by a re-render with fresh captions
+    # (built from the script, and from the word timings when supplied,
+    # so a stale .ass is replaced by a synced one). Visual failures
+    # are deliberately NOT in this set: the re-render below uses the
+    # gradient fallback, which is the opposite of a fix for missing
+    # real visuals -- real_visuals_present / visual_coverage failures
+    # persist through the retry and block upload.
+    caption_failed = failed & {"captions_present", "captions_cover_script",
+                               "captions_cover_duration", "captions_timing"}
+    effective_text = script_text or " ".join(script_words or [])
+    if ((failed & {"resolution", "no_long_black_stretches",
+                   "title_card_not_black"}) | caption_failed) and effective_text:
         # Re-render with fallback visuals (gradient) and fresh captions.
         # build_video(script_dict, audio_path, output, ...).
+        timings = None
+        if word_timings_path:
+            try:
+                timings = load_word_timings(word_timings_path)
+            except (ValueError, OSError) as exc:
+                print(f"WARNING: QA re-render could not load word timings "
+                      f"({exc}); falling back to legacy captions",
+                      file=sys.stderr)
         try:
             width, height = (1920, 1080) if fmt == "long" else (1080, 1920)
-            build_video({"text": script_text, "topic": title or "Video"},
+            build_video({"text": effective_text, "topic": title or "Video"},
                         narration or "", video, visuals=[],
-                        width=width, height=height)
+                        width=width, height=height, word_timings=timings)
             fixes.append("re-rendered with fallback visuals + fresh captions")
         except Exception as exc:
             fixes.append(f"re-render FAILED: {exc}")
-    elif failed & {"resolution", "no_long_black_stretches", "captions_present",
-                   "title_card_not_black"}:
+    elif (failed & {"resolution", "no_long_black_stretches", "captions_present",
+                    "title_card_not_black"}) | caption_failed:
         fixes.append("re-render skipped: no script text available for rebuild")
     new_checks, _ = check(video, narration=narration, script_text=script_text,
-                          title=title, fmt=fmt)
+                          title=title, fmt=fmt,
+                          word_timings_path=word_timings_path,
+                          script_words=script_words,
+                          visual_manifest_path=visual_manifest_path)
     # Accuracy failures are NOT auto-fixable: re-check them, do not clear them.
     new_checks.extend(check_accuracy(script))
     return new_checks, fixes
 
 
-def run_qa(video, narration=None, script_text="", title="", report_path="data/qa_report.json", fmt="short", script=None):
-    checks, _ = check(video, narration=narration, script_text=script_text, title=title, fmt=fmt)
+def run_qa(video, narration=None, script_text="", title="", report_path="data/qa_report.json", fmt="short", script=None,
+           word_timings_path=None, script_words=None, visual_manifest_path=None):
+    if script_words is None:
+        if script_text:
+            script_words = script_text.split()
+        elif isinstance(script, dict) and script.get("text"):
+            script_words = script["text"].split()
+    checks, _ = check(video, narration=narration, script_text=script_text, title=title, fmt=fmt,
+                      word_timings_path=word_timings_path,
+                      script_words=script_words,
+                      visual_manifest_path=visual_manifest_path)
     checks.extend(check_accuracy(script))
     fixes = []
     failed = [c for c in checks if c["status"] == "fail"]
     if failed:
         checks, fixes = fix_and_recheck(video, checks, narration=narration,
                                         script_text=script_text, title=title, fmt=fmt,
-                                        script=script)
+                                        script=script,
+                                        word_timings_path=word_timings_path,
+                                        script_words=script_words,
+                                        visual_manifest_path=visual_manifest_path)
         failed = [c for c in checks if c["status"] == "fail"]
     overall = "pass" if not failed else "fail"
     report = {"video": video, "overall": overall, "checks": checks,
@@ -475,6 +629,14 @@ def main(argv=None):
     parser.add_argument("--script-json", default="",
                         help="JSON file with the full script dict (for the "
                              "accuracy checklist: sources, tiers, ending).")
+    parser.add_argument("--word-timings", default="",
+                        help="Path to a Whisper word-timings JSON file "
+                             "(list of [start, end, word] or "
+                             "[{word, start, end}]); enables the "
+                             "captions_timing check against the audio.")
+    parser.add_argument("--visual-manifest", default="",
+                        help="Path to the <video>.visuals.json manifest; "
+                             "defaults to <video>.visuals.json.")
     args = parser.parse_args(argv)
     script = None
     if args.script_json and os.path.exists(args.script_json):
@@ -499,7 +661,9 @@ def main(argv=None):
             script = loaded
     ok = run_qa(args.video, narration=args.narration,
                 script_text=args.script_text or "", title=args.title,
-                report_path=args.report, fmt=args.format, script=script)
+                report_path=args.report, fmt=args.format, script=script,
+                word_timings_path=args.word_timings or None,
+                visual_manifest_path=args.visual_manifest or None)
     return 0 if ok else 1
 
 
