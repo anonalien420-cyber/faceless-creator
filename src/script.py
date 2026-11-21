@@ -21,16 +21,11 @@ unless --hook-style is passed explicitly):
 - shock:     "Most people get X completely backwards."
 - story:     "I used to get X wrong every single week."
 
-History-mystery style (--style history_mystery, auto-detected when the
-locked/first niche in config.yaml mentions history + mystery):
-every script presents EVIDENCE first, then COMPETING THEORIES (each
-labelled as a theory, never as proven fact), then WHAT IS STILL
-UNEXPLAINED. It never presents a theory as proven fact, and it never
-invents historical "facts": dates, names, and findings in the template
-are structural ("researchers found...", "one theory says..."), and the
-script's `notes` field carries the rule that every concrete claim
-must be checked against a real source before publishing, with sources
-cited in `sources`. The generator itself cites no invented source.
+History-mystery style (auto-detected for the Deep Scan niche):
+historical scripts are built only from the reviewed claim-level
+evidence ledger via src/documentary.py. Generic history filler is
+disabled for this channel. KNOWN and DEBATED claims require approved
+source records; every claim is topic-scoped and linked to its evidence.
 
 Shock, honestly (see README "Shock, honestly"): a history video
 opens with a verified SHOCK HOOK — a genuinely surprising but TRUE
@@ -674,6 +669,7 @@ def main(argv=None):
                              "Empty = auto-detect from config's first niche "
                              "(history + mystery -> history_mystery).")
     parser.add_argument("--config", default="config.yaml")
+    parser.add_argument("--ledger", default="data/evidence_ledger.json", help="Reviewed claim-level evidence ledger for history_mystery scripts.")
     args = parser.parse_args(argv)
 
     config = {}
@@ -690,6 +686,11 @@ def main(argv=None):
                        if (config.get("niches") or config.get("niche")) else "")
         lowered = (first_niche or "").lower()
         style = "history_mystery" if ("history" in lowered and "myster" in lowered) else "general"
+    first_niche = ((config.get("niches") or [config.get("niche", "")])[0]
+                   if (config.get("niches") or config.get("niche")) else "")
+    lowered_niche = (first_niche or "").lower()
+    if "history" in lowered_niche and "myster" in lowered_niche and style != "history_mystery":
+        parser.error("History-mystery channel content must use the evidence-led history_mystery style; generic script mode is disabled.")
     if style == "history_mystery":
         hook_style = args.hook_style or "question"
     if args.format == "long":
@@ -702,6 +703,17 @@ def main(argv=None):
         builder = build_history_short_script if style == "history_mystery" else build_script
     candidates = load_candidates(args.input)
     scripts = []
+    documentary_builder = None
+    evidence_ledger = None
+    if style == "history_mystery":
+        try:
+            from src.documentary import build_documentary
+            from src.evidence import load_ledger
+        except ImportError:
+            from documentary import build_documentary
+            from evidence import load_ledger
+        documentary_builder = build_documentary
+        evidence_ledger = load_ledger(args.ledger)
     for rank, cand in enumerate(candidates[: args.count], start=1):
         topic = topic_from_candidate(cand)
         # History shock hook + next-episode tease come from the
@@ -712,8 +724,9 @@ def main(argv=None):
             extra = {"shock_fact": cand.get("shock_fact"),
                      "shock_source": cand.get("shock_source"),
                      "next_topic": cand.get("next_topic")}
-        if args.format == "long":
-            script = builder(topic, hook_style=hook_style, target_words=target, **extra)
+        if style == "history_mystery":
+            # Evidence-driven mode: no generic historical filler or invented hooks.
+            script = documentary_builder(topic, args.format, evidence_ledger)
         else:
             script = builder(topic, hook_style=hook_style, target_words=target, **extra)
         script.setdefault("dropped_unverified", [])

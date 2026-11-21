@@ -102,6 +102,15 @@ it picks a fast upbeat royalty-free pop-style track, not a random slow
 one. The match (profile → chosen track → why) is logged to
 `data/run_log.json`.
 
+**Mix levels and bed length:** the mix uses ffmpeg `amix` with
+`normalize=0`, so the narration stays at full level and the bed stays
+at exactly its configured relative volume (e.g. 0.06) — the old
+`amix` default halved both inputs (~6 dB quieter). The bed is looped
+(`-stream_loop -1`) with the mix cut at the narration's end
+(`duration=first`), so a bed shorter than the narration (the in-house
+bed is 64s) repeats to cover the whole narration instead of cutting
+out mid-video.
+
 **Copyright rule, enforced in code:** do NOT download or use the actual
 trending songs from TikTok/YouTube — that draws Content ID claims and
 takedowns. The match is style/tempo/mood-alikeness with a royalty-free
@@ -172,19 +181,20 @@ pipeline, the same QA gate below, and its own peak-time schedule.
 **Traction is not guaranteed** — cadence and quality help, but no
 schedule promises views.
 
-## Peak-time publishing: render in the morning, publish at peak
+## Peak-time publishing: render in the morning, publish manually at peak
 
 Daily flow, 1 long + 2 Shorts per day, one niche per run:
 1. **Morning render** — the GitHub workflow runs at 12:00 UTC
    (06:00 CST / 07:00 CDT Chicago), so rendering finishes well before
-   the peak windows.
-2. **Peak publish** — the upload step uses `--publish-at-peak`:
-   each video uploads as private with YouTube's `publishAt` set to
-   its own next peak window (see `src/scheduler.py`), and YouTube
-   publishes it at that time. Shorts and long-form have separate
-   windows (below).
-3. **Manual review by default** — without `--publish-at-peak`, an
-   upload stays unlisted for you to review. Without `UPLOAD_ENABLED`,
+   the peak windows. The workflow never uploads.
+2. **Human review** — review `data/review_queue.md` (title,
+   thumbnails, script summary, SEO, QA result) for each video.
+3. **Manual publish at peak** — after review, upload as unlisted
+   (with `UPLOAD_ENABLED=true` and `HUMAN_REVIEW_APPROVED=true`)
+   and publish manually in YouTube Studio at the video's next peak
+   window (see `src/scheduler.py`). There is no scheduled-public
+   path in the pipeline: `--publish-at-peak` is refused. Shorts and
+   long-form have separate windows (below). Without `UPLOAD_ENABLED`,
    everything dry-runs and nothing is posted.
 
 Defaults in `config.yaml` (`peak_windows`, `channel_timezone`):
@@ -202,7 +212,7 @@ own analytics. Check your own windows with:
 python -m src.scheduler --niche "cooking" --list
 python -m src.scheduler --niche "cooking" --format short
 python -m src.scheduler --niche "cooking" --format long
-python -m src.upload --video data/videos/01-x.mp4 --title "X" --dry-run --publish-at-peak --niche "cooking" --format short
+python -m src.upload --video data/videos/01-x.mp4 --title "X" --dry-run --niche "cooking" --format short
 ```
 
 ## QA gate: no upload on QA failure
@@ -245,8 +255,9 @@ file you paste from YouTube Studio
 **Never invent performance numbers:** videos with no stats are listed
 as "no data yet" and are not scored.
 
-What it auto-changes (safe bounds only, applied to `config.yaml`,
-logged, and reversible via `data/review_history.json` before/after):
+What it computes (recommendations only, in `data/review_adjustments.json`
+and `data/weekly_review.json` — **it never writes `config.yaml`**; apply
+any adjustment to `config.yaml` by hand after reviewing it):
 - Niche ranking: +20 demand bonus for the winning niche next run.
 - Hook style: `review_preferred_hook_style` = top performers' style.
 - Length: `review_preferred_length_seconds` = top performers' median,
@@ -335,24 +346,22 @@ it until 90 days pass, then re-rank and lock the new winner. This is
 a recommendation lock, not a prison: `--niche` overrides it for a
 single run (without rewriting the lock).
 
-## Human review queue (safety net, NOT full auto-public)
+## Human review queue (safety net — uploads are UNLISTED only)
 
-Default upload flow is now: upload as **UNLISTED** + write
+Upload flow is: upload as **UNLISTED** + write
 `data/review_queue.md` — one entry per video with title, both
 thumbnail variants (A/B pick), script summary, SEO (titles, tags,
 pinned-comment question), QA result, and scheduled peak time.
-**Review the queue before the peak window.** With
-`--publish-at-peak` the video is private + scheduled, so the queue
-review happens before YouTube publishes it at peak — that is the
-intended safety window.
-
-`--auto-public` exists but is **OFF by default**, and the README
-warns against casual use: full auto-public risks factual and taste
-mistakes QA cannot catch. **QA catches technical mistakes only**
-(blank video, silent audio, wrong resolution, missing captions,
-clipping). It cannot tell whether a claim is wrong, a joke lands
-badly, or a thumbnail's curiosity line overpromises — those need
-human eyes in the review queue.
+**Review the queue before the peak window.** Publishing happens
+manually in YouTube Studio after that human review: there is no
+public or scheduled-public path in this pipeline — `src/upload.py`
+refuses `--public` / `--auto-public` / `--publish-at-peak` /
+`--publish-at`, and `src/run.py` does not even accept those flags.
+**QA catches technical mistakes only** (blank video, silent audio,
+wrong resolution, missing captions, clipping). It cannot tell
+whether a claim is wrong, a joke lands badly, or a thumbnail's
+curiosity line overpromises — those need human eyes in the review
+queue.
 
 ## Monetization + channel promise
 
@@ -497,21 +506,21 @@ exaggeration, invented numbers, or misleading framing.
 
 ## Upload safety
 
-- Default privacy is **unlisted**, never public, unless you pass
-  `--public` / `--auto-public` to `src.upload`. `--auto-public` is OFF
-  by default: QA catches technical mistakes only, so review
-  `data/review_queue.md` before using it (see "Human review queue").
+- Privacy is **unlisted, always**. `src.upload` refuses any public or
+  scheduled-publish request (`--public` / `--auto-public` /
+  `--publish-at-peak` / `--publish-at` all exit 1), and `src/run.py`
+  does not accept those flags at all. Publishing happens manually in
+  YouTube Studio after a human reviews `data/review_queue.md`.
 - Every run writes `data/review_queue.md` (title, thumbnails, script
   summary, SEO, QA result, scheduled peak time) — review it before
-  the peak window when `--publish-at-peak` is on.
-- `--publish-at-peak` uploads as private + `publishAt` (required by
-  YouTube for scheduled publishing); it flips public at that time.
-- `src.upload` refuses to upload unless `UPLOAD_ENABLED=true`.
-- `src.run` defaults to `--dry-run` for uploads; pass `--upload` (and
-  optionally `--publish-at-peak`) to actually post.
-- The GitHub workflow runs daily at 12:00 UTC and on manual dispatch
-  (niche + publish_at_peak inputs), but its upload only happens with
-  `secrets.UPLOAD_ENABLED == 'true'`.
+  the peak window.
+- `src.upload` refuses to upload unless `UPLOAD_ENABLED=true` **and**
+  `HUMAN_REVIEW_APPROVED=true`.
+- `src.run` defaults to `--dry-run` for uploads; pass `--upload` to
+  actually post (unlisted only, with both gates above).
+- The GitHub daily workflow runs at 12:00 UTC and on manual dispatch
+  (niche input only). **It NEVER uploads** — it renders and reviews
+  only, and preserves its outputs as Actions artifacts.
 - Upload failures fail the run loudly (non-zero exit + `data/run_log.json`),
   never a silent green run.
 
@@ -531,7 +540,7 @@ src/
   seo.py                     # original titles, description, tags, pinned comment
   qa.py                      # QA gate: ffprobe/ffmpeg checks + one-retry auto-fixes
   review.py                  # weekly self-review, safe-bounded auto-corrections
-  upload.py                  # YouTube upload, unlisted default, --publish-at-peak, --auto-public (off)
+  upload.py                  # YouTube upload, unlisted only; refuses public/scheduled; HUMAN_REVIEW_APPROVED + UPLOAD_ENABLED gates
   run.py                     # orchestrator: 1 long + 2 Shorts, QA gate, thumbnails, SEO, review queue
 data/
   trends_input.example.json  # EXAMPLE demo input (not real stats)
@@ -570,3 +579,100 @@ data/
   were not available; not tested live).
 - Full end-to-end `src.run` render (needs narration audio + ffmpeg at
   runtime; `src.video` itself was compile-checked only).
+
+
+---
+
+## Deep Scan: evidence-led historical documentary production
+
+The history-mystery path now uses a claim-level evidence ledger. It is intentionally
+fail-closed: research discovery is not fact verification, and a generated script
+cannot turn an unreviewed search result into a KNOWN fact.
+
+### Research discovery
+
+Run a scholarly search:
+
+```bash
+python -m src.research --query "Pompeii eruption archaeological evidence"
+```
+
+OpenAlex, Crossref, the Library of Congress public catalogue, and Internet Archive advanced search are queried without paid API keys. Candidate records are
+written to `data/research_sources.json` and appended to
+`data/evidence_ledger.json` with `review_status: UNREVIEWED`. Metadata includes
+title, URL/DOI, authors, publication, year, provider, notes, and a discovery
+priority hint. Institutional domains and primary-source repositories should be
+prioritized during human review. Search results are leads, not proof.
+
+### Claim-level review
+
+Start from the example:
+
+```bash
+cp data/evidence_ledger.example.json data/evidence_ledger.json
+python -m src.evidence --ledger data/evidence_ledger.json --validate
+```
+
+Each claim must have a unique `claim_id`, an exact documentary `topic` (or matching `topics` list), exact claim text, a status
+(`KNOWN`, `DEBATED`, or `UNKNOWN`), reviewer identity, and ISO-8601
+`reviewed_at`. Claims are scoped to their topic so one episode cannot accidentally inherit evidence from another episode. KNOWN and DEBATED claims must cite one or more ledger sources
+whose `review_status` is `APPROVED`, with a title and valid URL. DEBATED
+claims additionally require two competing positions, a neutral summary of the disagreement, and at least two distinct approved source records. UNKNOWN
+claims still require human review, but must not be dressed up as established
+facts. Research discovery never sets source approval or claim status.
+
+A source is approved only after a person checks that the cited record exists
+and actually supports the exact claim. Record the reasoning in its `notes`.
+Do not mark a source APPROVED merely because it is returned by OpenAlex or
+Crossref.
+
+### Evidence-driven scripts and scene prompts
+
+History-mystery script generation now calls `src.documentary` and refuses to
+write a script unless the ledger validates and includes a reviewed KNOWN
+claim explicitly marked `shock_hook: true`. The daily run wires this in
+explicitly: for a history-mystery niche, `src/run.py` passes
+`--style history_mystery --ledger data/evidence_ledger.json` to the
+`scripts:long` / `scripts:short` steps, so a real-topic end-to-end run
+goes through the documentary package, not the generic template builders. Each script section carries claim
+IDs and source IDs. The documentary package includes scene-by-scene image and
+animation prompts with period, location, clothing, architecture, objects,
+lighting, camera movement, and atmosphere fields. Missing historical details
+are called out rather than guessed.
+
+Generated visuals are labelled as interpretive AI reconstructions, never
+authentic historical footage. The prompts are production metadata; this
+repository does not yet call a generative image/video provider to render those
+prompts automatically.
+
+Short scripts are accepted only when the reviewed narration material supports
+120-180 words. Long-form scripts require 1200-1800 words of reviewed material.
+The generator refuses to pad a thin evidence file with generic historical
+filler. Every claim must carry an exact topic, and claims from one topic are
+never reused for another episode.
+
+### QA and publication safety
+
+Historical QA now validates the full evidence ledger and confirms that script
+claim IDs exist in it. Missing reviews, unapproved sources, missing claim
+links, and invalid source records block the video before upload. The existing
+FFmpeg, narration, captions, thumbnail, SEO, and review-queue steps remain in
+place. The review queue now includes claim IDs and scene prompts.
+
+The daily GitHub workflow is render/review only. `src.upload` refuses public
+or scheduled-public flags and requires both `UPLOAD_ENABLED=true` and
+`HUMAN_REVIEW_APPROVED=true` for a manual unlisted upload. Final public
+publication must be performed by a person in YouTube Studio after reviewing
+the evidence and video. Do not add automatic public publishing back to CI.
+
+### Tests
+
+Run the test suite with:
+
+```bash
+python -m unittest discover -s tests -v
+```
+
+The tests cover scholarly metadata mapping, research discovery remaining
+unapproved, evidence review requirements, source approval, claim-ID integrity,
+documentary hook safeguards, and publishing restrictions.

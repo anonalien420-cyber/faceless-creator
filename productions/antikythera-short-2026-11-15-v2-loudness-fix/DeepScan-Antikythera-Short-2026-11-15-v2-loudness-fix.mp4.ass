@@ -1,0 +1,64 @@
+[Script Info]
+ScriptType: v4.00+
+PlayResX: 1080
+PlayResY: 1920
+
+[V4+ Styles]
+Format: Name, Fontname, Fontsize, PrimaryColour, BackColour, Bold, Alignment, MarginL, MarginR, MarginV, BorderStyle, Outline
+Style: Default,DejaVu Sans,72,&H00FFFFFF,&H80000000,-1,2,60,60,400,1,5
+
+[Events]
+Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
+Dialogue: 0,0:00:00.00,0:00:00.96,Default,,0,0,0,,A GEARED BRONZE
+Dialogue: 0,0:00:00.97,0:00:02.08,Default,,0,0,0,,MACHINE THAT PREDICTED
+Dialogue: 0,0:00:02.09,0:00:03.70,Default,,0,0,0,,ECLIPSES EXISTED IN
+Dialogue: 0,0:00:03.71,0:00:04.44,Default,,0,0,0,,THE ANCIENT WORLD
+Dialogue: 0,0:00:04.45,0:00:05.46,Default,,0,0,0,,ABOUT TWO THOUSAND
+Dialogue: 0,0:00:05.46,0:00:07.20,Default,,0,0,0,,YEARS AGO. SPONGE
+Dialogue: 0,0:00:07.20,0:00:08.42,Default,,0,0,0,,DIVERS FOUND THE
+Dialogue: 0,0:00:08.43,0:00:09.56,Default,,0,0,0,,WRECK OFF ANTIKYTHERA
+Dialogue: 0,0:00:09.57,0:00:11.48,Default,,0,0,0,,IN 1900, RECOVERED
+Dialogue: 0,0:00:11.49,0:00:12.36,Default,,0,0,0,,THE CORRODED LUMP
+Dialogue: 0,0:00:12.37,0:00:14.06,Default,,0,0,0,,IN 1901, AND
+Dialogue: 0,0:00:14.07,0:00:14.88,Default,,0,0,0,,ITS FRAGMENTS ARE
+Dialogue: 0,0:00:14.89,0:00:15.48,Default,,0,0,0,,NOW HELD AT
+Dialogue: 0,0:00:15.49,0:00:16.67,Default,,0,0,0,,THE NATIONAL ARCHAEOLOGICAL
+Dialogue: 0,0:00:16.68,0:00:17.85,Default,,0,0,0,,MUSEUM IN ATHENS.
+Dialogue: 0,0:00:18.57,0:00:20.13,Default,,0,0,0,,IN 1902 A
+Dialogue: 0,0:00:20.14,0:00:20.85,Default,,0,0,0,,GEAR WAS SPOTTED
+Dialogue: 0,0:00:20.86,0:00:22.03,Default,,0,0,0,,INSIDE THE CORRODED
+Dialogue: 0,0:00:22.04,0:00:23.13,Default,,0,0,0,,LUMP, AND THE
+Dialogue: 0,0:00:23.14,0:00:24.99,Default,,0,0,0,,MUSEUM'S VALERIOS STAIS
+Dialogue: 0,0:00:25.00,0:00:26.87,Default,,0,0,0,,STUDIED IT. WHAT
+Dialogue: 0,0:00:26.89,0:00:28.01,Default,,0,0,0,,SURVIVES IS 82
+Dialogue: 0,0:00:28.02,0:00:29.57,Default,,0,0,0,,FRAGMENTS CONTAINING 30
+Dialogue: 0,0:00:29.58,0:00:30.87,Default,,0,0,0,,BRONZE GEAR WHEELS.
+Dialogue: 0,0:00:31.39,0:00:32.20,Default,,0,0,0,,THE MECHANISM WAS
+Dialogue: 0,0:00:32.21,0:00:33.28,Default,,0,0,0,,BUILT AROUND 100
+Dialogue: 0,0:00:33.28,0:00:34.84,Default,,0,0,0,,BCE, GIVE OR
+Dialogue: 0,0:00:34.85,0:00:35.89,Default,,0,0,0,,TAKE THIRTY YEARS.
+Dialogue: 0,0:00:36.35,0:00:37.46,Default,,0,0,0,,NOTHING COMPARABLY COMPLEX
+Dialogue: 0,0:00:37.46,0:00:38.48,Default,,0,0,0,,APPEARS AGAIN FOR
+Dialogue: 0,0:00:38.49,0:00:40.26,Default,,0,0,0,,ABOUT 1,400 YEARS,
+Dialogue: 0,0:00:40.57,0:00:41.32,Default,,0,0,0,,UNTIL THE GREAT
+Dialogue: 0,0:00:41.32,0:00:42.14,Default,,0,0,0,,CLOCKS OF MEDIEVAL
+Dialogue: 0,0:00:42.14,0:00:44.14,Default,,0,0,0,,CATHEDRALS. WHAT REMAINS
+Dialogue: 0,0:00:44.14,0:00:45.93,Default,,0,0,0,,UNKNOWN: NO INSCRIPTION
+Dialogue: 0,0:00:45.94,0:00:46.82,Default,,0,0,0,,ON THE MECHANISM
+Dialogue: 0,0:00:46.82,0:00:47.82,Default,,0,0,0,,NAMES ITS BUILDER,
+Dialogue: 0,0:00:48.25,0:00:49.07,Default,,0,0,0,,AND NO ANCIENT
+Dialogue: 0,0:00:49.08,0:00:50.42,Default,,0,0,0,,TEXT DESCRIBES THE
+Dialogue: 0,0:00:50.42,0:00:51.20,Default,,0,0,0,,WORKSHOP THAT MADE
+Dialogue: 0,0:00:51.21,0:00:51.75,Default,,0,0,0,,IT OR THE
+Dialogue: 0,0:00:51.76,0:00:52.57,Default,,0,0,0,,PERSON WHO PAID
+Dialogue: 0,0:00:52.58,0:00:54.03,Default,,0,0,0,,FOR IT. THE
+Dialogue: 0,0:00:54.04,0:00:55.03,Default,,0,0,0,,EVIDENCE IS WHAT
+Dialogue: 0,0:00:55.04,0:00:56.30,Default,,0,0,0,,WE HAVE. THE
+Dialogue: 0,0:00:56.31,0:00:57.70,Default,,0,0,0,,UNANSWERED QUESTIONS ARE
+Dialogue: 0,0:00:57.71,0:00:59.06,Default,,0,0,0,,WHAT REMAIN. WHAT
+Dialogue: 0,0:00:59.07,0:00:59.48,Default,,0,0,0,,DO YOU THINK
+Dialogue: 0,0:00:59.49,0:01:01.03,Default,,0,0,0,,HAPPENED? WHAT DOES
+Dialogue: 0,0:01:01.04,0:01:02.20,Default,,0,0,0,,THE RECORD ACTUALLY
+Dialogue: 0,0:01:02.21,0:01:02.78,Default,,0,0,0,,SUPPORT?
+Dialogue: 0,0:01:03.57,0:01:04.79,Default,,0,0,0,,LIKE AND SUBSCRIBE
+Dialogue: 0,0:01:04.79,0:01:05.51,Default,,0,0,0,,FOR MORE!

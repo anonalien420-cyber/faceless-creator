@@ -36,11 +36,48 @@ import re
 import shutil
 import subprocess
 import sys
+import tempfile
 
 try:
     from src.config import load_config
 except ImportError:
     from config import load_config
+
+try:
+    from src.pronunciation import apply_pronunciation, flag_unknown
+except ImportError:  # running from inside src/
+    try:
+        from pronunciation import apply_pronunciation, flag_unknown
+    except ImportError:  # dictionary support unavailable; narrate as written
+        apply_pronunciation = flag_unknown = None
+
+# Sane narration-speed bounds (production-readiness issue 5). Speeds
+# outside this range are a config/CLI mistake, not a creative choice:
+# below 0.5x the narration drags past every format's duration budget,
+# above 2.0x it is unintelligible. Reject loudly, never clamp silently
+# (a silent clamp would ship audio at a speed nobody asked for).
+MIN_SPEED = 0.5
+MAX_SPEED = 2.0
+
+
+def validate_speed(speed):
+    """Return float(speed) if it is a sane narration speed, else raise.
+
+    Raises ValueError for non-numeric, non-finite, or out-of-range
+    values, naming the allowed range.
+    """
+    try:
+        value = float(speed)
+    except (TypeError, ValueError):
+        raise ValueError(
+            "Invalid narration speed {!r}: must be a number between "
+            "{} and {}.".format(speed, MIN_SPEED, MAX_SPEED)) from None
+    import math
+    if not math.isfinite(value) or not MIN_SPEED <= value <= MAX_SPEED:
+        raise ValueError(
+            "Invalid narration speed {}: must be between {} and {} "
+            "(got {}).".format(speed, MIN_SPEED, MAX_SPEED, value))
+    return value
 
 
 def slug(text):
@@ -55,7 +92,19 @@ def humanize_text(text, pause_ms=350, speed=1.0):
     - Commas get a short break, sentence ends get the full pause.
     - Plain version uses extra punctuation spacing so even non-SSML
       engines get some pacing instead of a flat monotone stream.
+    Plain-text pauses cover all sentence terminators (". ", "? ", "! ")
+    and lead-in colons (": ") — the earlier version only paused after
+    commas and periods, so consecutive questions (e.g. the closing
+    "What do you think happened? What does the record actually
+    support?") and colon lead-ins ("What remains unknown: ...") ran
+    together with no beat. NOTE: those "..." markers only affect
+    engines that read punctuation (Edge/pyttsx3). Kokoro ignores
+    them — verified 2026-11-15 by an ellipsis probe (identical total
+    durations, 6.70–6.90s, with and without "..." after a sentence).
+    Real pacing control for Kokoro is the segment-silence mechanism
+    in narrate_kokoro (sentence_pauses), not punctuation.
     """
+    validate_speed(speed)
     sentences = re.split(r"(?<=[.!?])\s+", text.strip())
     if not sentences:
         return text, text
@@ -72,7 +121,9 @@ def humanize_text(text, pause_ms=350, speed=1.0):
     rate_pct = int(round(speed * 100))
     ssml = (f'<speak><prosody rate="{rate_pct}%" pitch="+1st">'
             f"{ssml_body}</prosody></speak>")
-    plain = text.replace(", ", ", ... ").replace(". ", ". ... ")
+    plain = (text.replace(", ", ", ... ").replace(". ", ". ... ")
+             .replace("? ", "? ... ").replace("! ", "! ... ")
+             .replace(": ", ": ... "))
     return ssml, plain
 
 
@@ -115,15 +166,60 @@ def narrate_edge(text, voice, output, ssml, speed):
     return "edge-tts CLI (plain text, pause punctuation)"
 
 
+def sentence_pauses(text, hook_pause=0.3, question_pause=0.2):
+    """Return {sentence_index: extra_silence_seconds} for Kokoro.
+
+    Two targeted beats, both measured against the 2026-11-15 Antikythera
+    render (sentence-boundary gaps there were 0.48–0.78s):
+    - After the hook (sentence 0): +hook_pause, so the opening claim
+      lands before the story starts. The hook gap was the shortest in
+      the render (0.48s).
+    - Between consecutive closing questions ("What do you think
+      happened? What does the record actually support?"): +question_pause,
+      so the CTA breathes instead of running together.
+    Only these two beats are lengthened; every other boundary keeps
+    Kokoro's natural pause. Total added time is hook_pause +
+    question_pause (0.5s by default) — inside the production duration
+    budget (body ±2s, video ±1s).
+    """
+    sentences = [s for s in re.split(r"(?<=[.!?])\s+", text.strip()) if s]
+    pauses = {}
+    if len(sentences) >= 2 and hook_pause > 0:
+        pauses[0] = hook_pause
+    for i in range(len(sentences) - 1):
+        if (sentences[i].rstrip().endswith("?")
+                and sentences[i + 1].rstrip().endswith("?")
+                and question_pause > 0):
+            pauses[i] = pauses.get(i, 0.0) + question_pause
+    return pauses
+
+
 def narrate_kokoro(text, voice, output, speed):
     """Kokoro open-weight TTS (local, free). Voice names are Kokoro voices
     (e.g. af_heart, am_adam); the config voice is passed through only if
-    it looks like a Kokoro voice, otherwise Kokoro's default is used."""
+    it looks like a Kokoro voice, otherwise Kokoro's default is used.
+
+    Single pipeline call over the whole text (the v1 behaviour). A
+    per-sentence variant was tried 2026-11-16 and REVERTED: synthesizing
+    sentence-by-sentence made Kokoro speak ~20% slower (the same 151
+    words rendered as 80.4s instead of 63.0s, blowing the video
+    duration budget), even though each call used the same voice and
+    speed. Pacing beats are therefore added AFTER synthesis, by
+    inserting silence at measured sentence boundaries — see
+    insert_silence() — which keeps the proven single-call delivery
+    exactly and makes each beat verifiable.
+    """
     from kokoro import KPipeline
     import soundfile as sf
-    lang = "a"  # American English
-    pipeline = KPipeline(lang_code=lang)
+    validate_speed(speed)
     kokoro_voice = voice if re.match(r"^[ab][fm]_", voice or "") else "af_heart"
+    # Kokoro's language pipeline must match the voice's accent: British
+    # voices (bm_/bf_) use the British pipeline ("b"), American voices
+    # (am_/af_) use the American one ("a"). Using "a" with a British
+    # voice silently Americanises pronunciation, so derive it from the
+    # resolved voice, not from a hardcoded default.
+    lang = "b" if kokoro_voice.startswith("b") else "a"
+    pipeline = KPipeline(lang_code=lang)
     audio_chunks = []
     for _, _, audio in pipeline(text, voice=kokoro_voice, speed=speed):
         audio_chunks.append(audio)
@@ -133,6 +229,61 @@ def narrate_kokoro(text, voice, output, speed):
     combined = np.concatenate(audio_chunks)
     sf.write(output, combined, 24000)
     return f"kokoro ({kokoro_voice})"
+
+
+def insert_silence(audio_path, output_path, pauses, sample_rate=24000):
+    """Insert exact digital silence into a narration file at chosen times.
+
+    `pauses` is a list of (after_seconds, duration_seconds), sorted
+    ascending — e.g. [(8.0, 0.3)] lengthens the pause after the word
+    ending at 8.0s by 0.3s. The audio is decoded with ffmpeg to
+    `sample_rate` mono PCM (Kokoro's native 24 kHz), silence is
+    inserted at the given sample positions, and the result is written
+    as mp3. Returns the new duration in seconds.
+
+    This is the pacing mechanism for Kokoro: the "..." pause markers
+    in the plain text are inert for Kokoro (ellipsis probe,
+    2026-11-15), and per-sentence synthesis slows delivery (see
+    narrate_kokoro), so beats are inserted here, at measured
+    sentence-boundary times from a transcription of the rendered
+    narration. Callers must shift their word timings by the inserted
+    amounts (each word after an insertion moves later by the sum of
+    all insertions before it).
+    """
+    import subprocess
+    import numpy as np
+    import soundfile as sf
+    if not pauses:
+        raise ValueError("insert_silence called with no pauses")
+    pauses = sorted((float(t), float(d)) for t, d in pauses)
+    if any(d <= 0 for _, d in pauses):
+        raise ValueError("pause durations must be positive")
+    with tempfile.TemporaryDirectory(prefix="deep_scan_pacing_") as tmp:
+        wav_in = os.path.join(tmp, "in.wav")
+        subprocess.run(["ffmpeg", "-v", "error", "-i", audio_path,
+                        "-ac", "1", "-ar", str(sample_rate),
+                        "-f", "wav", wav_in],
+                       check=True)
+        audio, sr = sf.read(wav_in, dtype="float32")
+        if audio.ndim > 1:
+            audio = audio[:, 0]
+        # Insert from the END backwards so earlier sample positions
+        # stay valid as later insertions shift the tail.
+        pieces = []
+        prev = len(audio)
+        for after, dur in reversed(pauses):
+            idx = min(int(round(after * sr)), len(audio))
+            pieces.append(audio[idx:prev])
+            pieces.append(np.zeros(int(round(dur * sr)), dtype=np.float32))
+            prev = idx
+        pieces.append(audio[:prev])
+        combined = np.concatenate(list(reversed(pieces)))
+        wav_out = os.path.join(tmp, "out.wav")
+        sf.write(wav_out, combined, sr)
+        subprocess.run(["ffmpeg", "-y", "-v", "error", "-i", wav_out,
+                        "-codec:a", "libmp3lame", "-b:a", "64k", output_path],
+                       check=True)
+    return len(combined) / sr
 
 
 def narrate_elevenlabs(text, voice, output):
@@ -184,19 +335,57 @@ def main(argv=None):
     parser.add_argument("--tier", default="")
     parser.add_argument("--speed", type=float, default=0.0)
     parser.add_argument("--pause-ms", type=int, default=0)
+    parser.add_argument("--pronunciation-dictionary", default="",
+                        help="Path to data/pronunciation_dictionary.json "
+                             "(default: the repo's dictionary). The "
+                             "dictionary is applied in memory only, to the "
+                             "text fed to TTS — scripts, ledger and subtitles "
+                             "keep the correct written forms. If the file is "
+                             "missing, narration proceeds as written with a "
+                             "warning.")
     args = parser.parse_args(argv)
 
     config = load_config(args.config)
     voice = args.voice or config.get("narrator_voice", "en-US-ChristopherNeural")
     tier = (args.tier or config.get("narrator_tier", "free") or "free").lower()
-    speed = args.speed or float(config.get("narrator_speed", 1.0) or 1.0)
+    try:
+        speed = validate_speed(
+            args.speed or float(config.get("narrator_speed", 1.0) or 1.0))
+    except ValueError as exc:
+        print(f"ERROR: {exc}", file=sys.stderr)
+        return 1
     pause_ms = args.pause_ms or int(config.get("narrator_pause_ms", 350) or 350)
     with open(args.input, encoding="utf-8") as fh:
         scripts = json.load(fh)
     os.makedirs(args.outdir, exist_ok=True)
     for script in scripts:
         output = os.path.join(args.outdir, f"{script['rank']:02d}-{slug(script['topic'])}.mp3")
-        ssml, plain = humanize_text(script["text"], pause_ms=pause_ms, speed=speed)
+        # Pronunciation dictionary (in-memory only): verified respellings
+        # are substituted into the TTS input so names come out right;
+        # the written script, ledger and subtitles are untouched.
+        spoken_text = script["text"]
+        if apply_pronunciation is not None:
+            try:
+                dict_path = args.pronunciation_dictionary or None
+                dictionary = None
+                if dict_path:
+                    import json as _json
+                    with open(dict_path, encoding="utf-8") as _fh:
+                        dictionary = _json.load(_fh)
+                spoken_text, applied = apply_pronunciation(
+                    script["text"], dictionary)
+                unknown = flag_unknown(script["text"], dictionary)
+                if applied:
+                    print(f"Pronunciation respellings applied "
+                          f"({script['topic']}): {', '.join(applied)}")
+                if unknown:
+                    print(f"NOTE: unverified pronunciations in "
+                          f"'{script['topic']}': {', '.join(unknown)} "
+                          f"(spoken as written; no respelling applied)")
+            except FileNotFoundError:
+                print("WARNING: pronunciation dictionary not found; "
+                      "narrating as written.", file=sys.stderr)
+        ssml, plain = humanize_text(spoken_text, pause_ms=pause_ms, speed=speed)
         used = ""
         try:
             if tier == "paid":

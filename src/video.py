@@ -29,6 +29,7 @@ import re
 import shutil
 import subprocess
 import sys
+import tempfile
 import urllib.parse
 import urllib.request
 
@@ -37,8 +38,53 @@ try:
 except ImportError:
     from config import load_config
 
+try:
+    from src.job_state import persist_diagnostic
+except ImportError:
+    from job_state import persist_diagnostic
+
+try:
+    from src.caption_presets import DOCUMENTARY, FONT_DIR, PRESETS
+    from src.caption_presets import build_ass as _build_preset_ass
+except ImportError:
+    from caption_presets import DOCUMENTARY, FONT_DIR, PRESETS
+    from caption_presets import build_ass as _build_preset_ass
+
 WIDTH, HEIGHT, FPS = 1080, 1920, 30
 FADE = 0.5  # seconds of crossfade between visual segments
+
+
+def _run_ffmpeg(cmd, step=None):
+    """Run FFmpeg and preserve its diagnostic output on failure.
+
+    The COMPLETE stderr (or stdout, if stderr is empty) is persisted
+    verbatim to a file artifact
+    (data/ffmpeg_diagnostics/<step>-<timestamp>.log, overridable via
+    DEEP_SCAN_FFMPEG_DIAGNOSTICS_DIR) and the artifact path is named
+    in the raised error. The message itself keeps only the last
+    12,000 chars for readability — the full text is never discarded.
+    `step` labels the artifact; when omitted it is derived from the
+    output file (last argv element).
+    """
+    result = subprocess.run(cmd, capture_output=True, text=True)
+    if result.returncode != 0:
+        raw = result.stderr or result.stdout or "FFmpeg returned no diagnostic output"
+        details = raw.strip()
+        label = step
+        if not label and cmd:
+            label = os.path.splitext(os.path.basename(str(cmd[-1])))[0]
+        try:
+            artifact = persist_diagnostic(label or "ffmpeg", raw)
+        except OSError:
+            artifact = None
+        tail = details[-12000:]
+        if artifact:
+            raise RuntimeError(
+                f"FFmpeg failed with exit code {result.returncode}:\n"
+                f"full diagnostic saved to {artifact}\n{tail}")
+        raise RuntimeError(
+            f"FFmpeg failed with exit code {result.returncode}:\n{tail}")
+    return result
 
 
 def _require(tool):
@@ -176,27 +222,340 @@ def resolve_visuals(raw_entries, min_resolution):
     return accepted, rejected
 
 
-def make_ass(script_text, duration, path, width=1080, height=1920, fontsize=72):
-    words = script_text.split()
-    chunks, chunk = [], []
-    for word in words:
-        chunk.append(word)
-        if len(chunk) >= 7:
-            chunks.append(" ".join(chunk))
-            chunk = []
-    if chunk:
-        chunks.append(" ".join(chunk))
-    per = duration / max(len(chunks), 1)
+def _norm_token(word):
+    """Lowercased alphanumeric form of a word for comparison."""
+    return re.sub(r"[^a-z0-9]", "", word.lower())
+
+
+_ONES = {"zero": 0, "one": 1, "two": 2, "three": 3, "four": 4, "five": 5,
+         "six": 6, "seven": 7, "eight": 8, "nine": 9, "ten": 10,
+         "eleven": 11, "twelve": 12, "thirteen": 13, "fourteen": 14,
+         "fifteen": 15, "sixteen": 16, "seventeen": 17, "eighteen": 18,
+         "nineteen": 19}
+_TENS = {"twenty": 20, "thirty": 30, "forty": 40, "fifty": 50,
+         "sixty": 60, "seventy": 70, "eighty": 80, "ninety": 90}
+_SCALES = {"hundred": 100, "thousand": 1000, "million": 1000000}
+
+
+def _number_value(word):
+    """Numeric value of a number word or a digit token, else None.
+
+    Used to align script words with ASR tokens: the script says
+    "two thousand" where the transcript hears the digits "2,000".
+    """
+    norm = _norm_token(word)
+    if norm.isdigit():
+        return int(norm)
+    if norm in _ONES:
+        return _ONES[norm]
+    if norm in _TENS:
+        return _TENS[norm]
+    if norm in _SCALES:
+        return _SCALES[norm]
+    return None
+
+
+def _canonical_tokens(words):
+    """Collapse a word list into canonical tokens for alignment.
+
+    Consecutive number words ("two", "thousand") collapse into one
+    integer token (2000); every other word becomes its normalized
+    string. Returns (tokens, spans) where spans[i] is the list of
+    original word indices covered by tokens[i].
+    """
+    tokens, spans = [], []
+    i = 0
+    while i < len(words):
+        value = _number_value(words[i])
+        if value is not None:
+            # Accumulate a number phrase: "two thousand" -> 2000,
+            # "one hundred" -> 100. Standard small-number algorithm.
+            total, current = 0, 0
+            start = i
+            while i < len(words):
+                value = _number_value(words[i])
+                if value is None:
+                    break
+                if value in (100, 1000, 1000000):
+                    current = (current or 1) * value
+                    if value >= 1000:
+                        total += current
+                        current = 0
+                else:
+                    current += value
+                i += 1
+            tokens.append(total + current)
+            spans.append(list(range(start, i)))
+        else:
+            tokens.append(_norm_token(words[i]))
+            spans.append([i])
+            i += 1
+    return tokens, spans
+
+
+def align_script_to_timings(script_words, timed):
+    """Assign a (start, end) to every script word from ASR word timings.
+
+    `timed` is a list of (start, end, word) triples from a transcription
+    of the actual spoken narration. The script words are the correct
+    written forms; the timings are the spoken reality. Alignment is by
+    difflib on canonical tokens (numbers collapse, so "two thousand"
+    aligns with "2,000"), and mismatched blocks (e.g. a name the ASR
+    misheard) share the block's timed span evenly. Returns a list of
+    (start, end, script_word) triples in script order.
+    """
+    import difflib
+    if not script_words or not timed:
+        return []
+    script_tokens, script_spans = _canonical_tokens(script_words)
+    timed_words = [w for _, _, w in timed]
+    timed_tokens, timed_spans = _canonical_tokens(timed_words)
+    # Timed tokens are already merged digit groups ("2,000" -> 2000);
+    # _canonical_tokens handles them because _number_value reads digits.
+    matcher = difflib.SequenceMatcher(a=script_tokens, b=timed_tokens,
+                                      autojunk=False)
+    result = [None] * len(script_words)
+
+    def timed_span(first, last):
+        """(start, end) covering timed canonical tokens first..last."""
+        if first > last:
+            return None
+        start = timed[timed_spans[first][0]][0]
+        end = timed[timed_spans[last][-1]][1]
+        return (start, end)
+
+    def fill(script_lo, script_hi, span):
+        """Split `span` evenly across script words script_lo..script_hi."""
+        if span is None:
+            return
+        start, end = span
+        count = script_hi - script_lo
+        if count <= 0:
+            return
+        per = (end - start) / count
+        for k in range(count):
+            result[script_lo + k] = (start + k * per, start + (k + 1) * per)
+
+    last_end = 0.0
+    for tag, i1, i2, j1, j2 in matcher.get_opcodes():
+        if tag == "equal":
+            for a, b in zip(range(i1, i2), range(j1, j2)):
+                span = timed_span(b, b)
+                fill(script_spans[a][0],
+                     script_spans[a][-1] + 1, span)
+                last_end = span[1]
+        elif tag == "replace":
+            span = timed_span(j1, j2 - 1)
+            words_lo = script_spans[i1][0]
+            words_hi = script_spans[i2 - 1][-1] + 1
+            fill(words_lo, words_hi, span)
+            if span:
+                last_end = span[1]
+        elif tag == "delete":
+            # Script words the ASR did not emit: give them the gap
+            # between the neighbouring timed tokens.
+            words_lo = script_spans[i1][0]
+            words_hi = script_spans[i2 - 1][-1] + 1
+            next_start = (timed[timed_spans[j1][0]][0]
+                          if j1 < len(timed_spans) else last_end + 0.3)
+            fill(words_lo, words_hi, (last_end, next_start))
+        # "insert": extra ASR tokens with no script word — ignore them.
+    # Any word still unassigned (should not happen) gets the last end.
+    for idx, entry in enumerate(result):
+        if entry is None:
+            result[idx] = (last_end, last_end + 0.2)
+    return [(result[i][0], result[i][1], script_words[i])
+            for i in range(len(script_words))]
+
+
+def escape_filter_arg(value):
+    """Escape a value for ffmpeg's filter option parser (F12).
+
+    An `ass=` value passes through TWO parsers, and each level
+    strips one layer of backslash escaping:
+    - Level 1 (filtergraph parser): splits filters on ',' / ';' and
+      link labels on '[' / ']', and unescapes one layer.
+    - Level 2 (the filter's own option parser, av_opt_set_from_string):
+      splits options on ':' and unescapes one layer more; it also
+      treats a bare "'" as a quote opener.
+    So a character that is special at both levels needs escaping
+    twice, and one special only at level 1 needs it once. Verified
+    2026-11-17 with real ffmpeg renders of paths containing each
+    character (a single ``\\:`` and a single ``\\'`` both still fail
+    with rc=234; the counts below all render):
+    - backslash: 4x (``\\\\``) — special at both levels
+    - single-quote: 3x + quote (``\\\'``) — quote opener at both levels
+    - colon: 2x + colon (``\\:``) — option separator at level 2 only
+    - comma, semicolon, brackets: 1x — separators at level 1 only
+    (``\\\\,`` splits the filtergraph again — double-escaping those
+    BREAKS the render, so the counts are exact, not "at least").
+    Backslash is escaped first so the backslashes added for the other
+    characters are not themselves re-escaped.
+    """
+    bs = "\\"
+    out = str(value).replace(bs, bs * 4)
+    for ch, count in (("'", 3), (":", 2), (",", 1), (";", 1),
+                      ("[", 1), ("]", 1)):
+        out = out.replace(ch, bs * count + ch)
+    return out
+
+
+def _resolve_preset(preset):
+    """Resolve a caption preset reference to a CaptionPreset object.
+
+    Accepts a CaptionPreset, a slug ("documentary"), or None (legacy
+    behaviour — no preset). Raises ValueError on an unknown slug.
+    """
+    if preset is None:
+        return None
+    if isinstance(preset, str):
+        if preset not in PRESETS:
+            raise ValueError(
+                f"Unknown caption preset {preset!r} "
+                f"(known: {sorted(PRESETS)})")
+        return PRESETS[preset]
+    return preset
+
+
+def _write_visual_manifest(output, duration, chunks):
+    """Write <output>.visuals.json — the visual-source manifest QA reads.
+
+    Schema (exact contract, see task Phase 2)::
+        {"duration": float, "chunks": [{"start": float, "end": float,
+         "source": "real"|"gradient", "asset": str|null}, ...],
+         "real_seconds": float, "gradient_seconds": float}
+    One chunk per visual segment in render order; "real" means a real
+    visual asset (stock/comfyui/cartoon), "gradient" the fallback.
+    real_seconds + gradient_seconds == duration.
+    """
+    real_seconds = round(sum(c["end"] - c["start"] for c in chunks
+                             if c["source"] == "real"), 3)
+    gradient_seconds = round(sum(c["end"] - c["start"] for c in chunks
+                                 if c["source"] == "gradient"), 3)
+    manifest = {
+        "duration": round(float(duration), 3),
+        "chunks": [{"start": round(float(c["start"]), 3),
+                    "end": round(float(c["end"]), 3),
+                    "source": c["source"],
+                    "asset": c["asset"]} for c in chunks],
+        "real_seconds": real_seconds,
+        "gradient_seconds": gradient_seconds,
+    }
+    manifest_path = output + ".visuals.json"
+    with open(manifest_path, "w", encoding="utf-8") as fh:
+        json.dump(manifest, fh, indent=2)
+    return manifest_path
+
+
+def make_ass(script_text, duration, path, width=1080, height=1920, fontsize=72,
+             word_timings=None, extra_captions=None, preset=None):
+    """Write an .ass subtitle file.
+
+    `preset` (a CaptionPreset or a slug such as "documentary") wires
+    src/caption_presets.py into production captions: the Modern
+    Documentary preset is the production default (see build_video).
+    With a preset, captions use the bundled Montserrat ExtraBold
+    (fallback chain: bundled Montserrat -> Noto Sans ExtraBold ->
+    DejaVu Sans Bold, see caption_presets.resolve_font), UPPERCASE,
+    max 2 lines, and the preset's OWN segmentation rules — sentence
+    segmentation with up to 6 words/event (NOT the legacy kinetic
+    <=3-words/frame rule). A preset REQUIRES real word_timings;
+    without them it raises ValueError — uniform timing is never a
+    silent substitute for measured timing in the production path.
+
+    Without a preset (legacy callers only — explicit non-production
+    use): with word_timings, the kinetic <=3-words/frame captions as
+    before; without word_timings, uniform 7-word chunks evenly spaced
+    over `duration`. The uniform fallback is NOT production timing
+    and must never be used for a video that ships — build_video with
+    require_word_timings=True refuses it outright.
+
+    With word_timings — a list of (start, end, word) from a
+    transcription of the actual spoken narration — captions follow the
+    spoken words. The caption TEXT always comes from the script
+    (correct written forms); only the TIMING comes from the
+    transcription.
+    `extra_captions` is a list of (start, end, text) appended after
+    the body captions (e.g. the subscribe close, rendered as a
+    separate clip after the body).
+    """
+    preset_obj = _resolve_preset(preset)
+    if preset_obj is not None:
+        if not word_timings:
+            raise ValueError(
+                "Caption preset {!r} requires real word timings — "
+                "refusing to render preset captions from uniform "
+                "chunking. Transcribe the narration first "
+                "(src.caption_treatments.get_word_timings) or pass "
+                "preset=None for the explicit legacy path.".format(
+                    preset_obj.slug))
+        aligned = align_script_to_timings(script_text.split(), word_timings)
+        words = [{"word": w, "start": float(s), "end": float(e)}
+                 for s, e, w in aligned]
+        _build_preset_ass(preset_obj, words, path, width=width,
+                          height=height, duration=duration)
+        if extra_captions:
+            # build_ass has no extra-caption slot: append the extra
+            # events in the preset's own style.
+            def fmt(t):
+                t = max(0.0, float(t))
+                h, rem = divmod(int(t), 3600)
+                m, s = divmod(rem, 60)
+                return f"{h}:{m:02d}:{s:02d}.{int(round((t % 1) * 100)):02d}"
+            with open(path, "a", encoding="utf-8") as fh:
+                for start, end, text in extra_captions:
+                    safe = str(text).replace("{", "(").replace("}", ")")
+                    fh.write(f"\nDialogue: 0,{fmt(start)},{fmt(end)},"
+                             f"{preset_obj.name},,0,0,0,,{safe}")
+        return path
+    if word_timings:
+        aligned = align_script_to_timings(script_text.split(), word_timings)
+        chunks = []
+        frame = []
+        for start, end, word in aligned:
+            frame.append((start, end, word))
+            if len(frame) >= 3:
+                chunks.append(frame)
+                frame = []
+        if frame:
+            chunks.append(frame)
+        timed_chunks = []
+        for frame in chunks:
+            start = max(0.0, frame[0][0] - 0.03)
+            end = frame[-1][1] + 0.05
+            text = " ".join(w for _, _, w in frame).upper()
+            timed_chunks.append((start, end, text))
+        # Clamp overlaps: a frame must end before the next one starts.
+        for i in range(len(timed_chunks) - 1):
+            start, end, text = timed_chunks[i]
+            next_start = timed_chunks[i + 1][0]
+            if end > next_start - 0.01:
+                timed_chunks[i] = (start, next_start - 0.01, text)
+        chunks = [(s, e, t) for (s, e, t) in timed_chunks]
+    else:
+        words = script_text.split()
+        raw, chunk = [], []
+        for word in words:
+            chunk.append(word)
+            if len(chunk) >= 7:
+                raw.append(" ".join(chunk))
+                chunk = []
+        if chunk:
+            raw.append(" ".join(chunk))
+        per = duration / max(len(raw), 1)
+        chunks = [(i * per, (i + 1) * per, text)
+                  for i, text in enumerate(raw)]
+    if extra_captions:
+        chunks.extend((float(s), float(e), str(t))
+                      for (s, e, t) in extra_captions)
     lines = ["[Script Info]", "ScriptType: v4.00+", f"PlayResX: {width}", f"PlayResY: {height}",
              "", "[V4+ Styles]",
              "Format: Name, Fontname, Fontsize, PrimaryColour, BackColour, Bold, "
              "Alignment, MarginL, MarginR, MarginV, BorderStyle, Outline",
              f"Style: Default,DejaVu Sans,{fontsize},&H00FFFFFF,&H80000000,-1,2,60,60,400,1,5",
              "", "[Events]",
-             "Format: Layer, Start, End, Style, Text"]
-    for i, text in enumerate(chunks):
-        start, end = i * per, (i + 1) * per
-
+             "Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text"]
+    for start, end, text in chunks:
         def fmt(t):
             h, rem = divmod(int(t), 3600)
             m, s = divmod(rem, 60)
@@ -208,8 +567,50 @@ def make_ass(script_text, duration, path, width=1080, height=1920, fontsize=72):
     return path
 
 
-def _escape_drawtext(text):
-    return text.replace("\\", "\\\\").replace(":", "\\:").replace("'", "\\'")
+def _fit_fontsize(text, max_width, start_size, font_name="DejaVuSans-Bold.ttf"):
+    """Largest fontsize <= start_size whose rendered width fits max_width.
+
+    Found 2026-11-15 on the first real Antikythera run: the title card
+    drew the 45-character topic at 72pt, wider than the 1080px frame,
+    so the title was cut off at both edges in the first 3 seconds.
+    Measured with Pillow when available (Bold metrics are wider than
+    the regular face drawtext uses, so the fit is conservative);
+    otherwise falls back to a ~0.62em average-glyph-width estimate.
+    """
+    try:
+        from PIL import ImageFont
+        size = start_size
+        while size > 8:
+            if ImageFont.truetype(font_name, size).getlength(text) <= max_width:
+                return size
+            size -= 2
+        return size
+    except Exception:
+        return max(8, min(start_size,
+                          int(max_width / max(1, len(text) * 0.62))))
+
+
+def _write_drawtext_file(directory, name, text):
+    """Write arbitrary text for FFmpeg drawtext without filtergraph quoting."""
+    path = os.path.join(directory, f"{name}.txt")
+    with open(path, "w", encoding="utf-8", newline="") as fh:
+        fh.write(str(text))
+    return path
+
+
+def _drawtext_path(path):
+    """Escape a generated path for FFmpeg's filter option parser.
+
+    NOTE: this is single-level escaping (backslash, colon) and is
+    NOT the same as escape_filter_arg(). It is only ever called on
+    mkdtemp textfile paths (alphanumeric + underscore, never ':', "'"
+    or ','), and its exact output is pinned by
+    tests/test_video_drawtext.py — do not "upgrade" it by routing it
+    through escape_filter_arg(), which would double-escape these
+    paths. The ass= value, which carries arbitrary user output
+    paths, uses escape_filter_arg() instead.
+    """
+    return path.replace("\\", "\\\\").replace(":", "\\:")
 
 
 def _fill_filter(width, height):
@@ -218,13 +619,73 @@ def _fill_filter(width, height):
             f"crop={width}:{height},fps=30,format=yuv420p")
 
 
+def _normalize_rendered_audio(output):
+    """Loudness-normalize a rendered MP4 in place (fail-soft).
+
+    The video stream is copied untouched; only the audio is
+    re-encoded to the -14 LUFS / -1 dBTP master (see src/music.py).
+    A failure here must never break the render itself — the QA
+    loudness gate is the fail-loud layer that refuses a quiet video.
+    """
+    try:
+        from src.music import normalize_loudness
+    except ImportError:
+        from music import normalize_loudness
+    if not os.path.exists(output):
+        return  # mocked / failed render left no file; nothing to normalize
+    tmp = output + ".loudnorm.mp4"
+    try:
+        report = normalize_loudness(output, tmp)
+        os.replace(tmp, output)
+        out = report["output_measured"]
+        print(f"Loudness normalized -> {output} "
+              f"({out['input_i']:.2f} LUFS, {out['input_tp']:.2f} dBTP)")
+    except Exception as exc:
+        if os.path.exists(tmp):
+            try:
+                os.remove(tmp)
+            except OSError:
+                pass
+        print(f"WARNING: loudness normalization failed ({exc}); "
+              f"keeping un-normalized render {output}", file=sys.stderr)
+
+
 def build_video(script, audio_path, output, visuals=None, duration=None,
                 bitrate="10M", min_resolution=1080, width=1080, height=1920,
-                end_card_text="Subscribe for the next one"):
+                end_card_text="Subscribe for the next one",
+                word_timings=None, normalize_loudness=True,
+                require_word_timings=False, caption_preset=None):
     """Render one video. Shorts default 1080x1920; long-form 1920x1080.
 
     `script` is a dict with text/topic/hook (see script.py). Captions are
-    written to output + ".ass" (QA also checks that path).
+    written to output + ".ass" (QA also checks that path). A visual
+    manifest is written to output + ".visuals.json" (see
+    _write_visual_manifest) for BOTH render paths.
+
+    `word_timings` (optional): a list of (start, end, word) triples from
+    a transcription of the ACTUAL narration audio. When given, captions
+    follow the spoken words (see align_script_to_timings); when omitted
+    the legacy uniform chunking is used, so existing callers are
+    unaffected.
+
+    `require_word_timings` (default False): when True, the production
+    path — missing or empty word_timings raises ValueError instead of
+    silently rendering unsynced captions. src/run.py sets this.
+
+    `caption_preset` (default None = legacy DejaVu kinetic captions):
+    a CaptionPreset or slug (e.g. "documentary"). The production path
+    passes "documentary" (Modern Documentary: bundled Montserrat
+    ExtraBold, UPPERCASE, max 2 lines, the preset's sentence
+    segmentation of up to 6 words/event). A preset requires real
+    word_timings and raises without them. Viral/Minimal are NOT wired
+    into production — only "documentary" is passed by the pipeline.
+
+    `normalize_loudness` (default True): after rendering, normalize
+    the finished MP4's audio to -14 LUFS / -1 dBTP (video stream
+    copied untouched). Fail-soft — a normalization failure only warns
+    and the un-normalized render is kept; the QA loudness gate is
+    what refuses a quiet video. Pass False only for tests that need
+    the raw render.
 
     Retention pacing (see README "Retention editing"):
     - First 3 seconds: title card + hook line on screen immediately,
@@ -240,52 +701,101 @@ def build_video(script, audio_path, output, visuals=None, duration=None,
     """
     _require("ffmpeg")
     duration = duration or audio_duration(audio_path)
+    if require_word_timings and not word_timings:
+        raise ValueError(
+            "Production path requires word timings for "
+            f"{output} — refusing to render unsynced captions. "
+            "Transcribe the narration first "
+            "(src.caption_treatments.get_word_timings, model='small') "
+            "and pass word_timings=... .")
+    preset_obj = _resolve_preset(caption_preset)
+    if preset_obj is not None and not word_timings:
+        raise ValueError(
+            "Caption preset {!r} requires real word timings for "
+            f"{output} — refusing to render preset captions from "
+            "uniform chunking.".format(preset_obj.slug))
     os.makedirs(os.path.dirname(output) or ".", exist_ok=True)
     ass_path = output + ".ass"
     fontsize = 72 if height > width else 54
     make_ass(script["text"], duration, ass_path, width=width, height=height,
-             fontsize=fontsize)
-    title = _escape_drawtext(script["topic"].title()[:60])
-    hook_line = _escape_drawtext((script.get("hook", "") or "").split(". ")[0][:80])
+             fontsize=fontsize, word_timings=word_timings,
+             preset=preset_obj)
+    drawtext_dir = tempfile.mkdtemp(prefix="deep_scan_drawtext_")
+    title = _write_drawtext_file(drawtext_dir, "title", script["topic"].title()[:60])
+    hook_text = (script.get("hook", "") or "").split(". ")[0][:80]
+    hook_line = (_write_drawtext_file(drawtext_dir, "hook", hook_text)
+                 if hook_text else "")
     accepted, _rejected = resolve_visuals(visuals or [], min_resolution)
     # Pattern-interrupt interval: 25s longs, 10s Shorts.
     interrupt = 25.0 if width > height else 10.0
     import math as _math
     chunk_count = max(1, _math.ceil(duration / interrupt))
-    chunk = duration / chunk_count
-    # Caption/title/progress filters, applied after the visual chain.
+    # xfade overlap fix (found 2026-11-15 on the first real Antikythera
+    # run): joining n segments of `chunk` with (n-1) fades of FADE
+    # produces n*chunk - (n-1)*FADE seconds of video, NOT n*chunk.
+    # With chunk = duration / chunk_count the joined video came out
+    # (n-1)*FADE short (63.03s of narration rendered as a 60.03s
+    # video) and `-shortest` cut the tail of the narration off.
+    # Lengthen each segment so the joined video is exactly `duration`.
+    chunk = ((duration + (chunk_count - 1) * FADE) / chunk_count
+             if chunk_count > 1 else duration)
+    # Dynamic text is read from files with expansion disabled.
+    title_text = script["topic"].title()[:60]
+    title_size = _fit_fontsize(title_text, width - 80, fontsize)
+    # The ASS filter value is filtergraph text: escape it (F12 — an
+    # output path containing ':', ',' or "'" broke the graph) and,
+    # for a preset render, point libass at the bundled fonts so the
+    # Montserrat face resolves even where it is not installed.
+    # The ':' separating the fontsdir option is a real separator and
+    # must stay unescaped; each VALUE is escaped on its own.
+    ass_filter = f"ass={escape_filter_arg(ass_path)}"
+    if preset_obj is not None:
+        ass_filter += f":fontsdir={escape_filter_arg(FONT_DIR)}"
     overlay = [
         f"drawbox=x=0:y={height - 50}:w='{width}*t/{duration:.2f}':h=12:color=yellow@0.9:t=fill",
-        f"drawtext=text='{title}':font=DejaVu Sans:fontsize={fontsize}:fontcolor=white:"
+        f"drawtext=textfile={_drawtext_path(title)}:expansion=none:font=DejaVu Sans:fontsize={title_size}:fontcolor=white:"
         f"borderw=3:bordercolor=black:x=(w-text_w)/2:y=200:enable='lt(t,3)'",
-        f"ass={ass_path}",
+        ass_filter,
     ]
     if hook_line:
         overlay.append(
-            f"drawtext=text='{hook_line}':font=DejaVu Sans:fontsize={max(28, fontsize - 18)}:"
+            f"drawtext=textfile={_drawtext_path(hook_line)}:expansion=none:font=DejaVu Sans:fontsize={max(28, fontsize - 18)}:"
             f"fontcolor=white:borderw=2:bordercolor=black:x=(w-text_w)/2:"
             f"y={200 + fontsize + 20}:enable='lt(t,5)'")
     prompts = ["The key part:", "Here's why it works:", "Don't miss this:", "Quick check:"]
     for k in range(1, chunk_count):
         t = k * chunk
-        prompt = _escape_drawtext(prompts[(k - 1) % len(prompts)])
+        prompt_file = _write_drawtext_file(
+            drawtext_dir, f"prompt_{k}", prompts[(k - 1) % len(prompts)])
         overlay.append(
-            f"drawtext=text='{prompt}':font=DejaVu Sans:fontsize={max(32, fontsize - 14)}:"
+            f"drawtext=textfile={_drawtext_path(prompt_file)}:expansion=none:font=DejaVu Sans:fontsize={max(32, fontsize - 14)}:"
             f"fontcolor=yellow:borderw=3:bordercolor=black:x=(w-text_w)/2:"
             f"y={height // 3}:enable='between(t,{t:.2f},{t + 2:.2f})'")
+    end_card = _write_drawtext_file(drawtext_dir, "end_card", end_card_text)
     overlay.append(
-        f"drawtext=text='{_escape_drawtext(end_card_text)}':font=DejaVu Sans:"
+        f"drawtext=textfile={_drawtext_path(end_card)}:expansion=none:font=DejaVu Sans:"
         f"fontsize={fontsize}:fontcolor=white:borderw=3:bordercolor=black:"
         f"x=(w-text_w)/2:y={height - 220}:enable='gt(t,{duration - 3:.2f})'")
     if not accepted:
         # Animated gradient fallback (no asset to grade).
+        # NOTE: the lavfi gradients source defaults to 25 fps, but the
+        # QA gate requires 30 fps — pin the chain to 30 explicitly, the
+        # same rate the visuals path enforces with fps={FPS}.
         cmd = ["ffmpeg", "-y", "-f", "lavfi",
                "-i", f"gradients=s={width}x{height}:c0=0x0f172a:c1=0x1e3a8a:x0=0:y0=0:x1={width}:y1={height}:duration={duration}",
-               "-i", audio_path, "-vf", ",".join(overlay),
+               "-i", audio_path, "-vf", ",".join(["fps=30"] + overlay),
                "-t", str(duration), "-c:v", "libx264", "-pix_fmt", "yuv420p",
                "-b:v", bitrate, "-maxrate", "12M", "-bufsize", "20M",
                "-c:a", "aac", "-shortest", output]
-        subprocess.run(cmd, check=True)
+        try:
+            _run_ffmpeg(cmd)
+        finally:
+            shutil.rmtree(drawtext_dir, ignore_errors=True)
+        _write_visual_manifest(output, duration, [
+            {"start": 0.0, "end": duration, "source": "gradient",
+             "asset": None}])
+        if normalize_loudness:
+            _normalize_rendered_audio(output)
         print(f"Video -> {output} ({duration:.1f}s, {width}x{height}, gradient fallback)")
         return output
 
@@ -299,7 +809,24 @@ def build_video(script, audio_path, output, visuals=None, duration=None,
     # One ffmpeg input per chunk (same file may be listed several times).
     for i in range(n):
         vis = accepted[i % len(accepted)]
-        inputs += ["-loop", "1", "-i", vis["path"]] if vis["type"] == "image" else ["-i", vis["path"]]
+        if vis["type"] == "image":
+            inputs += ["-loop", "1", "-i", vis["path"]]
+        else:
+            # Short stock clips are the norm (real Pexels clips are
+            # often 4-10 s) and a segment is `seg` seconds long. A
+            # trim past the end of a short clip used to yield a short
+            # segment, and the xfade chain then collapsed the whole
+            # render to ~one segment (a 63.6 s render came out 9.5 s).
+            # Loop short/unknown-duration clips so every segment is
+            # full-length; vary the entry point per chunk so repeated
+            # use of one clip does not replay identical frames.
+            clip_dur = vis.get("duration") or 0
+            if clip_dur and clip_dur > seg:
+                inputs += ["-i", vis["path"]]
+            elif clip_dur:
+                inputs += ["-stream_loop", "-1", "-i", vis["path"]]
+            else:
+                inputs += ["-stream_loop", "-1", "-i", vis["path"]]
         if vis["type"] == "image":
             zoom = ("min(zoom+0.0008,1.3)" if i % 2 == 0
                     else "max(1.25-0.0008*on,1.0)")
@@ -311,6 +838,12 @@ def build_video(script, audio_path, output, visuals=None, duration=None,
             start = 0.0
             if clip_dur and clip_dur > seg:
                 start = min(i * 2.0, clip_dur - seg)
+            elif clip_dur:
+                # Looped short clip: vary the entry point per chunk
+                # (mod the clip length) so repeats do not replay the
+                # same frames; trim on the looped stream still yields
+                # a full `seg`-length segment.
+                start = (i * 2.0) % clip_dur
             filters.append(
                 f"[{i}:v]trim={start:.2f}:{start + seg:.2f},setpts=PTS-STARTPTS,{_fill_filter(width, height)}[v{i}]")
     audio_idx = n
@@ -328,16 +861,60 @@ def build_video(script, audio_path, output, visuals=None, duration=None,
     filters.append("[vx]eq=contrast=1.05:saturation=1.10:brightness=0.02[vgrade]")
     filters.append(f"[vgrade]{','.join(overlay)}[vout]")
     cmd = (["ffmpeg", "-y"] + inputs +
-           ["-filter_complex", ";".join(filters),
+           ["-filter_complex_threads", "1", "-filter_complex", ";".join(filters),
             "-map", "[vout]", "-map", f"{audio_idx}:a",
             "-t", str(duration), "-c:v", "libx264", "-pix_fmt", "yuv420p",
             "-b:v", bitrate, "-maxrate", "12M", "-bufsize", "20M",
             "-c:a", "aac", "-shortest", output])
-    subprocess.run(cmd, check=True)
+    try:
+        _run_ffmpeg(cmd)
+    finally:
+        shutil.rmtree(drawtext_dir, ignore_errors=True)
+    # Visual manifest: one chunk per pattern-interrupt segment in
+    # render order. The chunks partition [0, duration] evenly; the
+    # on-screen xfade boundaries sit within +/-FADE (0.5s) of these
+    # nominal boundaries, since each segment fades into the next.
+    seg_nominal = duration / n
+    _write_visual_manifest(output, duration, [
+        {"start": i * seg_nominal,
+         "end": duration if i == n - 1 else (i + 1) * seg_nominal,
+         "source": "real",
+         "asset": accepted[i % len(accepted)]["path"]}
+        for i in range(n)])
+    if normalize_loudness:
+        _normalize_rendered_audio(output)
     kinds = ",".join(v["type"] for v in accepted)
     print(f"Video -> {output} ({duration:.1f}s, {width}x{height}, "
           f"{len(accepted)} visual(s) in {n} chunk(s): {kinds}, {bitrate})")
     return output
+
+
+def _load_timings_for_script(script, word_timings, timings_dir,
+                             require_word_timings):
+    """Word timings for one script in the CLI loop.
+
+    `word_timings` is a single shared list (legacy --word-timings,
+    applied to every script); `timings_dir` holds one JSON file per
+    script named ``{rank:02d}-{slug}.json`` (written by src/run.py).
+    The dir wins when both are given. With require_word_timings and
+    no timings found for this script, raises SystemExit (fail loudly
+    — never silently render unsynced captions in production).
+    """
+    if timings_dir:
+        slug = re.sub(r"[^a-z0-9]+", "-", script["topic"].lower()).strip("-") or "script"
+        path = os.path.join(timings_dir, f"{script['rank']:02d}-{slug}.json")
+        if os.path.exists(path):
+            with open(path, encoding="utf-8") as fh:
+                return [(float(s), float(e), str(w))
+                        for s, e, w in json.load(fh)]
+        if require_word_timings:
+            raise SystemExit(
+                f"No word-timings file for {script['topic']!r}: "
+                f"expected {path} — transcription must succeed before "
+                "a production render. Refusing to render unsynced "
+                "captions.")
+        return None
+    return word_timings
 
 
 def main(argv=None):
@@ -354,6 +931,27 @@ def main(argv=None):
                         help="short = 1080x1920 vertical; long = 1920x1080 16:9.")
     parser.add_argument("--end-card-text", default="Subscribe for the next one",
                         help="End-card CTA shown in the last 3 seconds (Shorts funnel: 'Watch the full video today').")
+    parser.add_argument("--word-timings", default="",
+                        help="JSON file of [start, end, word] triples from a "
+                        "transcription of the narration audio; captions are "
+                        "timed to the spoken words instead of uniform "
+                        "chunking. Applies to every script in --input.")
+    parser.add_argument("--word-timings-dir", default="",
+                        help="Directory of per-script word-timings JSON "
+                        "files named {rank:02d}-{slug}.json (written by "
+                        "src/run.py, one per narration). Wins over "
+                        "--word-timings when both are given.")
+    parser.add_argument("--require-word-timings", action="store_true",
+                        help="Fail loudly if a script has no word timings "
+                        "instead of rendering unsynced captions. "
+                        "Set by src/run.py for production renders.")
+    parser.add_argument("--caption-preset", default="documentary",
+                        choices=["documentary", "none"],
+                        help="Caption preset for production renders "
+                        "(default: documentary — Modern Documentary, "
+                        "bundled Montserrat ExtraBold). 'none' keeps the "
+                        "legacy DejaVu kinetic captions; Viral/Minimal are "
+                        "deliberately not offered here.")
     parser.add_argument("--fetch-stock", action="store_true",
                         help="Fetch HD stock video clips (needs PEXELS_API_KEY or PIXABAY_API_KEY).")
     args = parser.parse_args(argv)
@@ -369,9 +967,14 @@ def main(argv=None):
         scripts = json.load(fh)
     os.makedirs(args.outdir, exist_ok=True)
     visuals = list(args.visuals) + list(args.images)
+    topic_visuals = {}
     if args.visuals_file and os.path.exists(args.visuals_file):
         with open(args.visuals_file, encoding="utf-8") as fh:
-            visuals.extend(json.load(fh))
+            loaded_visuals = json.load(fh)
+        if isinstance(loaded_visuals, dict) and isinstance(loaded_visuals.get("by_topic"), dict):
+            topic_visuals = loaded_visuals["by_topic"]
+        elif isinstance(loaded_visuals, list):
+            visuals.extend(loaded_visuals)
     if args.fetch_stock:
         # Stock video first, then stock images — per visual_source order.
         stock = fetch_stock_videos(config, config.get("niche_keywords") or [])
@@ -379,16 +982,29 @@ def main(argv=None):
     if not visuals:
         # Config order: stock video URLs first, then stock images.
         visuals = list(config.get("stock_video_urls") or []) + list(config.get("stock_image_urls") or [])
+    word_timings = None
+    if args.word_timings:
+        with open(args.word_timings, encoding="utf-8") as fh:
+            word_timings = [(float(s), float(e), str(w))
+                            for s, e, w in json.load(fh)]
+    caption_preset = None if args.caption_preset == "none" else args.caption_preset
     for script in scripts:
         slug = re.sub(r"[^a-z0-9]+", "-", script["topic"].lower()).strip("-") or "script"
         audio = os.path.join(args.audio_dir, f"{script['rank']:02d}-{slug}.mp3")
         if not os.path.exists(audio):
             audio = os.path.join("data/audio", f"{script['rank']:02d}-{slug}.mp3")
         output = os.path.join(args.outdir, f"{script['rank']:02d}-{slug}.mp4")
-        build_video(script, audio, output, visuals=visuals or None,
+        selected_visuals = topic_visuals.get(script.get("topic"), visuals)
+        script_timings = _load_timings_for_script(
+            script, word_timings, args.word_timings_dir,
+            args.require_word_timings)
+        build_video(script, audio, output, visuals=selected_visuals or None,
                     bitrate=bitrate, min_resolution=min_resolution,
                     width=width, height=height,
-                    end_card_text=args.end_card_text)
+                    end_card_text=args.end_card_text,
+                    word_timings=script_timings,
+                    require_word_timings=args.require_word_timings,
+                    caption_preset=caption_preset)
     return 0
 
 
