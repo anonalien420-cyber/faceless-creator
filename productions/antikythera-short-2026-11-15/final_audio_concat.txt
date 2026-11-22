@@ -1,0 +1,2 @@
+file '/home/hatch/workspace/faceless-creator-branch/productions/antikythera-short-2026-11-15/mixed-audio.mp3'
+file '/home/hatch/workspace/faceless-creator-branch/productions/antikythera-short-2026-11-15/sub_audio.wav'

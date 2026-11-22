@@ -1,51 +1,193 @@
-"""Upload a video to YouTube. Draft-like by default, never public by accident.
+"""Upload only an unlisted draft after explicit human review.
 
-- Default privacyStatus: "unlisted" (draft-like; not listed, not public).
-  This is the human-review-queue flow: run.py writes data/review_queue.md
-  for every upload so a human can glance at title, thumbnail, script
-  summary, SEO, QA result, and scheduled peak time BEFORE the peak
-  window. Review the queue before the peak window.
-- --public / --auto-public publish immediately and publicly. --auto-public
-  is OFF by default for a reason: full auto-public risks factual and
-  taste mistakes that QA cannot catch — QA catches TECHNICAL mistakes
-  only (blank video, silent audio, wrong resolution, missing captions).
-  Use auto-public only if you accept that risk.
-- --publish-at-peak uploads as private with a YouTube publishAt time set
-  to the next peak window for the niche (src/scheduler.py). YouTube then
-  publishes the video at that time. This is the daily peak-time flow:
-  render in the morning, publish at peak, one video per day. Peak times
-  are general audience windows, NOT a guarantee of popularity.
-- --dry-run prints exactly what WOULD be uploaded and calls no API.
-- Real uploads are refused unless UPLOAD_ENABLED=true in the environment.
-- Requires client_secrets.json (YouTube Data API OAuth client) on first
-  run; the token is then stored in token.json (gitignored, never commit).
-
-Never run this in CI without explicitly setting UPLOAD_ENABLED=true.
+Deep Scan intentionally disables public and scheduled-public uploads.
+Manual unlisted uploads require HUMAN_REVIEW_APPROVED=true and
+UPLOAD_ENABLED=true. Final public publication must happen manually in
+YouTube Studio after the reviewer checks the evidence ledger and queue.
+--dry-run performs no network operation.
 """
 
 import argparse
+import hashlib
 import json
 import os
 import sys
-from datetime import timezone
+import time
+from datetime import datetime, timezone
 
-try:
-    from src.config import load_config
-    from src.scheduler import next_peak_window
-except ImportError:
-    from config import load_config
-    from scheduler import next_peak_window
+# Upload state: fingerprints of completed uploads, so a retry never
+# creates a duplicate video. Written atomically, owner-only (0600).
+DEFAULT_UPLOAD_STATE_PATH = "data/upload_state.json"
+UPLOAD_STATE_SCHEMA_VERSION = 1
+# Resumable-upload retries: a transient 5xx / 429 / network error
+# resumes the same upload; a non-retryable 4xx fails fast.
+_MAX_UPLOAD_ATTEMPTS = 3
+_RETRYABLE_HTTP_STATUSES = frozenset({408, 429, 500, 502, 503, 504})
+
+
+def upload_fingerprint(video, title, description):
+    """Stable fingerprint of one upload: file bytes + title + description.
+
+    The same video file uploaded with a different title/description is
+    a different upload (a new video), while an exact retry of the same
+    upload has the same fingerprint and must not create a duplicate.
+    """
+    digest = hashlib.sha256()
+    with open(video, "rb") as fh:
+        for chunk in iter(lambda: fh.read(1024 * 1024), b""):
+            digest.update(chunk)
+    digest.update(b"\0")
+    digest.update(title.encode("utf-8"))
+    digest.update(b"\0")
+    digest.update((description or "").encode("utf-8"))
+    return digest.hexdigest()
+
+
+def load_upload_state(path=DEFAULT_UPLOAD_STATE_PATH):
+    """Load the upload-state file; a missing or corrupt file is an
+    empty state (uploads proceed normally — state is a dedup aid,
+    never a gate that can block a legitimate upload)."""
+    try:
+        with open(path, encoding="utf-8") as fh:
+            data = json.load(fh)
+        if (data.get("schema_version") == UPLOAD_STATE_SCHEMA_VERSION
+                and isinstance(data.get("uploads"), dict)):
+            return data
+    except (OSError, ValueError):
+        pass
+    return {"schema_version": UPLOAD_STATE_SCHEMA_VERSION, "uploads": {}}
+
+
+def _save_upload_state(state, path=DEFAULT_UPLOAD_STATE_PATH):
+    os.makedirs(os.path.dirname(path) or ".", exist_ok=True)
+    tmp = path + ".tmp"
+    with open(tmp, "w", encoding="utf-8") as fh:
+        json.dump(state, fh, indent=2)
+        fh.flush()
+        os.fsync(fh.fileno())
+    os.replace(tmp, path)
+    os.chmod(path, 0o600)
+
+
+def find_completed_upload(state, fingerprint):
+    """Video id already uploaded for this fingerprint, or None."""
+    entry = state.get("uploads", {}).get(fingerprint)
+    if isinstance(entry, dict) and entry.get("video_id"):
+        return entry["video_id"]
+    return None
+
+
+def record_completed_upload(state, fingerprint, video_id, video, title,
+                            path=DEFAULT_UPLOAD_STATE_PATH):
+    state.setdefault("uploads", {})[fingerprint] = {
+        "video_id": video_id, "video": video, "title": title,
+        "recorded_at": datetime.now(timezone.utc).isoformat()}
+    _save_upload_state(state, path)
+
+
+def _is_retryable_upload_error(exc):
+    """True for transient failures worth resuming: network errors
+    (no HTTP status attached) and HTTP 408/429/5xx. A 4xx from the
+    API (bad title, bad metadata) will fail the same way on retry,
+    so it fails fast instead of burning attempts."""
+    resp = getattr(exc, "resp", None)
+    status = getattr(resp, "status", None) if resp is not None else None
+    if status is None:
+        return True
+    try:
+        return int(status) in _RETRYABLE_HTTP_STATUSES
+    except (TypeError, ValueError):
+        return True
+
+
+def resumable_upload(request, max_attempts=_MAX_UPLOAD_ATTEMPTS,
+                     sleep=time.sleep):
+    """Drive a googleapiclient resumable insert request to completion.
+
+    Uses next_chunk() (not execute()) so a transient failure resumes
+    the same server-side upload instead of restarting from scratch:
+    the request object keeps its upload state and the next call
+    continues where the server left off. Returns the response dict
+    (with the video "id") once the upload completes.
+    """
+    last_exc = None
+    for attempt in range(1, max_attempts + 1):
+        try:
+            _status, response = request.next_chunk()
+            if response is not None:
+                return response
+            last_exc = RuntimeError(
+                "resumable upload returned no progress and no response")
+        except Exception as exc:  # transient or API error; see below
+            last_exc = exc
+            if not _is_retryable_upload_error(exc):
+                raise RuntimeError(
+                    "resumable upload failed (not retryable): "
+                    f"{exc}") from exc
+        if attempt < max_attempts:
+            print(f"Upload attempt {attempt} failed ({last_exc}); "
+                  f"resuming upload (attempt {attempt + 1}/"
+                  f"{max_attempts})...", file=sys.stderr)
+            sleep(min(30, 2 ** attempt))
+    raise RuntimeError(
+        f"resumable upload failed after {max_attempts} attempt(s): "
+        f"{last_exc}")
 
 
 def plan(video, title, description, privacy, publish_at=None):
-    out = {"video": video, "title": title, "description": description,
-           "privacyStatus": privacy, "categoryId": "27"}
+    # Defense in depth: plan() must enforce the same policy as
+    # upload() — unlisted only, never scheduled — so no caller can
+    # build a public/scheduled plan through this helper.
+    if privacy != "unlisted":
+        raise ValueError(
+            "Only unlisted uploads are permitted: privacy={!r} was "
+            "supplied but this pipeline never uploads public videos. "
+            "Upload unlisted and publish manually in YouTube Studio."
+            .format(privacy))
+    # Scheduled publishing is disabled: reject publish_at loudly
+    # instead of silently ignoring it (or scheduling it).
     if publish_at:
-        out["publishAt"] = publish_at
-    return out
+        raise ValueError(
+            "Scheduled publishing is disabled: publish_at={!r} was "
+            "supplied but this pipeline never schedules a publish. "
+            "Upload unlisted and publish manually in YouTube Studio."
+            .format(publish_at))
+    return {"video": video, "title": title, "description": description,
+            "privacyStatus": privacy, "categoryId": "27"}
 
 
-def upload(video, title, description, privacy, publish_at=None, tags=None):
+def _save_token(creds, path="token.json"):
+    """Write refreshed OAuth credentials with owner-only permissions.
+
+    A freshly written token.json must be mode 600: the plain open()
+    write used to leave it at umask-default permissions.
+    """
+    with open(path, "w", encoding="utf-8") as fh:
+        fh.write(creds.to_json())
+    os.chmod(path, 0o600)
+
+
+def upload(video, title, description, privacy, publish_at=None, tags=None,
+           state_path=None, max_upload_attempts=_MAX_UPLOAD_ATTEMPTS):
+    # Defense in depth: callers cannot bypass the CLI publishing policy.
+    if privacy != "unlisted" or publish_at:
+        raise ValueError("Only unlisted, unscheduled uploads are permitted.")
+    if os.environ.get("HUMAN_REVIEW_APPROVED", "") != "true":
+        raise PermissionError("Human review approval is required before upload.")
+    if os.environ.get("UPLOAD_ENABLED", "") != "true":
+        raise PermissionError("UPLOAD_ENABLED must be true before upload.")
+    # Idempotency: a retry of an upload that already completed returns
+    # the existing video id WITHOUT calling the API again, so a
+    # retried run can never create a duplicate video.
+    state_path = state_path or DEFAULT_UPLOAD_STATE_PATH
+    fingerprint = upload_fingerprint(video, title, description)
+    state = load_upload_state(state_path)
+    existing = find_completed_upload(state, fingerprint)
+    if existing:
+        print(f"Upload already completed for this video "
+              f"(fingerprint {fingerprint[:12]}...): video id {existing} "
+              f"— skipping re-upload.")
+        return existing
     try:
         from google_auth_oauthlib.flow import InstalledAppFlow
         from google.auth.transport.requests import Request
@@ -66,16 +208,9 @@ def upload(video, title, description, privacy, publish_at=None, tags=None):
         else:
             flow = InstalledAppFlow.from_client_secrets_file("client_secrets.json", scopes)
             creds = flow.run_local_server(port=0)
-        with open("token.json", "w", encoding="utf-8") as fh:
-            fh.write(creds.to_json())
+        _save_token(creds)
     youtube = build("youtube", "v3", credentials=creds)
     status = {"privacyStatus": privacy}
-    if publish_at:
-        # Scheduled publishing requires private + publishAt; YouTube
-        # flips it public at publishAt. Never combine publishAt with
-        # an immediate public status — the API rejects that.
-        status["privacyStatus"] = "private"
-        status["publishAt"] = publish_at
     snippet = {"title": title, "description": description, "categoryId": "27"}
     if tags:
         snippet["tags"] = tags
@@ -83,8 +218,13 @@ def upload(video, title, description, privacy, publish_at=None, tags=None):
     request = youtube.videos().insert(
         part="snippet,status", body=body,
         media_body=MediaFileUpload(video, chunksize=-1, resumable=True))
-    response = request.execute()
+    # Resumable + retried: a transient failure resumes this same
+    # upload instead of restarting it, and the completed upload is
+    # recorded so a later retry returns the same video id.
+    response = resumable_upload(request, max_attempts=max_upload_attempts)
     video_id = response.get("id")
+    record_completed_upload(state, fingerprint, video_id, video, title,
+                            state_path)
     print(f"Uploaded video id: {video_id}")
     print(f"https://www.youtube.com/watch?v={video_id}")
     return video_id
@@ -99,47 +239,42 @@ def main(argv=None):
                         help="Comma-separated tags for the video snippet.")
     parser.add_argument("--public", action="store_true")
     parser.add_argument("--auto-public", action="store_true",
-                        help="Publish publicly immediately (OFF by default). "
+                        help="Rejected: public publishing is disabled; publish manually in YouTube Studio. "
                              "WARNING: full auto-public risks factual/taste "
                              "mistakes QA cannot catch — QA catches technical "
                              "mistakes only. Review data/review_queue.md first.")
     parser.add_argument("--dry-run", action="store_true")
     parser.add_argument("--publish-at-peak", action="store_true",
-                        help="Upload private with publishAt = next peak window for --niche.")
+                        help="Rejected: scheduled public publishing is disabled.")
     parser.add_argument("--publish-at", default="",
-                        help="Explicit ISO publishAt timestamp (overrides --publish-at-peak).")
+                        help="Rejected: scheduled public publishing is disabled.")
     parser.add_argument("--niche", default="")
+    parser.add_argument("--upload-state", default="",
+                        help="Path to the upload-state file used for "
+                             "retry idempotency (default: "
+                             "data/upload_state.json).")
     parser.add_argument("--format", default="", choices=["", "short", "long"],
                         help="Use this format's peak window for --publish-at-peak.")
-    parser.add_argument("--config", default="config.yaml")
     args = parser.parse_args(argv)
-    privacy = "public" if (args.public or args.auto_public) else "unlisted"
-    publish_at = args.publish_at or None
-    if args.publish_at_peak and not publish_at:
-        config = load_config(args.config)
-        niche = args.niche or (config.get("niches") or [config.get("niche", "")])[0]
-        start, _end = next_peak_window(niche, config, fmt=args.format or None)
-        if start is None:
-            print("ERROR: --publish-at-peak requested but no peak window found "
-                  "in the next 14 days. Refusing to upload without a schedule.",
-                  file=sys.stderr)
-            return 1
-        publish_at = start.astimezone(timezone.utc).isoformat()
-        privacy = "private"  # required for scheduled publishing
-        print(f"Scheduled publishing: private now, publishAt {publish_at} "
-              f"(next peak window for niche '{niche}')")
+    # Deep Scan safety policy: no direct-public or scheduled-public publishing.
+    if args.public or args.auto_public or args.publish_at_peak or args.publish_at:
+        print("ERROR: Public or scheduled publishing is disabled. Review and publish manually in YouTube Studio.", file=sys.stderr)
+        return 1
     if args.dry_run:
         print("DRY RUN — nothing uploaded:")
-        print(json.dumps(plan(args.video, args.title, args.description, privacy,
-                              publish_at=publish_at), indent=2))
+        print(json.dumps(plan(args.video, args.title, args.description, "unlisted"), indent=2))
         return 0
+    if os.environ.get("HUMAN_REVIEW_APPROVED", "") != "true":
+        print("ERROR: Refusing upload: HUMAN_REVIEW_APPROVED must be set to true after reviewing the evidence ledger and review queue.", file=sys.stderr)
+        return 1
+    privacy = "unlisted"
     if os.environ.get("UPLOAD_ENABLED", "") != "true":
         print("ERROR: Refusing to upload: UPLOAD_ENABLED is not 'true'. "
               "Use --dry-run, or set UPLOAD_ENABLED=true explicitly.", file=sys.stderr)
         return 1
     tags = [t.strip() for t in args.tags.split(",") if t.strip()] or None
-    upload(args.video, args.title, args.description, privacy,
-           publish_at=publish_at, tags=tags)
+    upload(args.video, args.title, args.description, privacy, tags=tags,
+           state_path=args.upload_state or None)
     return 0
 
 

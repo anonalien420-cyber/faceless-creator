@@ -1,0 +1,128 @@
+{
+  "schema_version": 1,
+  "topic": "The 2,000-Year-Old Object That Shouldn't Exist",
+  "generated_at": "2026-11-15T20:17:10.901693+00:00",
+  "discovery_warning": "Record packet for the transcribed Antikythera ledger: sources below are already human-approved; this packet is a record, not a fresh discovery run.",
+  "sources": [
+    {
+      "source_id": "src_britannica",
+      "title": "Antikythera mechanism",
+      "url": "https://www.britannica.com/topic/Antikythera-mechanism",
+      "publication": "Encyclopaedia Britannica",
+      "publication_year": 2009,
+      "authors": [],
+      "provider": "Encyclopaedia Britannica",
+      "source_priority": "institutional_or_primary",
+      "review_status": "APPROVED",
+      "review_notes": "Checked 2026-11-15 against the live article (published 2009-02-19, updated 2026-09-17). Confirms: recovered 1901 from a trading ship that sank in the first half of the 1st century BCE near Antikythera; manufacture dated to 100 BCE, give or take 30 years; fragments contain 30 gear wheels; no other geared mechanism of such complexity until medieval cathedral clocks a millennium later; shoebox-sized case; Greek inscriptions indicating the astronomical/calendrical purpose; front dial Sun/Moon in the zodiac and half-silvered Moon-phase ball; back dials Metonic 235 lunations over 19 years, four-year Panhellenic Games dial, Saros 18.2-year eclipse cycle; inscriptions imply a possible planetary display but nearly all the relevant parts are missing. Does NOT mention Stais, the 1902 gear spotting, the 82-fragment count, the 223-tooth gear, or the 2005 X-ray CT work, so it is never the sole source for those claims.",
+      "review_decision": "PENDING"
+    },
+    {
+      "source_id": "src_nature2006",
+      "title": "Decoding the ancient Greek astronomical calculator known as the Antikythera Mechanism",
+      "url": "https://doi.org/10.1038/nature05357",
+      "publication": "Nature",
+      "publication_year": 2006,
+      "authors": [
+        "T. Freeth",
+        "Y. Bitsakis",
+        "X. Moussas",
+        "J. H. Seiradakis",
+        "A. Tselikas",
+        "H. Mangou",
+        "M. Zafeiropoulou",
+        "R. Hadland",
+        "D. Bate",
+        "A. Ramsey",
+        "M. Allen",
+        "A. Crawley",
+        "P. Hockley",
+        "T. Malzbender",
+        "D. Gelb",
+        "W. Ambrisco",
+        "M. G. Edmunds"
+      ],
+      "provider": "Nature",
+      "source_priority": "academic_publication",
+      "review_status": "APPROVED",
+      "review_notes": "Freeth et al., Nature 444, 587-591 (2006), published 30 November 2006. Checked 2026-11-15. Confirms: unique Greek geared device constructed around the end of the second century BC; discovered in 1901 in a Roman shipwreck; technically more complex than any known device for at least a millennium afterwards; high-resolution X-ray tomography of the surviving fragments, doubling the number of deciphered inscriptions; mechanism predicted lunar and solar eclipses on the basis of Babylonian arithmetic-progression cycles; 223 is the Saros eclipse cycle; lettering dated to the second half of the second century BC, implying construction 150-100 BC; Figure 1 caption: the 82 fragments that survive in the National Archaeological Museum in Athens; case of uncertain overall size 315 x 190 x 100 mm.",
+      "review_decision": "PENDING"
+    },
+    {
+      "source_id": "src_scirep2021",
+      "title": "A Model of the Cosmos in the ancient Greek Antikythera Mechanism",
+      "url": "https://doi.org/10.1038/s41598-021-84310-w",
+      "publication": "Scientific Reports",
+      "publication_year": 2021,
+      "authors": [
+        "Tony Freeth",
+        "David Higgon",
+        "Aris Dacanalis",
+        "Lindsay MacDonald",
+        "Myrto Georgakopoulou",
+        "Adam Wojcik"
+      ],
+      "provider": "Nature",
+      "source_priority": "academic_publication",
+      "review_status": "APPROVED",
+      "review_notes": "Freeth et al., Scientific Reports 11, 5821 (2021), published 12 March 2021, UCL Antikythera Research Team. Checked 2026-11-15. Confirms: mechanism challenged researchers since its discovery in 1901; now split into 82 fragments, only a third of the original survives, including 30 corroded bronze gearwheels; Microfocus X-ray Computed Tomography (X-ray CT) in 2005 of the 82 fragments; the front remained deeply controversial due to loss of physical evidence; the paper builds a new model of a cosmos display (nine concentric rings: Moon, Nodes, Mercury, Venus, Sun, Mars, Jupiter, Saturn, Date) that matches the surviving evidence. It is a model, not a recovered object, which is why the cosmos-display claim is tiered DEBATED.",
+      "review_decision": "PENDING"
+    },
+    {
+      "source_id": "src_nam",
+      "title": "Collection of Metalwork",
+      "url": "https://www.namuseum.gr/en/permanent_exhibition/erga-metallotechnias/",
+      "publication": "National Archaeological Museum, Athens - Collection of Metalwork",
+      "publication_year": null,
+      "authors": [],
+      "provider": "National Archaeological Museum, Athens",
+      "source_priority": "institutional_or_primary",
+      "review_status": "APPROVED",
+      "review_notes": "The museum's own collection page, checked 2026-11-15. Confirms the Antikythera Mechanism (inventory X15087) is held in the Collection of Metalwork, Room 38, among the finds from the Shipwreck of Antikythera, and calls it the most significant scientific instrument of antiquity. Used here as the archival anchor that the surviving fragments are held at the National Archaeological Museum in Athens. It does not state dates, gear counts, or the 1902 spotting, so it is never the sole source for those claims.",
+      "review_decision": "PENDING"
+    },
+    {
+      "source_id": "src_thesea",
+      "title": "Antikythera Mechanism Discovery: How It Was Decoded",
+      "url": "https://thesea.org/antikythera-mechanism-one-amazing-discovery/",
+      "publication": "The Sea",
+      "publication_year": null,
+      "authors": [],
+      "provider": "thesea.org",
+      "source_priority": "scholarly_candidate",
+      "review_status": "APPROVED",
+      "review_notes": "Secondary explainer, checked 2026-11-15. Used ONLY for the two facts none of the four description sources state: (1) on 17 May 1902 the museum's director, archaeologist Valerios Stais, saw a gearwheel embedded in a broken piece of the corroded lump; (2) the wooden case is estimated at about 34 by 18 by 9 centimetres, roughly the size of a large shoebox. It is a secondary source, so the claims it supports are flagged as single-secondary-source KNOWN claims and carry this note rather than a stronger citation.",
+      "review_decision": "PENDING"
+    },
+    {
+      "source_id": "src_heritage2021",
+      "title": "The Antikythera Mechanism: The Prove of the Accuracy of the Astronomical Calculations Based on It",
+      "url": "https://doi.org/10.3390/heritage4040211",
+      "publication": "Heritage",
+      "publication_year": 2021,
+      "authors": [
+        "Kyriakos Efstathiou",
+        "Marianna Efstathiou",
+        "Alexandros Basiakoulis",
+        "Nicholas Kokkinos"
+      ],
+      "provider": "MDPI",
+      "source_priority": "academic_publication",
+      "review_status": "APPROVED",
+      "review_notes": "Efstathiou et al., Heritage 4(4), 3848-3878 (2021), DOI 10.3390/heritage4040211. Checked 2026-11-15. Used ONLY for the inscription character count: new inscriptions unread for more than 2000 years were revealed mainly with X-ray micro-focusing tomography, and approximately 3500 letters and symbols have been deciphered.",
+      "review_decision": "PENDING"
+    }
+  ],
+  "extracted_claims": [],
+  "claim_review_template": {
+    "claim_id": "",
+    "topic": "The 2,000-Year-Old Object That Shouldn't Exist",
+    "text": "",
+    "status": "UNKNOWN",
+    "source_ids": [],
+    "reviewed_by": "",
+    "reviewed_at": "",
+    "include_in_script": false,
+    "reviewer_notes": "Write one precise, checkable statement. Do not infer facts from a source title or search snippet."
+  }
+}

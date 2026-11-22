@@ -1,0 +1,297 @@
+{
+  "topic": "The 2,000-Year-Old Object That Shouldn't Exist",
+  "title": "A 2,000-Year-Old Machine That Predicted Eclipses",
+  "overall": "pass",
+  "variations": [
+    {
+      "variant": "a",
+      "path": "productions/antikythera-short-2026-11-15/DeepScan-Antikythera-Short-2026-11-15-thumb-16x9-a.png",
+      "headline": "PREDICTED ECLIPSES",
+      "claim_id": "antikythera_01",
+      "tier": "KNOWN",
+      "angle": "The machine itself: a geared bronze computer that predicted eclipses.",
+      "focal_hint": "gears",
+      "qa_checks": [
+        {
+          "check": "thumbnail_resolution",
+          "status": "pass",
+          "detail": "1280x720 (want 1280x720)"
+        },
+        {
+          "check": "thumbnail_aspect_ratio",
+          "status": "pass",
+          "detail": "aspect 1.778 (want 1.778)"
+        },
+        {
+          "check": "thumbnail_headline_word_count",
+          "status": "pass",
+          "detail": "2 word(s): 'PREDICTED ECLIPSES'"
+        },
+        {
+          "check": "thumbnail_headline_spelling",
+          "status": "pass",
+          "detail": "drawn headline == intended 'PREDICTED ECLIPSES'"
+        },
+        {
+          "check": "thumbnail_safe_margins",
+          "status": "pass",
+          "detail": "headline bbox [48, 418, 742, 664], wordmark bbox [48, 48, 350, 95]"
+        },
+        {
+          "check": "thumbnail_badge_zone_clear",
+          "status": "pass",
+          "detail": "headline does not enter the bottom-right badge zone"
+        },
+        {
+          "check": "thumbnail_mobile_text_size",
+          "status": "pass",
+          "detail": "headline cap height at 320px wide: 19.8px (want >= 10px)"
+        },
+        {
+          "check": "thumbnail_mobile_readability",
+          "status": "pass",
+          "detail": "headline-region stddev 99.0, bright-pixel fraction 0.25 at 320px wide"
+        },
+        {
+          "check": "thumbnail_branding_gold_accent",
+          "status": "pass",
+          "detail": "gold-pixel fraction in accent-rule area: 0.59"
+        },
+        {
+          "check": "thumbnail_branding_wordmark",
+          "status": "pass",
+          "detail": "gold-pixel fraction in wordmark area: 0.25"
+        },
+        {
+          "check": "thumbnail_claims_match_ledger",
+          "status": "pass",
+          "detail": "headline matches the grounding claim"
+        }
+      ],
+      "qa_overall": "pass",
+      "spec": {
+        "path": "productions/antikythera-short-2026-11-15/DeepScan-Antikythera-Short-2026-11-15-thumb-16x9-a.png",
+        "headline": "PREDICTED ECLIPSES",
+        "headline_font_size": 110,
+        "headline_lines": [
+          "PREDICTED",
+          "ECLIPSES"
+        ],
+        "headline_bbox": [
+          48,
+          418,
+          742,
+          664
+        ],
+        "wordmark_bbox": [
+          48,
+          48,
+          350,
+          95
+        ],
+        "accent": [
+          212,
+          175,
+          55
+        ],
+        "size": [
+          1280,
+          720
+        ]
+      }
+    },
+    {
+      "variant": "b",
+      "path": "productions/antikythera-short-2026-11-15/DeepScan-Antikythera-Short-2026-11-15-thumb-16x9-b.png",
+      "headline": "NOTHING FOR 1,400 YEARS",
+      "claim_id": "antikythera_09",
+      "tier": "KNOWN",
+      "angle": "The time gap: nothing this complex again for ~1,400 years.",
+      "focal_hint": "time",
+      "qa_checks": [
+        {
+          "check": "thumbnail_resolution",
+          "status": "pass",
+          "detail": "1280x720 (want 1280x720)"
+        },
+        {
+          "check": "thumbnail_aspect_ratio",
+          "status": "pass",
+          "detail": "aspect 1.778 (want 1.778)"
+        },
+        {
+          "check": "thumbnail_headline_word_count",
+          "status": "pass",
+          "detail": "4 word(s): 'NOTHING FOR 1,400 YEARS'"
+        },
+        {
+          "check": "thumbnail_headline_spelling",
+          "status": "pass",
+          "detail": "drawn headline == intended 'NOTHING FOR 1,400 YEARS'"
+        },
+        {
+          "check": "thumbnail_safe_margins",
+          "status": "pass",
+          "detail": "headline bbox [48, 418, 915, 664], wordmark bbox [48, 48, 350, 95]"
+        },
+        {
+          "check": "thumbnail_badge_zone_clear",
+          "status": "pass",
+          "detail": "headline does not enter the bottom-right badge zone"
+        },
+        {
+          "check": "thumbnail_mobile_text_size",
+          "status": "pass",
+          "detail": "headline cap height at 320px wide: 19.8px (want >= 10px)"
+        },
+        {
+          "check": "thumbnail_mobile_readability",
+          "status": "pass",
+          "detail": "headline-region stddev 101.9, bright-pixel fraction 0.25 at 320px wide"
+        },
+        {
+          "check": "thumbnail_branding_gold_accent",
+          "status": "pass",
+          "detail": "gold-pixel fraction in accent-rule area: 0.58"
+        },
+        {
+          "check": "thumbnail_branding_wordmark",
+          "status": "pass",
+          "detail": "gold-pixel fraction in wordmark area: 0.25"
+        },
+        {
+          "check": "thumbnail_claims_match_ledger",
+          "status": "pass",
+          "detail": "headline matches the grounding claim"
+        }
+      ],
+      "qa_overall": "pass",
+      "spec": {
+        "path": "productions/antikythera-short-2026-11-15/DeepScan-Antikythera-Short-2026-11-15-thumb-16x9-b.png",
+        "headline": "NOTHING FOR 1,400 YEARS",
+        "headline_font_size": 110,
+        "headline_lines": [
+          "NOTHING FOR",
+          "1,400 YEARS"
+        ],
+        "headline_bbox": [
+          48,
+          418,
+          915,
+          664
+        ],
+        "wordmark_bbox": [
+          48,
+          48,
+          350,
+          95
+        ],
+        "accent": [
+          212,
+          175,
+          55
+        ],
+        "size": [
+          1280,
+          720
+        ]
+      }
+    },
+    {
+      "variant": "c",
+      "path": "productions/antikythera-short-2026-11-15/DeepScan-Antikythera-Short-2026-11-15-thumb-16x9-c.png",
+      "headline": "WHO MADE IT?",
+      "claim_id": "antikythera_10",
+      "tier": "UNKNOWN",
+      "angle": "The open question: no inscription names the builder.",
+      "focal_hint": "maker",
+      "qa_checks": [
+        {
+          "check": "thumbnail_resolution",
+          "status": "pass",
+          "detail": "1280x720 (want 1280x720)"
+        },
+        {
+          "check": "thumbnail_aspect_ratio",
+          "status": "pass",
+          "detail": "aspect 1.778 (want 1.778)"
+        },
+        {
+          "check": "thumbnail_headline_word_count",
+          "status": "pass",
+          "detail": "3 word(s): 'WHO MADE IT?'"
+        },
+        {
+          "check": "thumbnail_headline_spelling",
+          "status": "pass",
+          "detail": "drawn headline == intended 'WHO MADE IT?'"
+        },
+        {
+          "check": "thumbnail_safe_margins",
+          "status": "pass",
+          "detail": "headline bbox [48, 541, 972, 664], wordmark bbox [48, 48, 350, 95]"
+        },
+        {
+          "check": "thumbnail_badge_zone_clear",
+          "status": "pass",
+          "detail": "headline does not enter the bottom-right badge zone"
+        },
+        {
+          "check": "thumbnail_mobile_text_size",
+          "status": "pass",
+          "detail": "headline cap height at 320px wide: 19.8px (want >= 10px)"
+        },
+        {
+          "check": "thumbnail_mobile_readability",
+          "status": "pass",
+          "detail": "headline-region stddev 99.8, bright-pixel fraction 0.26 at 320px wide"
+        },
+        {
+          "check": "thumbnail_branding_gold_accent",
+          "status": "pass",
+          "detail": "gold-pixel fraction in accent-rule area: 0.58"
+        },
+        {
+          "check": "thumbnail_branding_wordmark",
+          "status": "pass",
+          "detail": "gold-pixel fraction in wordmark area: 0.25"
+        },
+        {
+          "check": "thumbnail_claims_match_ledger",
+          "status": "pass",
+          "detail": "headline matches the grounding claim"
+        }
+      ],
+      "qa_overall": "pass",
+      "spec": {
+        "path": "productions/antikythera-short-2026-11-15/DeepScan-Antikythera-Short-2026-11-15-thumb-16x9-c.png",
+        "headline": "WHO MADE IT?",
+        "headline_font_size": 110,
+        "headline_lines": [
+          "WHO MADE IT?"
+        ],
+        "headline_bbox": [
+          48,
+          541,
+          972,
+          664
+        ],
+        "wordmark_bbox": [
+          48,
+          48,
+          350,
+          95
+        ],
+        "accent": [
+          212,
+          175,
+          55
+        ],
+        "size": [
+          1280,
+          720
+        ]
+      }
+    }
+  ]
+}

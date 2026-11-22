@@ -1,0 +1,914 @@
+[
+ {
+  "word": "A",
+  "start": 0.0,
+  "end": 0.48,
+  "probability": 0.5448551177978516
+ },
+ {
+  "word": "geared",
+  "start": 0.48,
+  "end": 0.76,
+  "probability": 0.31945568323135376
+ },
+ {
+  "word": "bronze",
+  "start": 0.76,
+  "end": 1.12,
+  "probability": 0.9772192239761353
+ },
+ {
+  "word": "machine",
+  "start": 1.12,
+  "end": 1.6,
+  "probability": 0.9890806674957275
+ },
+ {
+  "word": "that",
+  "start": 1.6,
+  "end": 1.88,
+  "probability": 0.964779794216156
+ },
+ {
+  "word": "predicted",
+  "start": 1.88,
+  "end": 2.2,
+  "probability": 0.9978556036949158
+ },
+ {
+  "word": "eclipses",
+  "start": 2.2,
+  "end": 3.02,
+  "probability": 0.9536171555519104
+ },
+ {
+  "word": "existed",
+  "start": 3.02,
+  "end": 3.6,
+  "probability": 0.9645163416862488
+ },
+ {
+  "word": "in",
+  "start": 3.6,
+  "end": 3.86,
+  "probability": 0.9977947473526001
+ },
+ {
+  "word": "the",
+  "start": 3.86,
+  "end": 4.0,
+  "probability": 0.9910842180252075
+ },
+ {
+  "word": "ancient",
+  "start": 4.0,
+  "end": 4.2,
+  "probability": 0.9596162438392639
+ },
+ {
+  "word": "world",
+  "start": 4.2,
+  "end": 4.6,
+  "probability": 0.9931601285934448
+ },
+ {
+  "word": "about",
+  "start": 4.6,
+  "end": 4.94,
+  "probability": 0.9880908727645874
+ },
+ {
+  "word": "2",
+  "start": 4.94,
+  "end": 5.22,
+  "probability": 0.7014230489730835
+ },
+ {
+  "word": ",000",
+  "start": 5.22,
+  "end": 5.58,
+  "probability": 0.9943081140518188
+ },
+ {
+  "word": "years",
+  "start": 5.58,
+  "end": 5.88,
+  "probability": 0.994051992893219
+ },
+ {
+  "word": "ago,",
+  "start": 5.88,
+  "end": 6.52,
+  "probability": 0.9997612833976746
+ },
+ {
+  "word": "sponge",
+  "start": 6.96,
+  "end": 7.16,
+  "probability": 0.8644338846206665
+ },
+ {
+  "word": "divers",
+  "start": 7.16,
+  "end": 7.58,
+  "probability": 0.709154486656189
+ },
+ {
+  "word": "found",
+  "start": 7.58,
+  "end": 8.06,
+  "probability": 0.9924310445785522
+ },
+ {
+  "word": "the",
+  "start": 8.06,
+  "end": 8.28,
+  "probability": 0.9958783388137817
+ },
+ {
+  "word": "wreck",
+  "start": 8.28,
+  "end": 8.44,
+  "probability": 0.4804448187351227
+ },
+ {
+  "word": "off",
+  "start": 8.44,
+  "end": 8.72,
+  "probability": 0.8421617150306702
+ },
+ {
+  "word": "Antikithra",
+  "start": 8.72,
+  "end": 9.34,
+  "probability": 0.5402384474873543
+ },
+ {
+  "word": "in",
+  "start": 9.34,
+  "end": 9.64,
+  "probability": 0.9915549159049988
+ },
+ {
+  "word": "1900,",
+  "start": 9.64,
+  "end": 10.42,
+  "probability": 0.9867203235626221
+ },
+ {
+  "word": "recovered",
+  "start": 11.12,
+  "end": 11.34,
+  "probability": 0.9851981997489929
+ },
+ {
+  "word": "the",
+  "start": 11.34,
+  "end": 11.58,
+  "probability": 0.9979478716850281
+ },
+ {
+  "word": "corroded",
+  "start": 11.58,
+  "end": 11.98,
+  "probability": 0.7473775744438171
+ },
+ {
+  "word": "lump",
+  "start": 11.98,
+  "end": 12.22,
+  "probability": 0.9370673298835754
+ },
+ {
+  "word": "in",
+  "start": 12.22,
+  "end": 12.48,
+  "probability": 0.9983672499656677
+ },
+ {
+  "word": "1901,",
+  "start": 12.48,
+  "end": 13.22,
+  "probability": 0.9867831170558929
+ },
+ {
+  "word": "and",
+  "start": 13.78,
+  "end": 13.94,
+  "probability": 0.9961743354797363
+ },
+ {
+  "word": "its",
+  "start": 13.94,
+  "end": 14.14,
+  "probability": 0.9837622046470642
+ },
+ {
+  "word": "fragments",
+  "start": 14.14,
+  "end": 14.48,
+  "probability": 0.9965534210205078
+ },
+ {
+  "word": "are",
+  "start": 14.48,
+  "end": 14.8,
+  "probability": 0.9965274930000305
+ },
+ {
+  "word": "now",
+  "start": 14.8,
+  "end": 14.94,
+  "probability": 0.9995179176330566
+ },
+ {
+  "word": "held",
+  "start": 14.94,
+  "end": 15.16,
+  "probability": 0.9967197775840759
+ },
+ {
+  "word": "at",
+  "start": 15.16,
+  "end": 15.36,
+  "probability": 0.995161235332489
+ },
+ {
+  "word": "the",
+  "start": 15.36,
+  "end": 15.5,
+  "probability": 0.9953811168670654
+ },
+ {
+  "word": "National",
+  "start": 15.5,
+  "end": 15.84,
+  "probability": 0.8994328379631042
+ },
+ {
+  "word": "Archaeological",
+  "start": 15.84,
+  "end": 16.6,
+  "probability": 0.8796037236849467
+ },
+ {
+  "word": "Museum",
+  "start": 16.6,
+  "end": 17.06,
+  "probability": 0.9966740608215332
+ },
+ {
+  "word": "in",
+  "start": 17.06,
+  "end": 17.42,
+  "probability": 0.9951841235160828
+ },
+ {
+  "word": "Athens.",
+  "start": 17.42,
+  "end": 17.88,
+  "probability": 0.9927841424942017
+ },
+ {
+  "word": "In",
+  "start": 18.52,
+  "end": 18.66,
+  "probability": 0.99506676197052
+ },
+ {
+  "word": "1902,",
+  "start": 18.66,
+  "end": 19.54,
+  "probability": 0.9954065680503845
+ },
+ {
+  "word": "a",
+  "start": 19.9,
+  "end": 20.12,
+  "probability": 0.9724332690238953
+ },
+ {
+  "word": "gear",
+  "start": 20.12,
+  "end": 20.32,
+  "probability": 0.9754045605659485
+ },
+ {
+  "word": "was",
+  "start": 20.32,
+  "end": 20.58,
+  "probability": 0.9976552724838257
+ },
+ {
+  "word": "spotted",
+  "start": 20.58,
+  "end": 20.88,
+  "probability": 0.9710313677787781
+ },
+ {
+  "word": "inside",
+  "start": 20.88,
+  "end": 21.42,
+  "probability": 0.9969407320022583
+ },
+ {
+  "word": "the",
+  "start": 21.42,
+  "end": 21.64,
+  "probability": 0.99782794713974
+ },
+ {
+  "word": "corroded",
+  "start": 21.64,
+  "end": 22.02,
+  "probability": 0.9895975589752197
+ },
+ {
+  "word": "lump,",
+  "start": 22.02,
+  "end": 22.46,
+  "probability": 0.993881106376648
+ },
+ {
+  "word": "and",
+  "start": 22.74,
+  "end": 23.06,
+  "probability": 0.9984822869300842
+ },
+ {
+  "word": "the",
+  "start": 23.06,
+  "end": 23.18,
+  "probability": 0.9969490170478821
+ },
+ {
+  "word": "museum's",
+  "start": 23.18,
+  "end": 23.76,
+  "probability": 0.8244006335735321
+ },
+ {
+  "word": "Valirio's",
+  "start": 23.76,
+  "end": 24.62,
+  "probability": 0.49586139619350433
+ },
+ {
+  "word": "Stise",
+  "start": 24.62,
+  "end": 24.9,
+  "probability": 0.286152683198452
+ },
+ {
+  "word": "studied",
+  "start": 24.9,
+  "end": 25.22,
+  "probability": 0.5485548377037048
+ },
+ {
+  "word": "it.",
+  "start": 25.22,
+  "end": 25.64,
+  "probability": 0.9959625601768494
+ },
+ {
+  "word": "What",
+  "start": 26.2,
+  "end": 26.56,
+  "probability": 0.7819479703903198
+ },
+ {
+  "word": "survives",
+  "start": 26.56,
+  "end": 26.96,
+  "probability": 0.9817969799041748
+ },
+ {
+  "word": "is",
+  "start": 26.96,
+  "end": 27.36,
+  "probability": 0.9894232153892517
+ },
+ {
+  "word": "82",
+  "start": 27.36,
+  "end": 27.72,
+  "probability": 0.9329099655151367
+ },
+ {
+  "word": "fragments",
+  "start": 27.72,
+  "end": 28.28,
+  "probability": 0.9864533543586731
+ },
+ {
+  "word": "containing",
+  "start": 28.28,
+  "end": 28.86,
+  "probability": 0.9856533408164978
+ },
+ {
+  "word": "30",
+  "start": 28.86,
+  "end": 29.38,
+  "probability": 0.8597505688667297
+ },
+ {
+  "word": "bronze",
+  "start": 29.38,
+  "end": 29.72,
+  "probability": 0.8602755665779114
+ },
+ {
+  "word": "gear",
+  "start": 29.72,
+  "end": 30.04,
+  "probability": 0.9548105001449585
+ },
+ {
+  "word": "wheels.",
+  "start": 30.04,
+  "end": 30.6,
+  "probability": 0.9888656735420227
+ },
+ {
+  "word": "The",
+  "start": 31.1,
+  "end": 31.22,
+  "probability": 0.9918280839920044
+ },
+ {
+  "word": "mechanism",
+  "start": 31.22,
+  "end": 31.56,
+  "probability": 0.9627992510795593
+ },
+ {
+  "word": "was",
+  "start": 31.56,
+  "end": 31.92,
+  "probability": 0.998254120349884
+ },
+ {
+  "word": "built",
+  "start": 31.92,
+  "end": 32.12,
+  "probability": 0.9979889392852783
+ },
+ {
+  "word": "around",
+  "start": 32.12,
+  "end": 32.48,
+  "probability": 0.9982991814613342
+ },
+ {
+  "word": "100",
+  "start": 32.48,
+  "end": 32.92,
+  "probability": 0.9904413223266602
+ },
+ {
+  "word": "BCE,",
+  "start": 32.92,
+  "end": 33.64,
+  "probability": 0.9593438506126404
+ },
+ {
+  "word": "give",
+  "start": 34.32,
+  "end": 34.4,
+  "probability": 0.7820424437522888
+ },
+ {
+  "word": "or",
+  "start": 34.4,
+  "end": 34.54,
+  "probability": 0.9909213185310364
+ },
+ {
+  "word": "take",
+  "start": 34.54,
+  "end": 34.76,
+  "probability": 0.9965200424194336
+ },
+ {
+  "word": "30",
+  "start": 34.76,
+  "end": 35.14,
+  "probability": 0.951223611831665
+ },
+ {
+  "word": "years.",
+  "start": 35.14,
+  "end": 35.7,
+  "probability": 0.9947903156280518
+ },
+ {
+  "word": "Nothing",
+  "start": 36.08,
+  "end": 36.32,
+  "probability": 0.9938655495643616
+ },
+ {
+  "word": "comparably",
+  "start": 36.32,
+  "end": 36.84,
+  "probability": 0.5860068798065186
+ },
+ {
+  "word": "complex",
+  "start": 36.84,
+  "end": 37.26,
+  "probability": 0.7726248502731323
+ },
+ {
+  "word": "appears",
+  "start": 37.26,
+  "end": 37.56,
+  "probability": 0.9963083863258362
+ },
+ {
+  "word": "again",
+  "start": 37.56,
+  "end": 37.98,
+  "probability": 0.9840832352638245
+ },
+ {
+  "word": "for",
+  "start": 37.98,
+  "end": 38.2,
+  "probability": 0.9901307821273804
+ },
+ {
+  "word": "about",
+  "start": 38.2,
+  "end": 38.5,
+  "probability": 0.9944331049919128
+ },
+ {
+  "word": "1",
+  "start": 38.5,
+  "end": 38.7,
+  "probability": 0.7640507817268372
+ },
+ {
+  "word": ",400",
+  "start": 38.7,
+  "end": 39.36,
+  "probability": 0.9907288551330566
+ },
+ {
+  "word": "years,",
+  "start": 39.36,
+  "end": 40.24,
+  "probability": 0.9960572719573975
+ },
+ {
+  "word": "until",
+  "start": 40.6,
+  "end": 40.7,
+  "probability": 0.9933225512504578
+ },
+ {
+  "word": "the",
+  "start": 40.7,
+  "end": 40.94,
+  "probability": 0.9929924011230469
+ },
+ {
+  "word": "great",
+  "start": 40.94,
+  "end": 41.14,
+  "probability": 0.5041816234588623
+ },
+ {
+  "word": "clocks",
+  "start": 41.14,
+  "end": 41.36,
+  "probability": 0.8974061608314514
+ },
+ {
+  "word": "of",
+  "start": 41.36,
+  "end": 41.64,
+  "probability": 0.8150144815444946
+ },
+ {
+  "word": "medieval",
+  "start": 41.64,
+  "end": 42.0,
+  "probability": 0.8595489263534546
+ },
+ {
+  "word": "cathedrals.",
+  "start": 42.0,
+  "end": 42.76,
+  "probability": 0.9764581720034281
+ },
+ {
+  "word": "What",
+  "start": 43.28,
+  "end": 43.48,
+  "probability": 0.9943640232086182
+ },
+ {
+  "word": "remains",
+  "start": 43.48,
+  "end": 43.84,
+  "probability": 0.9965007305145264
+ },
+ {
+  "word": "unknown,",
+  "start": 43.84,
+  "end": 44.46,
+  "probability": 0.9879834651947021
+ },
+ {
+  "word": "no",
+  "start": 44.92,
+  "end": 45.18,
+  "probability": 0.9931743741035461
+ },
+ {
+  "word": "inscription",
+  "start": 45.18,
+  "end": 45.64,
+  "probability": 0.949854850769043
+ },
+ {
+  "word": "on",
+  "start": 45.64,
+  "end": 45.94,
+  "probability": 0.9987026453018188
+ },
+ {
+  "word": "the",
+  "start": 45.94,
+  "end": 46.06,
+  "probability": 0.99875807762146
+ },
+ {
+  "word": "mechanism",
+  "start": 46.06,
+  "end": 46.46,
+  "probability": 0.9979554414749146
+ },
+ {
+  "word": "names",
+  "start": 46.46,
+  "end": 46.94,
+  "probability": 0.9266536235809326
+ },
+ {
+  "word": "its",
+  "start": 46.94,
+  "end": 47.24,
+  "probability": 0.946351170539856
+ },
+ {
+  "word": "builder,",
+  "start": 47.24,
+  "end": 47.62,
+  "probability": 0.9684922099113464
+ },
+ {
+  "word": "and",
+  "start": 48.12,
+  "end": 48.36,
+  "probability": 0.874567985534668
+ },
+ {
+  "word": "no",
+  "start": 48.36,
+  "end": 48.56,
+  "probability": 0.9985370635986328
+ },
+ {
+  "word": "ancient",
+  "start": 48.56,
+  "end": 48.86,
+  "probability": 0.9923537969589233
+ },
+ {
+  "word": "text",
+  "start": 48.86,
+  "end": 49.38,
+  "probability": 0.9876839518547058
+ },
+ {
+  "word": "describes",
+  "start": 49.38,
+  "end": 49.88,
+  "probability": 0.9525150656700134
+ },
+ {
+  "word": "the",
+  "start": 49.88,
+  "end": 50.24,
+  "probability": 0.9987309575080872
+ },
+ {
+  "word": "workshop",
+  "start": 50.24,
+  "end": 50.5,
+  "probability": 0.978486955165863
+ },
+ {
+  "word": "that",
+  "start": 50.5,
+  "end": 50.84,
+  "probability": 0.9891218543052673
+ },
+ {
+  "word": "made",
+  "start": 50.84,
+  "end": 50.98,
+  "probability": 0.9955779314041138
+ },
+ {
+  "word": "it",
+  "start": 50.98,
+  "end": 51.34,
+  "probability": 0.9988009929656982
+ },
+ {
+  "word": "or",
+  "start": 51.34,
+  "end": 51.5,
+  "probability": 0.6976006031036377
+ },
+ {
+  "word": "the",
+  "start": 51.5,
+  "end": 51.66,
+  "probability": 0.9894846081733704
+ },
+ {
+  "word": "person",
+  "start": 51.66,
+  "end": 51.94,
+  "probability": 0.9990965127944946
+ },
+ {
+  "word": "who",
+  "start": 51.94,
+  "end": 52.2,
+  "probability": 0.9963171482086182
+ },
+ {
+  "word": "paid",
+  "start": 52.2,
+  "end": 52.42,
+  "probability": 0.9797168374061584
+ },
+ {
+  "word": "for",
+  "start": 52.42,
+  "end": 52.68,
+  "probability": 0.9996891021728516
+ },
+ {
+  "word": "it.",
+  "start": 52.68,
+  "end": 53.06,
+  "probability": 0.9994524121284485
+ },
+ {
+  "word": "The",
+  "start": 53.06,
+  "end": 53.88,
+  "probability": 0.8287822008132935
+ },
+ {
+  "word": "evidence",
+  "start": 53.88,
+  "end": 54.32,
+  "probability": 0.9952422380447388
+ },
+ {
+  "word": "is",
+  "start": 54.32,
+  "end": 54.68,
+  "probability": 0.9964215755462646
+ },
+ {
+  "word": "what",
+  "start": 54.68,
+  "end": 54.84,
+  "probability": 0.9959656000137329
+ },
+ {
+  "word": "we",
+  "start": 54.84,
+  "end": 55.08,
+  "probability": 0.9988736510276794
+ },
+ {
+  "word": "have.",
+  "start": 55.08,
+  "end": 55.54,
+  "probability": 0.9979343414306641
+ },
+ {
+  "word": "The",
+  "start": 55.94,
+  "end": 56.12,
+  "probability": 0.9899010062217712
+ },
+ {
+  "word": "unanswered",
+  "start": 56.12,
+  "end": 56.68,
+  "probability": 0.8939931193987528
+ },
+ {
+  "word": "questions",
+  "start": 56.68,
+  "end": 57.18,
+  "probability": 0.9956941604614258
+ },
+ {
+  "word": "are",
+  "start": 57.18,
+  "end": 57.54,
+  "probability": 0.9911036491394043
+ },
+ {
+  "word": "what",
+  "start": 57.54,
+  "end": 57.72,
+  "probability": 0.9908979535102844
+ },
+ {
+  "word": "remain.",
+  "start": 57.72,
+  "end": 58.24,
+  "probability": 0.9323076009750366
+ },
+ {
+  "word": "What",
+  "start": 58.78,
+  "end": 58.94,
+  "probability": 0.9689828753471375
+ },
+ {
+  "word": "do",
+  "start": 58.94,
+  "end": 59.12,
+  "probability": 0.9993407130241394
+ },
+ {
+  "word": "you",
+  "start": 59.12,
+  "end": 59.2,
+  "probability": 0.9976054430007935
+ },
+ {
+  "word": "think",
+  "start": 59.2,
+  "end": 59.48,
+  "probability": 0.9981063604354858
+ },
+ {
+  "word": "happened?",
+  "start": 59.48,
+  "end": 59.9,
+  "probability": 0.9843795895576477
+ },
+ {
+  "word": "What",
+  "start": 60.28,
+  "end": 60.46,
+  "probability": 0.993472695350647
+ },
+ {
+  "word": "is",
+  "start": 60.46,
+  "end": 60.64,
+  "probability": 0.6546263694763184
+ },
+ {
+  "word": "the",
+  "start": 60.64,
+  "end": 60.8,
+  "probability": 0.9953540563583374
+ },
+ {
+  "word": "record",
+  "start": 60.8,
+  "end": 61.14,
+  "probability": 0.9964939951896667
+ },
+ {
+  "word": "actually",
+  "start": 61.14,
+  "end": 61.76,
+  "probability": 0.9792883992195129
+ },
+ {
+  "word": "support?",
+  "start": 61.76,
+  "end": 62.36,
+  "probability": 0.985008955001831
+ }
+]
