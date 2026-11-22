@@ -29,8 +29,8 @@ jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
         with:
           python-version: "3.11"
       - name: Install ffmpeg
@@ -53,7 +53,7 @@ jobs:
           python -m src.run "${NICHE_ARGS[@]}"
       - name: Preserve rendered videos and review package
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: deep-scan-production-${{ github.run_id }}
           if-no-files-found: warn
@@ -76,7 +76,6 @@ jobs:
             data/compare.md
             data/run_log.json
             data/job_state.json
-            data/ffmpeg_diagnostics/**
             data/series_state.json
             data/generated_visuals/**
             data/thumbnails/**

@@ -15,16 +15,6 @@
 #     data/crosspost_queue.json — a video only gets crossposted if a human
 #     put it in the queue.
 #
-# Injection hardening (2026-11-17, Phase 1 workstream C):
-#   * inputs.video_id is passed via `env:` (VIDEO_ID) and inputs.note
-#     via `env:` (CROSSPOST_NOTE). NOTHING from the dispatch inputs is
-#     interpolated into a `run:` shell line: double quotes do not stop
-#     $(...) / backtick substitution, so the old
-#     `--video-id "${{ inputs.video_id }}"` was command-injectable.
-#   * Defence in depth: scripts/auto_crosspost.py validates the id
-#     against ^[A-Za-z0-9_-]{11}$ (src/input_validation.py) BEFORE any
-#     queue lookup or API call, so an invalid id is refused outright.
-#
 # Still missing before this can run for real (all outstanding, Nov 6):
 #   * Facebook: the channel Pages don't exist yet (Page creation failed
 #     Nov 3). Needs FB_PAGE_ID + a Page access token (FB_PAGE_TOKEN).
@@ -58,10 +48,10 @@ jobs:
   crosspost:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
 
       - name: Set up Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
         with:
           python-version: '3.11'
 
@@ -73,6 +63,5 @@ jobs:
           REDDIT_CLIENT_SECRET: ${{ secrets.REDDIT_CLIENT_SECRET }}
           REDDIT_USERNAME: ${{ secrets.REDDIT_USERNAME }}
           REDDIT_PASSWORD: ${{ secrets.REDDIT_PASSWORD }}
-          VIDEO_ID: ${{ inputs.video_id }}
           CROSSPOST_NOTE: ${{ inputs.note }}
-        run: python scripts/auto_crosspost.py
+        run: python scripts/auto_crosspost.py --video-id "${{ inputs.video_id }}"
