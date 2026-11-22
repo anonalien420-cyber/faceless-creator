@@ -17,17 +17,18 @@ Grounding: the v2 Short's real .ass
 (productions/antikythera-short-2026-11-15-v2/...mp4.ass, 53 events:
 51 body events covering the 151-word script + 2 subscribe-close
 extra events) and its real word timings (word_timings_final.json).
-The v2 narration track the captions were timed against is
-mixed-audio.mp3 (63.6 s body narration); final-audio.mp3 (68.2 s)
-appends the subscribe close, so the valid-fixture test passes the
-mixed audio as the narration. NOTE: never run run_qa() against the
-production v2 MP4 in place -- a failing check would trigger the
-auto-fix re-render and overwrite it. The check()-level test below
-is read-only; run_qa is exercised only on throwaway tmp videos.
+The production v2 MP4 (80 MB) and mixed-audio.mp3 (63.6 s) are NOT
+in the repo, so the valid-v2 check() test synthesizes a video track
+and narration of the same 63.6 s and runs the real check() against
+the real .ass (see test_valid_v2_ass_passes_via_real_check). NOTE:
+never run run_qa() against the production v2 MP4 in place -- a
+failing check would trigger the auto-fix re-render and overwrite it.
+The check()-level test below is read-only; run_qa is exercised only
+on throwaway tmp videos.
 
 Fixture-based, no network. Real-ffmpeg tests skip cleanly without
-ffmpeg. The valid-v2 check() test measures loudness on the 68 s
-file and takes ~1-2 min; the rest are small synthetic videos.
+ffmpeg. The valid-v2 check() test takes ~1-2 min; the rest are small
+synthetic videos.
 """
 import json
 import os
@@ -51,7 +52,6 @@ V2 = os.path.join(REPO_ROOT, "productions",
 V2_MP4 = os.path.join(V2, "DeepScan-Antikythera-Short-2026-11-15-v2.mp4")
 V2_ASS = V2_MP4 + ".ass"
 V2_TIMINGS = os.path.join(V2, "word_timings_final.json")
-V2_NARRATION = os.path.join(V2, "mixed-audio.mp3")
 
 
 def _run(cmd):
@@ -197,18 +197,29 @@ class QaCaptionCheckTests(unittest.TestCase):
     """Tests through the real qa.check() path (small synthetic videos)."""
 
     def test_valid_v2_ass_passes_via_real_check(self):
-        # Read-only: check() never auto-fixes, so the production MP4
-        # is safe. Narration is the 63.6 s mixed audio the captions
-        # were timed against (see module docstring).
+        # The production v2 MP4 (80 MB) and mixed-audio.mp3 are NOT in
+        # the repo, so qa.check() on them returns after file_exists and
+        # the caption checks never run (run #260). Exercise the real
+        # check() path with the real v2 .ass + script + word timings,
+        # but a synthetic video track and narration of the same 63.6 s
+        # duration the captions were timed against. The caption checks
+        # only read the .ass, the script words, the timings and the
+        # duration, so the video content is irrelevant to them.
         with open(os.path.join(V2, "narration.txt"),
                   encoding="utf-8") as fh:
             script = fh.read().strip()
-        checks, _ = qa.check(V2_MP4, narration=V2_NARRATION,
-                             script_text=script, fmt="short",
-                             word_timings_path=V2_TIMINGS)
-        self.assertEqual(_status(checks, "captions_cover_script"), "pass")
-        self.assertEqual(_status(checks, "captions_cover_duration"), "pass")
-        self.assertEqual(_status(checks, "captions_timing"), "pass")
+        with tempfile.TemporaryDirectory() as tmp:
+            audio = os.path.join(tmp, "narr.mp3")
+            _write_sine_mp3(audio, 63.6)
+            video = os.path.join(tmp, "v.mp4")
+            _write_test_video(video, 63.6, audio)
+            shutil.copy(V2_ASS, video + ".ass")
+            checks, _ = qa.check(video, narration=audio,
+                                 script_text=script, fmt="short",
+                                 word_timings_path=V2_TIMINGS)
+            self.assertEqual(_status(checks, "captions_cover_script"), "pass")
+            self.assertEqual(_status(checks, "captions_cover_duration"), "pass")
+            self.assertEqual(_status(checks, "captions_timing"), "pass")
 
     def test_truncated_ass_for_60s_video_fails(self):
         words = _script_words()

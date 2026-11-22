@@ -129,15 +129,40 @@ class TestPresetDefinitions(unittest.TestCase):
             self.assertGreater(font.getlength("Antikythera"), 0)
 
     def test_fontconfig_resolves_ass_fontname(self):
+        # The CI runner does not have Montserrat installed system-wide
+        # (run #260: fc-match fell back to DejaVu Sans), so scope
+        # fontconfig to the bundled fonts with a throwaway config file
+        # instead of depending on the host's installed fonts.
+        # FONTCONFIG_FILE replaces the default config entirely, so only
+        # assets/fonts is scanned; fc-cache builds the cache for it.
         if shutil.which("fc-match") is None:
             self.skipTest("fc-match not available")
-        for preset in PRESETS.values():
-            out = subprocess.run(
-                ["fc-match", preset.font_name],
-                capture_output=True, text=True, timeout=30,
-            ).stdout
-            self.assertIn("Montserrat", out,
-                          f"{preset.slug}: fc-match {preset.font_name!r} -> {out!r}")
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as tmp:
+            cache_dir = os.path.join(tmp, "fc-cache")
+            os.makedirs(cache_dir, exist_ok=True)
+            conf_path = os.path.join(tmp, "fonts.conf")
+            with open(conf_path, "w", encoding="utf-8") as fh:
+                fh.write(
+                    '<?xml version="1.0"?>\n'
+                    '<!DOCTYPE fontconfig SYSTEM "fonts.dtd">\n'
+                    "<fontconfig>\n"
+                    f"  <dir>{FONT_DIR}</dir>\n"
+                    f"  <cachedir>{cache_dir}</cachedir>\n"
+                    "</fontconfig>\n")
+            env = dict(os.environ, FONTCONFIG_FILE=conf_path)
+            if shutil.which("fc-cache") is not None:
+                subprocess.run(["fc-cache", "-f"], env=env,
+                               capture_output=True, timeout=60)
+            for preset in PRESETS.values():
+                out = subprocess.run(
+                    ["fc-match", preset.font_name],
+                    capture_output=True, text=True, timeout=30, env=env,
+                ).stdout
+                self.assertIn("Montserrat", out,
+                              f"{preset.slug}: fc-match {preset.font_name!r} "
+                              f"-> {out!r}")
 
     def test_no_stopword_highlighted(self):
         for preset in PRESETS.values():
