@@ -59,6 +59,112 @@ except ImportError:  # running from inside src/
 MIN_SPEED = 0.5
 MAX_SPEED = 2.0
 
+# Fallback marker: when a narration run uses a different engine/voice
+# than configured, an entry is appended here so the pipeline (and a
+# human) can see the run is degraded. One file per narration run:
+# main() clears it at start, so it always describes the latest run.
+NARRATION_FALLBACK_PATH = "data/narration_fallback.json"
+
+_KOKORO_VOICE_RE = re.compile(r"^[ab][fm]_")
+_KOKORO_USED_RE = re.compile(r"^kokoro \(([^)]+)\)")
+
+
+def _expected_kokoro_voice(voice):
+    """The Kokoro voice narrate_kokoro will actually use for `voice`:
+    the configured voice when it looks like a Kokoro voice, else
+    Kokoro's af_heart default (narrate_kokoro substitutes silently)."""
+    return voice if _KOKORO_VOICE_RE.match(voice or "") else "af_heart"
+
+
+def detect_narration_fallback(used, tier, voice):
+    """Detect a narration fallback: the engine/voice actually used
+    differs from what the tier + configured voice asked for.
+
+    Returns {"fallback": bool, "expected_engine": str,
+    "expected_voice": str|None, "used": str, "reason": str}.
+    - tier "local": expects Kokoro with the configured voice
+      (bm_george). Edge TTS, pyttsx3, or a different Kokoro voice
+      is a fallback.
+    - tier "free": expects Edge TTS. The pyttsx3 robotic fallback
+      (or any other engine) is a fallback.
+    - tier "paid": expects ElevenLabs. Anything else is a fallback.
+    The "used" strings are the ones narrate_* return, so detection
+    never depends on probing the audio after the fact.
+    """
+    used = used or ""
+    tier = (tier or "free").lower()
+    if tier == "local":
+        expected_voice = _expected_kokoro_voice(voice)
+        match = _KOKORO_USED_RE.match(used)
+        if not match:
+            return {"fallback": True, "expected_engine": "kokoro",
+                    "expected_voice": expected_voice, "used": used,
+                    "reason": "tier 'local' expects Kokoro voice "
+                              f"{expected_voice}, but narration used "
+                              f"{used or 'nothing'}"}
+        if match.group(1) != expected_voice:
+            return {"fallback": True, "expected_engine": "kokoro",
+                    "expected_voice": expected_voice, "used": used,
+                    "reason": f"Kokoro voice {match.group(1)} was used "
+                              f"instead of configured {expected_voice}"}
+        return {"fallback": False, "expected_engine": "kokoro",
+                "expected_voice": expected_voice, "used": used,
+                "reason": ""}
+    if tier == "paid":
+        if not used.startswith("elevenlabs"):
+            return {"fallback": True, "expected_engine": "elevenlabs",
+                    "expected_voice": None, "used": used,
+                    "reason": "tier 'paid' expects ElevenLabs, but "
+                              f"narration used {used or 'nothing'}"}
+        return {"fallback": False, "expected_engine": "elevenlabs",
+                "expected_voice": None, "used": used, "reason": ""}
+    # tier "free": Edge TTS expected; the robotic pyttsx3 fallback
+    # (or any other engine) is a fallback.
+    if used.startswith("pyttsx3"):
+        return {"fallback": True, "expected_engine": "edge-tts",
+                "expected_voice": None, "used": used,
+                "reason": "tier 'free' expects Edge TTS, but narration "
+                          "fell back to the robotic pyttsx3 voice"}
+    if not used.startswith("edge-tts"):
+        return {"fallback": True, "expected_engine": "edge-tts",
+                "expected_voice": None, "used": used,
+                "reason": "tier 'free' expects Edge TTS, but narration "
+                          f"used {used or 'nothing'}"}
+    return {"fallback": False, "expected_engine": "edge-tts",
+            "expected_voice": None, "used": used, "reason": ""}
+
+
+def record_narration_fallback(detail, path=NARRATION_FALLBACK_PATH):
+    """Append one fallback entry to the marker file (created if
+    missing). The file describes the latest narration run only;
+    main() clears it at start."""
+    os.makedirs(os.path.dirname(path) or ".", exist_ok=True)
+    entries = []
+    if os.path.exists(path):
+        try:
+            with open(path, encoding="utf-8") as fh:
+                entries = json.load(fh)
+            if not isinstance(entries, list):
+                entries = []
+        except (OSError, ValueError):
+            entries = []
+    from datetime import datetime, timezone
+    entry = dict(detail)
+    entry["at"] = datetime.now(timezone.utc).isoformat()
+    entries.append(entry)
+    try:
+        from src.secrets import write_private_json
+    except ImportError:
+        from secrets import write_private_json
+    write_private_json(path, entries)
+
+
+def clear_narration_fallback(path=NARRATION_FALLBACK_PATH):
+    try:
+        os.remove(path)
+    except OSError:
+        pass
+
 
 def validate_speed(speed):
     """Return float(speed) if it is a sane narration speed, else raise.
@@ -313,15 +419,19 @@ def narrate_elevenlabs(text, voice, output):
 
 def append_run_log(step, detail):
     try:
+        from src.secrets import redact, write_private_json
+    except ImportError:
+        from secrets import redact, write_private_json
+    try:
         path = "data/run_log.json"
         log = {}
         if os.path.exists(path):
             with open(path, encoding="utf-8") as fh:
                 log = json.load(fh)
-        log.setdefault("steps", []).append({"step": step, "detail": detail})
+        log.setdefault("steps", []).append(
+            {"step": step, "detail": redact(detail)})
         os.makedirs("data", exist_ok=True)
-        with open(path, "w", encoding="utf-8") as fh:
-            json.dump(log, fh, indent=2)
+        write_private_json(path, log)
     except Exception as exc:
         print(f"WARNING: could not append to run log ({exc})", file=sys.stderr)
 
@@ -348,6 +458,14 @@ def main(argv=None):
     config = load_config(args.config)
     voice = args.voice or config.get("narrator_voice", "en-US-ChristopherNeural")
     tier = (args.tier or config.get("narrator_tier", "free") or "free").lower()
+    # Strict mode: any fallback fails the run instead of shipping the
+    # wrong voice. Off by default (config narrator_strict, or the
+    # DEEP_SCAN_STRICT_NARRATION=1 env override): a fallback is
+    # logged loudly and marked degraded, but the run continues.
+    strict = bool(config.get("narrator_strict")) or (
+        os.environ.get("DEEP_SCAN_STRICT_NARRATION", "") == "1")
+    # The fallback marker describes the latest narration run only.
+    clear_narration_fallback()
     try:
         speed = validate_speed(
             args.speed or float(config.get("narrator_speed", 1.0) or 1.0))
@@ -415,9 +533,29 @@ def main(argv=None):
         except Exception as exc:
             print(f"ERROR: Narration failed for {script['topic']}: {exc}", file=sys.stderr)
             return 1
+        # Fallback detection (Phase 3): the voice actually used must
+        # match the configured tier/voice. A fallback is never silent:
+        # it is logged loudly, written to the marker file (so the
+        # pipeline marks the run degraded), and fails the run outright
+        # in strict mode.
+        fallback = detect_narration_fallback(used, tier, voice)
+        if fallback["fallback"]:
+            print(f"WARNING: NARRATION FALLBACK DETECTED for "
+                  f"{script['topic']}: {fallback['reason']}. The "
+                  f"rendered voice is NOT the configured one.",
+                  file=sys.stderr)
+            record_narration_fallback(
+                {"topic": script["topic"], "tier": tier,
+                 "voice": voice, **fallback})
+            if strict:
+                print("ERROR: narrator_strict is set — refusing to ship "
+                      "a fallback voice. Install Kokoro / Edge TTS for "
+                      "the configured tier and re-run.", file=sys.stderr)
+                return 1
         if not _check_audio(output, script["topic"]):
             return 1
         detail = {"voice": voice, "tier": tier, "used": used,
+                  "fallback": fallback,
                   "speed": speed, "pause_ms": pause_ms}
         append_run_log(f"narrate:{script['topic']}", detail)
         print(f"Narrated -> {output} [{used}, tier={tier}]")

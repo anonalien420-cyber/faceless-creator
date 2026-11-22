@@ -84,8 +84,20 @@ narrator_voice: "bm_george"
 narrator_tier: "local"
 narrator_speed: 0.9
 narrator_pause_ms: 350
+# Fail loudly (instead of silently shipping the wrong voice) when a
+# narration run falls back to a different engine/voice than the
+# configured Kokoro bm_george. Default false: a fallback is logged
+# loudly and marked degraded, but the run continues. Set true to make
+# any fallback fail the run.
+narrator_strict: false
 
 # --- Music: trending-STYLE matching, royalty-free only ---
+# music_volume: the mellow history bed's mix level under the
+# narration (locked 0.06 — the level every shipped render used).
+# It lives in config, not in code, so it can be tuned without
+# editing src/music.py. The --music-volume CLI flag still overrides
+# it for one-off mixes; an out-of-range value fails loudly.
+music_volume: 0.06
 # NEVER put a copyrighted trending song here. music.py matches the
 # trending audio profile (genre/tempo/mood from trends.py) against this
 # library and picks the closest ROYALTY-FREE track. If no track matches,

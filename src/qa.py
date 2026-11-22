@@ -33,6 +33,15 @@ Checks (all local, no API):
     (F3). A missing manifest also FAILS: visuals cannot be verified.
 15. visual coverage (visual_coverage): gradient_seconds must be
     <= max(2.0s, 5% of the video duration).
+16. duration vs expected (duration_matches_expected): the rendered
+    video duration must match the duration the Whisper word timings
+    imply (end of the last spoken word), within the same tolerance
+    as check 2. A truncated or over-long render must never pass QA
+    silently — the Phase 2 xfade collapse (a 63.6 s render coming
+    out 9.5 s) is exactly what this catches when the narration file
+    itself is also short. Without word timings the check records
+    that the expected duration was NOT verified (same convention as
+    captions_timing); run.py always supplies timings.
 
 Auto-fixes (logged, one retry only):
 - too quiet / off-target loudness audio -> loudness-normalize to
@@ -93,6 +102,33 @@ except ImportError:
         check_cover_duration, check_cover_script, check_timing,
         check_visual_manifest, load_visual_manifest, load_word_timings,
         parse_ass)
+
+
+def expected_duration_from_timings(timings):
+    """Expected video duration implied by Whisper word timings: the
+    end time of the last spoken word, or None when there are no
+    timings. `timings` is the [(start, end, word), ...] list
+    load_word_timings returns."""
+    if not timings:
+        return None
+    try:
+        return max(float(entry[1]) for entry in timings)
+    except (TypeError, ValueError, IndexError):
+        return None
+
+
+def validate_duration(actual, expected, tolerance=2.0):
+    """(ok, detail): |actual - expected| within `tolerance` seconds.
+
+    `expected` None means "cannot verify" — the caller records that
+    explicitly instead of passing silently (see check())."""
+    if expected is None:
+        return True, "no expected duration supplied — not verified"
+    diff = abs(float(actual) - float(expected))
+    ok = diff <= tolerance
+    return ok, (f"video {float(actual):.1f}s vs expected "
+                f"{float(expected):.1f}s (tolerance {tolerance}s, "
+                f"diff {diff:.1f}s)")
 
 
 def run_cmd(cmd):
@@ -201,6 +237,30 @@ def check(video, narration=None, tolerance=2.0, scripts=None, script_text="",
     else:
         add("duration_matches_narration", True,
             f"no narration file given; video duration {duration:.1f}s")
+    # Duration vs expected (Phase 3, check 16): the rendered video
+    # must match the duration the Whisper word timings imply (end of
+    # the last spoken word). A truncated render (the Phase 2 xfade
+    # collapse: 63.6 s in, 9.5 s out) or an over-long one fails here
+    # even when video-vs-narration looks fine. Timings are loaded
+    # once here and reused for captions_timing below.
+    timings = None
+    timings_error = None
+    if word_timings_path:
+        try:
+            timings = load_word_timings(word_timings_path)
+        except (ValueError, OSError) as exc:
+            timings_error = str(exc)
+    if timings_error:
+        add("duration_matches_expected", False,
+            f"word-timings file could not be loaded: {timings_error}")
+    elif timings:
+        expected = expected_duration_from_timings(timings)
+        ok, detail = validate_duration(duration, expected, tolerance)
+        add("duration_matches_expected", ok, detail)
+    else:
+        add("duration_matches_expected", True,
+            "no word timings supplied — expected duration NOT verified; "
+            "video duration checked against narration only")
     if not audio_streams:
         add("audio_present", False, "no audio stream")
     else:
@@ -290,13 +350,10 @@ def check(video, narration=None, tolerance=2.0, scripts=None, script_text="",
             add("captions_cover_duration", passed,
                 f"{detail} (duration from {duration_source} "
                 f"{caption_duration:.1f}s)")
-            timings = None
-            timings_error = None
-            if word_timings_path:
-                try:
-                    timings = load_word_timings(word_timings_path)
-                except (ValueError, OSError) as exc:
-                    timings_error = str(exc)
+            # Timings were already loaded for duration_matches_expected
+            # above; reuse them here (a failed load was already
+            # recorded as a duration failure, and is recorded again
+            # here so the caption check does not pass on bad input).
             if timings_error:
                 add("captions_timing", False,
                     f"word-timings file could not be loaded: {timings_error}")
@@ -550,9 +607,22 @@ def fix_and_recheck(video, checks, narration=None, script_text="", title="", fmt
     # persist through the retry and block upload.
     caption_failed = failed & {"captions_present", "captions_cover_script",
                                "captions_cover_duration", "captions_timing"}
+    # A duration failure is also re-renderable: the rebuild uses the
+    # same narration, so a truncated render (xfade collapse) comes
+    # back at full length. If the timings themselves are stale, the
+    # re-render fails the check again and QA still blocks upload.
+    duration_failed = bool(failed & {"duration_matches_expected"})
+    rerender_triggers = (
+        (failed & {"resolution", "no_long_black_stretches",
+                   "title_card_not_black"}) | caption_failed)
+    if duration_failed and narration:
+        # A truncated render is fixed by rebuilding from the same
+        # narration (xfade collapse comes back at full length). If
+        # the timings themselves are stale, the re-render fails the
+        # check again and QA still blocks upload.
+        rerender_triggers = rerender_triggers | {"duration_matches_expected"}
     effective_text = script_text or " ".join(script_words or [])
-    if ((failed & {"resolution", "no_long_black_stretches",
-                   "title_card_not_black"}) | caption_failed) and effective_text:
+    if rerender_triggers and effective_text:
         # Re-render with fallback visuals (gradient) and fresh captions.
         # build_video(script_dict, audio_path, output, ...).
         timings = None
@@ -571,8 +641,7 @@ def fix_and_recheck(video, checks, narration=None, script_text="", title="", fmt
             fixes.append("re-rendered with fallback visuals + fresh captions")
         except Exception as exc:
             fixes.append(f"re-render FAILED: {exc}")
-    elif (failed & {"resolution", "no_long_black_stretches", "captions_present",
-                    "title_card_not_black"}) | caption_failed:
+    elif rerender_triggers:
         fixes.append("re-render skipped: no script text available for rebuild")
     new_checks, _ = check(video, narration=narration, script_text=script_text,
                           title=title, fmt=fmt,

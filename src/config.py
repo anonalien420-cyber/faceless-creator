@@ -46,6 +46,8 @@ DEFAULTS = {
     "narrator_tier": "local",
     "narrator_speed": 0.9,
     "narrator_pause_ms": 350,
+    "narrator_strict": False,
+    "music_volume": 0.06,
     "music_file": "",
     "music_urls": [],
     "music_library": [],

@@ -30,6 +30,15 @@ except ImportError:
     from job_state import JobState, run_with_retries
 
 try:
+    # Checkpoint/resume (Phase 3 item 7).
+    from src.checkpoint import (compute_fingerprint, file_sha256,
+                                load_checkpoint, record_stage,
+                                save_checkpoint)
+except ImportError:
+    from checkpoint import (compute_fingerprint, file_sha256,
+                            load_checkpoint, record_stage, save_checkpoint)
+
+try:
     from src.config import load_config
 except ImportError:
     from config import load_config
@@ -52,8 +61,19 @@ try:
 except ImportError:
     from caption_treatments import get_word_timings
 
+try:
+    # Secret redaction + owner-only state writes (Phase 3 item 6).
+    from src.secrets import redact, write_private_json
+except ImportError:
+    from secrets import redact, write_private_json
+
 
 def log_step(log, name, status, detail=""):
+    # Redact: step details can carry a subprocess tail, which can
+    # carry a secret (e.g. a key embedded in a request URL). The log
+    # dict lands in data/qa_report.json, so this is also the
+    # never-secrets-in-QA-reports guarantee.
+    detail = redact(detail)
     entry = {"step": name, "status": status, "detail": detail,
              "at": datetime.now(timezone.utc).isoformat()}
     log["steps"].append(entry)
@@ -266,78 +286,190 @@ def build_format(log, fmt, scripts, config, niche, args):
     """Narrate -> music -> video -> QA for one format. Returns a list of
     {script, video, narration, qa_report} for outputs that passed QA.
     A QA failure aborts the whole run (no upload of that video, and no
-    upload of anything else either — a broken pipeline must not post)."""
+    upload of anything else either — a broken pipeline must not post).
+
+    Checkpoint/resume (Phase 3 item 7): after each stage completes,
+    its outputs are hashed into data/checkpoint_<fmt>.json. A later
+    run with --resume reuses a stage only after the checkpoint
+    validates (checksum, input fingerprint, TTL, output hashes). QA
+    is never checkpointed and always re-runs on the reused video.
+    Without --resume the checkpoint is rebuilt from scratch, never
+    read, so a fresh run can never inherit a stale stage."""
     audio_dir = f"data/audio_{fmt}"
     mixed_dir = f"data/audio_mixed_{fmt}"
     video_dir = f"data/videos_{fmt}"
-    run_cmd([sys.executable, "-m", "src.narrate", "--input", scripts,
-             "--outdir", audio_dir], f"narrate:{fmt}", log)
+    timings_dir = f"data/word_timings_{fmt}"
     with open(scripts, encoding="utf-8") as fh:
         items = json.load(fh)
+    ckpt_path = f"data/checkpoint_{fmt}.json"
+    ckpt_fingerprint = compute_fingerprint({
+        "format": fmt, "niche": niche,
+        "scripts_sha256": file_sha256(scripts),
+        "narrator_tier": config.get("narrator_tier"),
+        "narrator_voice": config.get("narrator_voice"),
+        "narrator_speed": config.get("narrator_speed"),
+        "music_volume": config.get("music_volume"),
+        "caption_preset": "documentary"})
+    stages = {}
+    if getattr(args, "resume", False):
+        stages, ckpt_reason = load_checkpoint(ckpt_path, ckpt_fingerprint)
+        stages = stages or {}
+        if stages:
+            log_step(log, f"checkpoint:{fmt}", "ok",
+                     f"resuming from checkpoint ({len(stages)} stage(s) "
+                     f"verified)"
+                     + (f"; {ckpt_reason}" if ckpt_reason else ""))
+        else:
+            log_step(log, f"checkpoint:{fmt}", "skipped",
+                     f"no usable checkpoint: {ckpt_reason}")
+
+    def _save_stage(name, output_paths):
+        missing = [p for p in output_paths if not os.path.exists(p)]
+        if missing:
+            # A stage that produced no outputs cannot be recorded as
+            # done (e.g. a mocked stage in tests, or a render step
+            # that wrote nothing). The checkpoint simply does not
+            # claim this stage; the run's own loud-failure paths
+            # still apply downstream (a missing video fails in the
+            # QA loop, never silently).
+            log_step(log, f"checkpoint:{fmt}", "skipped",
+                     f"stage {name} not checkpointed: output missing: "
+                     f"{missing[0]}")
+            return
+        record_stage(stages, name, output_paths)
+        save_checkpoint(ckpt_path, ckpt_fingerprint, stages)
+
+    def _done(name):
+        return name in stages
+
+    def _names():
+        return [f"{s['rank']:02d}-{slug(s['topic'])}" for s in items]
+
+    if not _done("narrate"):
+        run_cmd([sys.executable, "-m", "src.narrate", "--input", scripts,
+                 "--outdir", audio_dir], f"narrate:{fmt}", log)
+        _save_stage("narrate", [os.path.join(audio_dir, f"{n}.mp3")
+                                for n in _names()])
+    else:
+        log_step(log, f"narrate:{fmt}", "resumed",
+                 "reusing narration from checkpoint")
+    # Narration fallback marker (Phase 3): if narrate.py recorded a
+    # fallback, the run is degraded — say so loudly in the run log
+    # instead of shipping the wrong voice silently. The run
+    # continues (strict mode, which fails the run, lives in
+    # narrate.py via config narrator_strict).
+    fallback_path = "data/narration_fallback.json"
+    if os.path.exists(fallback_path):
+        try:
+            with open(fallback_path, encoding="utf-8") as fh:
+                fallbacks = json.load(fh)
+            reasons = "; ".join(
+                f.get("reason", "?") for f in fallbacks
+                if isinstance(f, dict))
+        except (OSError, ValueError):
+            reasons = "unreadable marker file"
+        log_step(log, f"narration:fallback:{fmt}", "WARNING",
+                 f"run degraded — narration fell back from the "
+                 f"configured voice: {reasons}")
     os.makedirs(mixed_dir, exist_ok=True)
     outputs = []
-    for script in items:
-        name = f"{script['rank']:02d}-{slug(script['topic'])}"
-        mixed = os.path.join(mixed_dir, f"{name}.mp3")
-        run_cmd([sys.executable, "-m", "src.music", "--narration",
-                 os.path.join(audio_dir, f"{name}.mp3"), "--output", mixed,
-                 "--top5", "data/top5.json"], f"music:{fmt}:{name}", log)
+    if not _done("music"):
+        for script in items:
+            name = f"{script['rank']:02d}-{slug(script['topic'])}"
+            mixed = os.path.join(mixed_dir, f"{name}.mp3")
+            # Bed level from config (locked 0.06), passed explicitly so
+            # the daily path never falls back to a CLI default again.
+            run_cmd([sys.executable, "-m", "src.music", "--narration",
+                     os.path.join(audio_dir, f"{name}.mp3"), "--output", mixed,
+                     "--music-volume",
+                     str(config.get("music_volume", 0.06)),
+                     "--top5", "data/top5.json"], f"music:{fmt}:{name}", log)
+        _save_stage("music", [os.path.join(mixed_dir, f"{n}.mp3")
+                              for n in _names()])
+    else:
+        log_step(log, f"music:{fmt}", "resumed",
+                 "reusing mixed audio from checkpoint")
     if not args.skip_video:
         # Phase 2: transcribe each mixed narration with faster-whisper
         # (small, word timestamps) BEFORE the render. A failed or
         # empty transcription raises SystemExit here — the run fails
         # loudly instead of rendering unsynced captions. One JSON
         # file per script: data/word_timings_<fmt>/{rank}-{slug}.json.
-        timings_dir = f"data/word_timings_{fmt}"
-        for script in items:
-            name = f"{script['rank']:02d}-{slug(script['topic'])}"
-            mixed = os.path.join(mixed_dir, f"{name}.mp3")
-            timings_path = os.path.join(timings_dir, f"{name}.json")
-            triples = transcribe_narration(mixed, timings_path)
-            log_step(log, f"transcribe:{fmt}:{name}", "ok",
-                     f"{len(triples)} words -> {timings_path}")
+        if not _done("transcribe"):
+            for script in items:
+                name = f"{script['rank']:02d}-{slug(script['topic'])}"
+                mixed = os.path.join(mixed_dir, f"{name}.mp3")
+                timings_path = os.path.join(timings_dir, f"{name}.json")
+                triples = transcribe_narration(mixed, timings_path)
+                log_step(log, f"transcribe:{fmt}:{name}", "ok",
+                         f"{len(triples)} words -> {timings_path}")
+            _save_stage("transcribe", [os.path.join(timings_dir, f"{n}.json")
+                                       for n in _names()])
+        else:
+            log_step(log, f"transcribe:{fmt}", "resumed",
+                     "reusing word timings from checkpoint")
         visual_manifest = ""
         comfy_url = os.environ.get("COMFYUI_BASE_URL", "").strip()
         workflow_path = os.environ.get("COMFYUI_IMAGE_WORKFLOW", "").strip()
         if comfy_url and workflow_path:
-            by_topic = {}
-            media_type = os.environ.get("COMFYUI_MEDIA_TYPE", "image").strip() or "image"
-            for script in items:
-                asset_dir = os.path.join("data/generated_visuals", fmt, slug(script["topic"]))
-                single_script = os.path.join(asset_dir, "script.json")
-                os.makedirs(asset_dir, exist_ok=True)
-                with open(single_script, "w", encoding="utf-8") as sfh:
-                    json.dump(script, sfh, indent=2)
-                run_cmd([sys.executable, "-m", "src.visuals", "--script", single_script,
-                         "--workflow", workflow_path, "--outdir", asset_dir,
-                         "--media-type", media_type, "--base-url", comfy_url],
-                        "visual_generation:{}:{}".format(fmt, slug(script["topic"])), log)
-                manifest_path = os.path.join(asset_dir, "visual_manifest.json")
-                with open(manifest_path, encoding="utf-8") as fh:
-                    # The generator accepts a single script file. Extract the
-                    # current topic's matching scene manifest from the full list.
-                    generated = json.load(fh)
-                run_cmd([sys.executable, "-m", "src.visual_qa", "--script",
-                         single_script, "--manifest", manifest_path, "--output",
-                         os.path.join(asset_dir, "visual_qa.json")],
-                        "visual_qa:{}:{}".format(fmt, slug(script["topic"])), log)
-                by_topic[script["topic"]] = generated.get("assets", [])
-            visual_manifest = os.path.join("data", "generated_visuals", fmt, "visuals_by_topic.json")
-            os.makedirs(os.path.dirname(visual_manifest), exist_ok=True)
-            with open(visual_manifest, "w", encoding="utf-8") as fh:
-                json.dump({"by_topic": by_topic}, fh, indent=2)
+            visual_manifest = os.path.join("data", "generated_visuals", fmt,
+                                           "visuals_by_topic.json")
+            if _done("visuals"):
+                log_step(log, f"visuals:{fmt}", "resumed",
+                         "reusing generated visuals from checkpoint: "
+                         f"{visual_manifest}")
+            else:
+                by_topic = {}
+                visual_outputs = [visual_manifest]
+                media_type = os.environ.get("COMFYUI_MEDIA_TYPE", "image").strip() or "image"
+                for script in items:
+                    asset_dir = os.path.join("data/generated_visuals", fmt, slug(script["topic"]))
+                    single_script = os.path.join(asset_dir, "script.json")
+                    os.makedirs(asset_dir, exist_ok=True)
+                    with open(single_script, "w", encoding="utf-8") as sfh:
+                        json.dump(script, sfh, indent=2)
+                    run_cmd([sys.executable, "-m", "src.visuals", "--script", single_script,
+                             "--workflow", workflow_path, "--outdir", asset_dir,
+                             "--media-type", media_type, "--base-url", comfy_url],
+                            "visual_generation:{}:{}".format(fmt, slug(script["topic"])), log)
+                    manifest_path = os.path.join(asset_dir, "visual_manifest.json")
+                    with open(manifest_path, encoding="utf-8") as fh:
+                        # The generator accepts a single script file. Extract the
+                        # current topic's matching scene manifest from the full list.
+                        generated = json.load(fh)
+                    run_cmd([sys.executable, "-m", "src.visual_qa", "--script",
+                             single_script, "--manifest", manifest_path, "--output",
+                             os.path.join(asset_dir, "visual_qa.json")],
+                            "visual_qa:{}:{}".format(fmt, slug(script["topic"])), log)
+                    by_topic[script["topic"]] = generated.get("assets", [])
+                    visual_outputs += [manifest_path,
+                                       os.path.join(asset_dir, "visual_qa.json")]
+                os.makedirs(os.path.dirname(visual_manifest), exist_ok=True)
+                with open(visual_manifest, "w", encoding="utf-8") as fh:
+                    json.dump({"by_topic": by_topic}, fh, indent=2)
+                _save_stage("visuals", visual_outputs)
         # Funnel end card: Shorts push to the same-day long video;
         # longs tease the next episode.
         end_card = ("Watch the full video today" if fmt == "short"
                     else "Next episode tomorrow")
-        run_cmd([sys.executable, "-m", "src.video", "--input", scripts,
-                 "--audio-dir", mixed_dir, "--outdir", video_dir,
-                 "--format", fmt, "--end-card-text", end_card,
-                 "--word-timings-dir", timings_dir,
-                 "--require-word-timings",
-                 "--caption-preset", "documentary"]
-                + (["--visuals-file", visual_manifest] if visual_manifest else []),
-                f"video:{fmt}", log)
+        if not _done("video"):
+            run_cmd([sys.executable, "-m", "src.video", "--input", scripts,
+                     "--audio-dir", mixed_dir, "--outdir", video_dir,
+                     "--format", fmt, "--end-card-text", end_card,
+                     "--word-timings-dir", timings_dir,
+                     "--require-word-timings",
+                     "--caption-preset", "documentary"]
+                    + (["--visuals-file", visual_manifest] if visual_manifest else []),
+                    f"video:{fmt}", log)
+            video_outputs = []
+            for n in _names():
+                video_outputs += [os.path.join(video_dir, f"{n}.mp4"),
+                                  os.path.join(video_dir, f"{n}.mp4.ass"),
+                                  os.path.join(video_dir, f"{n}.mp4.visuals.json")]
+            _save_stage("video", video_outputs)
+        else:
+            log_step(log, f"video:{fmt}", "resumed",
+                     "reusing rendered video from checkpoint — QA still runs")
     qa_reports = []
     for script in items:
         name = f"{script['rank']:02d}-{slug(script['topic'])}"
@@ -494,6 +626,13 @@ def main(argv=None):
     parser.add_argument("--list-niches", action="store_true",
                         help="Print the niche ranking and stop (no videos, no upload).")
     parser.add_argument("--skip-video", action="store_true")
+    parser.add_argument("--resume", action="store_true",
+                        help="Resume an interrupted run from the "
+                        "checkpoint (data/checkpoint_<fmt>.json): "
+                        "finished stages are reused only after their "
+                        "outputs verify (hash + fingerprint + TTL). "
+                        "QA always re-runs, never trusted from a "
+                        "checkpoint.")
     parser.add_argument("--long-count", type=int, default=0,
                         help="Override long_videos_per_day (default from config).")
     parser.add_argument("--short-count", type=int, default=0,
@@ -614,8 +753,7 @@ def main(argv=None):
                                       "niche": niche,
                                       "videos": [o["video"] for o in all_outputs]})
             state["next_episode"] = episode + 1
-            with open(state_path, "w", encoding="utf-8") as fh:
-                json.dump(state, fh, indent=2)
+            write_private_json(state_path, state)
             log_step(log, "series", "ok", f"episode {episode} (series: {series_name})")
         # Thumbnails: 2 clickbait-style, truth-checked variants per video.
         thumb_map = {}

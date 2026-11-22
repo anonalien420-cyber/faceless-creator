@@ -6,6 +6,11 @@ import re
 import time
 from datetime import datetime, timezone
 
+try:
+    from src.secrets import redact, write_private_text
+except ImportError:  # run as a top-level module (tests import both ways)
+    from secrets import redact, write_private_text
+
 # Where complete subprocess diagnostics are persisted on failure.
 # FFmpeg stderr can run to tens of kilobytes; truncating it into
 # job_state.json / CI logs made the Nov 8 and Nov 16 failures
@@ -27,13 +32,14 @@ def persist_diagnostic(step, text, diagnostics_dir=None):
     written verbatim so a failure can be diagnosed after the run.
     `diagnostics_dir` defaults to DEEP_SCAN_FFMPEG_DIAGNOSTICS_DIR
     or data/ffmpeg_diagnostics (relative to the run's working dir).
+    The text is REDACTED first (a failing command can echo a secret
+    into stderr) and the file is mode 0600.
     """
     directory = diagnostics_dir or os.environ.get(
         "DEEP_SCAN_FFMPEG_DIAGNOSTICS_DIR", DIAGNOSTICS_DIR)
     os.makedirs(directory, exist_ok=True)
     path = os.path.join(directory, _diagnostic_filename(step))
-    with open(path, "w", encoding="utf-8") as fh:
-        fh.write(text)
+    write_private_text(path, redact(text))
     return path
 
 
@@ -54,8 +60,10 @@ class JobState:
                 pass
 
     def record(self, name, status, detail=""):
+        # Redact before persisting: a subprocess tail can carry a
+        # secret (e.g. a key embedded in a request URL).
         self.data.setdefault("steps", {})[name] = {
-            "status": status, "detail": str(detail)[:2000],
+            "status": status, "detail": redact(str(detail))[:2000],
             "updated_at": datetime.now(timezone.utc).isoformat()}
         self.save()
 
@@ -69,6 +77,9 @@ class JobState:
             json.dump(self.data, fh, indent=2)
             fh.flush()
             os.fsync(fh.fileno())
+        # State files can hold redacted diagnostic tails; keep them
+        # owner-only even under a permissive umask.
+        os.chmod(tmp, 0o600)
         os.replace(tmp, self.path)
 
 
@@ -103,7 +114,7 @@ def run_with_retries(command, step, state=None, attempts=3, backoff=2,
             state.record(step, "retrying" if attempt < attempts else "failed", detail)
         if attempt < attempts:
             sleep(min(30, backoff * (2 ** (attempt - 1)) + random.random()))
-    tail = (last.stderr or last.stdout or "unknown error")[-2000:]
+    tail = redact((last.stderr or last.stdout or "unknown error")[-2000:])
     if last_artifact:
         raise RuntimeError("{} failed after {} attempt(s): full diagnostic "
                            "saved to {}\n{}".format(

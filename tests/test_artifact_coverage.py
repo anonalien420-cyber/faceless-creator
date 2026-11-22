@@ -29,7 +29,11 @@ def read_daily_yml():
 class DailyArtifactCoverageTests(unittest.TestCase):
     def test_upload_artifact_step_present_with_explicit_retention(self):
         text = read_daily_yml()
-        self.assertIn("actions/upload-artifact@v4", text)
+        # Phase 3: actions are pinned to exact SHAs, not floating tags.
+        self.assertIn(
+            "actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02",
+            text)
+        self.assertNotIn("actions/upload-artifact@v4", text)
         self.assertIn("name: deep-scan-production-", text)
         self.assertIn("retention-days: 14", text)
         self.assertIn("if-no-files-found: warn", text)

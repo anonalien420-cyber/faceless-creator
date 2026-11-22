@@ -160,7 +160,13 @@ def fetch_stock_videos(config, keywords, per_keyword=2):
                     if hd and hd.get("link"):
                         clips.append(download_file(hd["link"]))
             except Exception as exc:
-                print(f"WARNING: Pexels video search failed ({exc}).", file=sys.stderr)
+                # The exception can carry the request URL (Pixabay
+                # puts its key in the query string) — redact it.
+                try:
+                    from src.secrets import redact as _redact
+                except ImportError:
+                    from secrets import redact as _redact
+                print(f"WARNING: Pexels video search failed ({_redact(exc)}).", file=sys.stderr)
     if not clips and pixabay_key:
         for query in queries[:3]:
             try:
@@ -174,7 +180,11 @@ def fetch_stock_videos(config, keywords, per_keyword=2):
                     if large.get("url"):
                         clips.append(download_file(large["url"]))
             except Exception as exc:
-                print(f"WARNING: Pixabay video search failed ({exc}).", file=sys.stderr)
+                try:
+                    from src.secrets import redact as _redact
+                except ImportError:
+                    from secrets import redact as _redact
+                print(f"WARNING: Pixabay video search failed ({_redact(exc)}).", file=sys.stderr)
     return clips
 
 

@@ -111,9 +111,19 @@ def base_entry(source, title, topic="", channel="", url="", published="",
 
 
 def _fetch_json(url, headers=None, timeout=20):
-    req = Request(url, headers=headers or {"User-Agent": USER_AGENT})
-    with urlopen(req, timeout=timeout) as resp:
-        return json.load(resp)
+    # The URL can carry an API key (YouTube/Pixabay use ?key=...), and
+    # urllib's HTTPError message includes the full URL — redact it
+    # before the exception reaches any log line.
+    try:
+        from src.secrets import redact
+    except ImportError:
+        from secrets import redact
+    try:
+        req = Request(url, headers=headers or {"User-Agent": USER_AGENT})
+        with urlopen(req, timeout=timeout) as resp:
+            return json.load(resp)
+    except Exception as exc:
+        raise RuntimeError(redact(str(exc))) from exc
 
 
 def _manual_candidates(path):
@@ -134,7 +144,11 @@ def youtube_collector(config, manual):
         try:
             return _youtube_api(api_key, config.get("niche", "")), "youtube_api"
         except Exception as exc:
-            print(f"WARNING: YouTube API failed ({exc}); using manual input.", file=sys.stderr)
+            try:
+                from src.secrets import redact as _redact
+            except ImportError:
+                from secrets import redact as _redact
+            print(f"WARNING: YouTube API failed ({_redact(exc)}); using manual input.", file=sys.stderr)
     entries = []
     for cand in manual:
         if (cand.get("source") or "youtube") != "youtube":
@@ -248,7 +262,11 @@ def tiktok_collector(config, manual):
         try:
             return _tiktok_research_api(token, config), "tiktok_research_api"
         except Exception as exc:
-            print(f"WARNING: TikTok Research API failed ({exc}); using manual input.",
+            try:
+                from src.secrets import redact as _redact
+            except ImportError:
+                from secrets import redact as _redact
+            print(f"WARNING: TikTok Research API failed ({_redact(exc)}); using manual input.",
                   file=sys.stderr)
     entries = []
     for cand in manual:

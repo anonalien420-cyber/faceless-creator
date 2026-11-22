@@ -46,6 +46,11 @@ class _FakeInsertRequest:
     def execute(self):
         return {"id": "VIDEOID123"}
 
+    def next_chunk(self):
+        # Resumable path (src/upload.py drives next_chunk, not
+        # execute): one chunk completes the upload.
+        return None, {"id": "VIDEOID123"}
+
 
 class _FakeVideos:
     def __init__(self, calls):

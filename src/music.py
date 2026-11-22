@@ -172,6 +172,40 @@ def legacy_music_file(config, music_arg):
     return ""
 
 
+def validate_music_volume(value):
+    """Return float(value) if it is a sane bed mix level, else raise.
+
+    The bed sits UNDER the narration: 0 < volume <= 1.0. Zero would
+    ship a bedless mix while claiming a bed, above 1.0 would drown
+    the narration. Reject loudly, never clamp silently (a silent
+    clamp would ship a mix at a level nobody asked for).
+    """
+    import math
+    try:
+        number = float(value)
+    except (TypeError, ValueError):
+        raise ValueError(
+            "Invalid music volume {!r}: must be a number between "
+            "0 (exclusive) and 1.0.".format(value)) from None
+    if not math.isfinite(number) or not 0.0 < number <= 1.0:
+        raise ValueError(
+            "Invalid music volume {}: must be between 0 (exclusive) "
+            "and 1.0 (got {}).".format(value, number))
+    return number
+
+
+def resolve_music_volume(cli_value, config):
+    """The bed mix level for one mix: the --music-volume CLI value
+    wins when given, else the config value (music_volume, locked
+    0.06), else the 0.06 default. Returns (volume, source) where
+    source is "cli", "config", or "default"."""
+    if cli_value is not None:
+        return validate_music_volume(cli_value), "cli"
+    if config is not None and config.get("music_volume") is not None:
+        return validate_music_volume(config.get("music_volume")), "config"
+    return 0.06, "default"
+
+
 def mix_command(narration, music_path, output, music_volume):
     """ffmpeg argv mixing a music bed under narration.
 
@@ -392,7 +426,10 @@ def main(argv=None):
     parser.add_argument("--music", default="")
     parser.add_argument("--output", required=True)
     parser.add_argument("--config", default="config.yaml")
-    parser.add_argument("--music-volume", type=float, default=0.15)
+    parser.add_argument("--music-volume", type=float, default=None,
+                        help="Bed mix level (0 < v <= 1.0). Overrides "
+                             "config music_volume (locked 0.06) for "
+                             "this mix only.")
     parser.add_argument("--top5", default="data/top5.json")
     parser.add_argument("--profile", default="")
     args = parser.parse_args(argv)
@@ -464,13 +501,24 @@ def main(argv=None):
     if not shutil.which("ffmpeg"):
         print("ERROR: ffmpeg is required to mix music.", file=sys.stderr)
         return 1
+    # The bed level comes from config (locked 0.06), not a hardcoded
+    # CLI default: the old 0.15 default meant the daily run path
+    # mixed hotter than every shipped render. --music-volume still
+    # overrides for a one-off mix.
+    try:
+        music_volume, volume_source = resolve_music_volume(
+            args.music_volume, config)
+    except ValueError as exc:
+        print(f"ERROR: {exc}", file=sys.stderr)
+        return 1
     # Mix via mix_command: amix normalize=0 (no ~6 dB drop) with the
     # bed looped to cover narration longer than the bed.
     subprocess.run(
-        mix_command(args.narration, music, args.output, args.music_volume),
+        mix_command(args.narration, music, args.output, music_volume),
         check=True,
     )
-    print(f"Mixed -> {args.output} (music bed at volume {args.music_volume})")
+    print(f"Mixed -> {args.output} (music bed at volume {music_volume} "
+          f"from {volume_source})")
     return 0
 
 
