@@ -29,6 +29,7 @@ import re
 import shutil
 import subprocess
 import sys
+import tempfile
 import urllib.parse
 import urllib.request
 
@@ -208,8 +209,29 @@ def make_ass(script_text, duration, path, width=1080, height=1920, fontsize=72):
     return path
 
 
-def _escape_drawtext(text):
-    return text.replace("\\", "\\\\").replace(":", "\\:").replace("'", "\\'")
+def _write_drawtext_file(directory, name, text):
+    """Write dynamic drawtext text to a file (no filtergraph quoting).
+
+    An inline drawtext=text='...' value cannot carry an apostrophe:
+    the escaping that ffmpeg's filtergraph parser accepts is stripped
+    again by drawtext's own option parser, which then sees a bare
+    quote, so any prompt like "Here's why it works:" aborted the
+    render with rc=234. Reading the text from a file sidesteps both
+    parsers entirely (drawtext=textfile=...:expansion=none).
+    """
+    path = os.path.join(directory, f"{name}.txt")
+    with open(path, "w", encoding="utf-8") as fh:
+        fh.write(str(text))
+    return path
+
+
+def _drawtext_path(path):
+    """Escape a generated textfile path for the filtergraph parser.
+
+    Only backslash and colon are escaped; these are mkdtemp paths
+    (alphanumeric + underscore), so this never mangles real input.
+    """
+    return path.replace("\\", "\\\\").replace(":", "\\:")
 
 
 def _fill_filter(width, height):
@@ -245,8 +267,15 @@ def build_video(script, audio_path, output, visuals=None, duration=None,
     fontsize = 72 if height > width else 54
     make_ass(script["text"], duration, ass_path, width=width, height=height,
              fontsize=fontsize)
-    title = _escape_drawtext(script["topic"].title()[:60])
-    hook_line = _escape_drawtext((script.get("hook", "") or "").split(". ")[0][:80])
+    title = script["topic"].title()[:60]
+    hook_line = (script.get("hook", "") or "").split(". ")[0][:80]
+    # Dynamic overlay text is read from files, never embedded in the
+    # filtergraph (apostrophes in prompts broke the render, rc=234).
+    drawtext_dir = tempfile.mkdtemp(prefix="deep_scan_drawtext_")
+    title = _drawtext_path(_write_drawtext_file(drawtext_dir, "title", title))
+    if hook_line:
+        hook_line = _drawtext_path(
+            _write_drawtext_file(drawtext_dir, "hook", hook_line))
     accepted, _rejected = resolve_visuals(visuals or [], min_resolution)
     # Pattern-interrupt interval: 25s longs, 10s Shorts.
     interrupt = 25.0 if width > height else 10.0
@@ -256,25 +285,28 @@ def build_video(script, audio_path, output, visuals=None, duration=None,
     # Caption/title/progress filters, applied after the visual chain.
     overlay = [
         f"drawbox=x=0:y={height - 50}:w='{width}*t/{duration:.2f}':h=12:color=yellow@0.9:t=fill",
-        f"drawtext=text='{title}':font=DejaVu Sans:fontsize={fontsize}:fontcolor=white:"
+        f"drawtext=textfile={title}:expansion=none:font=DejaVu Sans:fontsize={fontsize}:fontcolor=white:"
         f"borderw=3:bordercolor=black:x=(w-text_w)/2:y=200:enable='lt(t,3)'",
         f"ass={ass_path}",
     ]
     if hook_line:
         overlay.append(
-            f"drawtext=text='{hook_line}':font=DejaVu Sans:fontsize={max(28, fontsize - 18)}:"
+            f"drawtext=textfile={hook_line}:expansion=none:font=DejaVu Sans:fontsize={max(28, fontsize - 18)}:"
             f"fontcolor=white:borderw=2:bordercolor=black:x=(w-text_w)/2:"
             f"y={200 + fontsize + 20}:enable='lt(t,5)'")
     prompts = ["The key part:", "Here's why it works:", "Don't miss this:", "Quick check:"]
     for k in range(1, chunk_count):
         t = k * chunk
-        prompt = _escape_drawtext(prompts[(k - 1) % len(prompts)])
+        prompt = _drawtext_path(_write_drawtext_file(
+            drawtext_dir, f"prompt_{k}", prompts[(k - 1) % len(prompts)]))
         overlay.append(
-            f"drawtext=text='{prompt}':font=DejaVu Sans:fontsize={max(32, fontsize - 14)}:"
+            f"drawtext=textfile={prompt}:expansion=none:font=DejaVu Sans:fontsize={max(32, fontsize - 14)}:"
             f"fontcolor=yellow:borderw=3:bordercolor=black:x=(w-text_w)/2:"
             f"y={height // 3}:enable='between(t,{t:.2f},{t + 2:.2f})'")
+    end_card = _drawtext_path(
+        _write_drawtext_file(drawtext_dir, "end_card", end_card_text))
     overlay.append(
-        f"drawtext=text='{_escape_drawtext(end_card_text)}':font=DejaVu Sans:"
+        f"drawtext=textfile={end_card}:expansion=none:font=DejaVu Sans:"
         f"fontsize={fontsize}:fontcolor=white:borderw=3:bordercolor=black:"
         f"x=(w-text_w)/2:y={height - 220}:enable='gt(t,{duration - 3:.2f})'")
     if not accepted:
@@ -285,7 +317,10 @@ def build_video(script, audio_path, output, visuals=None, duration=None,
                "-t", str(duration), "-c:v", "libx264", "-pix_fmt", "yuv420p",
                "-b:v", bitrate, "-maxrate", "12M", "-bufsize", "20M",
                "-c:a", "aac", "-shortest", output]
-        subprocess.run(cmd, check=True)
+        try:
+            subprocess.run(cmd, check=True)
+        finally:
+            shutil.rmtree(drawtext_dir, ignore_errors=True)
         print(f"Video -> {output} ({duration:.1f}s, {width}x{height}, gradient fallback)")
         return output
 
@@ -333,7 +368,10 @@ def build_video(script, audio_path, output, visuals=None, duration=None,
             "-t", str(duration), "-c:v", "libx264", "-pix_fmt", "yuv420p",
             "-b:v", bitrate, "-maxrate", "12M", "-bufsize", "20M",
             "-c:a", "aac", "-shortest", output])
-    subprocess.run(cmd, check=True)
+    try:
+        subprocess.run(cmd, check=True)
+    finally:
+        shutil.rmtree(drawtext_dir, ignore_errors=True)
     kinds = ",".join(v["type"] for v in accepted)
     print(f"Video -> {output} ({duration:.1f}s, {width}x{height}, "
           f"{len(accepted)} visual(s) in {n} chunk(s): {kinds}, {bitrate})")
