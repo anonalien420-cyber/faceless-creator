@@ -44,8 +44,35 @@ DEFAULTS = {
 }
 
 
+def _strip_comment(value):
+    """Drop a trailing `# comment` that sits OUTSIDE quotes. A '#' inside a
+    quoted string, or one not preceded by whitespace (e.g. a URL fragment),
+    is kept. Without this, `speed: 1.2 # faster` parsed as the string
+    '1.2 # faster' and crashed float() downstream."""
+    in_single = in_double = False
+    for i, ch in enumerate(value):
+        if ch == "'" and not in_double:
+            in_single = not in_single
+        elif ch == '"' and not in_single:
+            in_double = not in_double
+        elif ch == "#" and not in_single and not in_double:
+            if i == 0 or value[i - 1] in " \t":
+                return value[:i].rstrip()
+    return value
+
+
+def _flow_list(value):
+    """Parse an inline flow list like `[]` or `[a, b]`. The loader previously
+    stored these as the literal string '[]', which then iterated as the
+    characters '[' and ']' (e.g. bogus niches)."""
+    inner = value[1:-1].strip()
+    if not inner:
+        return []
+    return [_scalar(part) for part in inner.split(",")]
+
+
 def _scalar(value):
-    value = value.strip()
+    value = _strip_comment(value.strip())
     if value in ("", "~", "null"):
         return ""
     if value.lower() == "true":
@@ -120,7 +147,11 @@ def load_config(path="config.yaml"):
                 current_list_key = key
                 current_dict = None
             else:
-                config[key] = _scalar(value)
+                value = _strip_comment(value)
+                if value.startswith("[") and value.endswith("]"):
+                    config[key] = _flow_list(value)
+                else:
+                    config[key] = _scalar(value)
                 current_list_key = None
                 current_dict = None
     # Drop empty-string list placeholders (e.g. a single "" URL entry).

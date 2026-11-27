@@ -1,0 +1,39 @@
+{
+  "_note": "EXAMPLE ONLY — these are not real statistics. Copy this file to data/video_stats.json and replace every value with numbers you exported from YouTube Studio (or connect YouTube OAuth so src/review.py reads the Data API). Fields it uses: video_id, title, niche, hook_style, length_seconds, music_genre, music_tempo_bpm, music_mood, publish_time (ISO 8601, UTC), views, avg_view_duration_seconds, retention_pct, likes, comments, published_date. Videos with no views are listed as 'no data yet' and never scored.",
+  "videos": [
+    {
+      "video_id": "EXAMPLE1",
+      "title": "EXAMPLE: The lost city nobody can explain",
+      "niche": "history mysteries investigated with modern tech",
+      "hook_style": "question",
+      "length_seconds": 52,
+      "music_genre": "electronic",
+      "music_tempo_bpm": 120,
+      "music_mood": "energetic",
+      "publish_time": "2026-11-20T18:00:00Z",
+      "published_date": "2026-11-20T18:00:00Z",
+      "views": 12000,
+      "avg_view_duration_seconds": 41,
+      "retention_pct": 78,
+      "likes": 640,
+      "comments": 85
+    },
+    {
+      "video_id": "EXAMPLE2",
+      "title": "EXAMPLE: An artifact that should not exist",
+      "niche": "history mysteries investigated with modern tech",
+      "hook_style": "shock",
+      "length_seconds": 58,
+      "music_genre": "lofi",
+      "music_tempo_bpm": 80,
+      "music_mood": "chill",
+      "publish_time": "2026-11-21T23:00:00Z",
+      "published_date": "2026-11-21T23:00:00Z",
+      "views": 3100,
+      "avg_view_duration_seconds": 22,
+      "retention_pct": 38,
+      "likes": 120,
+      "comments": 14
+    }
+  ]
+}

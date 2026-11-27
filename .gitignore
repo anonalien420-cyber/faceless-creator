@@ -11,4 +11,11 @@ data/audio/
 data/audio_mixed/
 data/videos/
 data/music_bed.mp3
+# Per-format output dirs the pipeline actually writes (run.py / video.py):
+data/audio*/
+data/videos*/
+data/stock/
+data/thumbnails/
+data/music_bed_*.mp3
+data/*.thumb_frame.jpg
 !data/trends_input.example.json

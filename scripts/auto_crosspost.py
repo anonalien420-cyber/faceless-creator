@@ -99,7 +99,6 @@ def post_reddit(entry, text):
         fail("Reddit: REDDIT_CLIENT_ID / REDDIT_CLIENT_SECRET / "
              "REDDIT_USERNAME / REDDIT_PASSWORD secrets are not set.")
     subreddit = entry.get("subreddit", "r/UnsolvedMysteries")
-    auth = urllib.request.HTTPBasicAuthHandler()
     # Token exchange (password grant) then link submission, stdlib only.
     import base64
     basic = base64.b64encode(f"{client_id}:{client_secret}".encode()).decode()
@@ -118,13 +117,15 @@ def post_reddit(entry, text):
     except Exception as exc:  # noqa: BLE001
         print(f"ERROR: Reddit auth failed: {exc}", file=sys.stderr)
         sys.exit(2)
+    # A link post carries a title + URL, not a body: Reddit ignores/rejects
+    # the "text" field for kind=link, so the old teaser body never appeared.
+    # Use the hook as the title (falls back to the video title) and drop text.
     submit_req = urllib.request.Request(
         "https://oauth.reddit.com/api/submit",
         data=urllib.parse.urlencode({
             "sr": subreddit, "kind": "link",
-            "title": entry.get("title", ""),
+            "title": (entry.get("hook") or entry.get("title", ""))[:300],
             "url": f"https://www.youtube.com/watch?v={entry['video_id']}",
-            "text": text,
         }).encode(),
         headers={"Authorization": f"bearer {token}",
                  "User-Agent": "the-deep-scan-crossposter/0.1"},
@@ -142,19 +143,17 @@ def post_reddit(entry, text):
     print(f"Reddit: posted to {subreddit}")
 
 
-def main(argv):
-    if "--video-id" not in argv:
-        fail("usage: auto_crosspost.py --video-id <youtube-id> [--note ...]")
-    video_id = argv[argv.index("--video-id") + 1]
-    note = ""
-    if "--note" in argv:
-        note = argv[argv.index("--note") + 1]
-    note = note or os.environ.get("CROSSPOST_NOTE", "")
-
-    entry = load_queue(video_id)
+def main(argv=None):
+    import argparse
+    parser = argparse.ArgumentParser(description="Crosspost a queued video teaser.")
+    parser.add_argument("--video-id", required=True)
+    parser.add_argument("--note", default="")
+    args = parser.parse_args(argv)
+    note = args.note or os.environ.get("CROSSPOST_NOTE", "")
+    entry = load_queue(args.video_id)
     platforms = entry.get("platforms", ["facebook", "reddit"])
     text = teaser_text(entry, note)
-    print(f"Crossposting {video_id} to: {', '.join(platforms)}")
+    print(f"Crossposting {args.video_id} to: {', '.join(platforms)}")
     if "facebook" in platforms:
         post_facebook(entry, text)
     if "reddit" in platforms:
@@ -163,4 +162,4 @@ def main(argv):
 
 
 if __name__ == "__main__":
-    main(sys.argv)
+    main()

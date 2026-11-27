@@ -62,17 +62,21 @@ def probe_asset(path):
     _require("ffprobe")
     out = subprocess.run(
         ["ffprobe", "-v", "error", "-select_streams", "v:0",
-         "-show_entries", "stream=width,height,codec_type,duration",
+         "-show_entries", "stream=width,height,codec_type,duration:format=duration",
          "-of", "json", path],
         capture_output=True, text=True)
     try:
-        streams = json.loads(out.stdout).get("streams", [])
+        data = json.loads(out.stdout)
+        streams = data.get("streams", [])
         if not streams:
             return None
         stream = streams[0]
         duration = stream.get("duration")
         if duration is None:
-            duration = audio_duration(path) if False else 0
+            # Some containers (e.g. webm) omit per-stream duration; fall
+            # back to the container duration so clips are not misread as
+            # still images (which would route them through zoompan).
+            duration = data.get("format", {}).get("duration")
         return (int(stream.get("width", 0)), int(stream.get("height", 0)),
                 float(duration or 0), stream.get("codec_type", "video"))
     except Exception:
@@ -81,10 +85,16 @@ def probe_asset(path):
 
 def download_file(url, dest_dir="data/stock"):
     os.makedirs(dest_dir, exist_ok=True)
-    name = re.sub(r"[^A-Za-z0-9._-]+", "_", url.split("/")[-1].split("?")[0]) or "asset"
-    dest = os.path.join(dest_dir, name)
+    import hashlib
+    base = re.sub(r"[^A-Za-z0-9._-]+", "_", url.split("/")[-1].split("?")[0]) or "asset"
+    # Prefix a short URL hash so two different URLs that share a basename
+    # (e.g. both end in video.mp4) never collide in the cache.
+    digest = hashlib.sha1(url.encode("utf-8")).hexdigest()[:10]
+    dest = os.path.join(dest_dir, f"{digest}-{base}")
     if not os.path.exists(dest):
-        urllib.request.urlretrieve(url, dest)
+        req = urllib.request.Request(url, headers={"User-Agent": "faceless-creator/1.0"})
+        with urllib.request.urlopen(req, timeout=60) as resp, open(dest, "wb") as fh:
+            shutil.copyfileobj(resp, fh)
     return dest
 
 
@@ -120,7 +130,7 @@ def fetch_stock_videos(config, keywords, per_keyword=2):
         for query in queries[:3]:
             try:
                 url = ("https://pixabay.com/api/videos/?key=" + pixabay_key +
-                       f"&q={urllib.parse.quote(query)}&per_page={per_keyword}")
+                       f"&q={urllib.parse.quote(query)}&per_page={max(3, per_keyword)}")
                 with urllib.request.urlopen(url, timeout=30) as resp:
                     data = json.load(resp)
                 for hit in data.get("hits", []):
@@ -374,34 +384,52 @@ def build_video(script, audio_path, output, visuals=None, duration=None,
     # every interrupt; zoom alternates in/out as a zoom punch.
     n = chunk_count
     seg = chunk
+    # Each xfade overlaps FADE seconds, so a chain of n segments of length
+    # `seg` would end (n-1)*FADE seconds EARLY and -shortest would chop the
+    # narration's ending. Give every segment FADE seconds of extra tail and
+    # place transition i at offset i*seg - FADE: the chain then totals
+    # exactly n*seg == duration, so audio and video stay in sync.
+    seg_len = seg + FADE if n > 1 else duration
     inputs = []
     filters = []
     # One ffmpeg input per chunk (same file may be listed several times).
     for i in range(n):
         vis = accepted[i % len(accepted)]
-        inputs += ["-loop", "1", "-i", vis["path"]] if vis["type"] == "image" else ["-i", vis["path"]]
         if vis["type"] == "image":
+            inputs += ["-loop", "1", "-i", vis["path"]]
             zoom = ("min(zoom+0.0008,1.3)" if i % 2 == 0
                     else "max(1.25-0.0008*on,1.0)")
+            # Scale to FILL the 2x frame and crop (aspect preserved, no
+            # stretch), then Ken Burns zoom anchored on the centre — not
+            # the top-left corner — and force square pixels so the output
+            # displays at the intended aspect.
             filters.append(
-                f"[{i}:v]scale={width * 2}:{height * 2},zoompan=z='{zoom}':"
-                f"d={int(seg * FPS)}:s={width}x{height}:fps={FPS},format=yuv420p[v{i}]")
+                f"[{i}:v]scale={width * 2}:{height * 2}:force_original_aspect_ratio=increase,"
+                f"crop={width * 2}:{height * 2},"
+                f"zoompan=z='{zoom}':x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':"
+                f"d={int(seg_len * FPS)}:s={width}x{height}:fps={FPS},"
+                f"setsar=1,format=yuv420p[v{i}]")
         else:
+            # Loop short clips so a segment always has enough frames even
+            # when the source clip is shorter than the interrupt interval.
+            inputs += ["-stream_loop", "-1", "-i", vis["path"]]
             clip_dur = vis.get("duration") or 0
             start = 0.0
-            if clip_dur and clip_dur > seg:
-                start = min(i * 2.0, clip_dur - seg)
+            if clip_dur and clip_dur > seg_len:
+                start = min(i * 2.0, clip_dur - seg_len)
             filters.append(
-                f"[{i}:v]trim={start:.2f}:{start + seg:.2f},setpts=PTS-STARTPTS,{_fill_filter(width, height)}[v{i}]")
+                f"[{i}:v]trim={start:.2f}:{start + seg_len:.2f},setpts=PTS-STARTPTS,"
+                f"{_fill_filter(width, height)},setsar=1[v{i}]")
     audio_idx = n
     inputs += ["-i", audio_path]
     if n == 1:
         filters.append("[v0]copy[vx]")
     else:
-        # xfade chain: each step fades 0.5s into the next segment.
-        current, offset = "[v0]", 0.0
+        # xfade chain: transition i starts at i*seg - FADE so the final
+        # stream length is exactly n*seg (see seg_len note above).
+        current = "[v0]"
         for i in range(1, n):
-            offset = offset + seg - FADE
+            offset = i * seg - FADE
             filters.append(f"{current}[v{i}]xfade=transition=fade:duration={FADE}:offset={offset:.2f}[x{i}]")
             current = f"[x{i}]"
         filters.append(f"{current}copy[vx]")

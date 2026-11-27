@@ -98,17 +98,21 @@ def validate_claim(text, script_text, topic="", n_items=None):
     for word in re.findall(r"[a-z']+", text.lower()):
         if word in GENERIC_WORDS or word in topic_words or len(word) <= 2:
             continue
-        if word not in script_lower:
+        # Whole-word match: a substring test let "art" pass inside "start",
+        # weakening the truth check.
+        if not re.search(r"\b" + re.escape(word) + r"\b", script_lower):
             return False, f"word {word!r} is not in the script/topic"
     return True, "claim matches the script"
 
 
 def fallback_line(topic):
-    """Truthful curiosity line: topic words + 'Fix', max 4 words, no claim."""
+    """Truthful curiosity line: topic words + a neutral hook, max 4 words,
+    no claim. 'Fix' read oddly for non-how-to niches (e.g. 'Lost Cities
+    Fix'), so use a question instead."""
     words = [w for w in re.findall(r"[A-Za-z']+", topic or "")][:3]
     if not words:
-        return "The Fix"
-    return " ".join((words + ["Fix"])[:4])
+        return "What Happened?"
+    return " ".join(words[:3]) + "?"
 
 
 def curiosity_lines(topic, script_text, n_items):

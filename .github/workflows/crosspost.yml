@@ -64,4 +64,5 @@ jobs:
           REDDIT_USERNAME: ${{ secrets.REDDIT_USERNAME }}
           REDDIT_PASSWORD: ${{ secrets.REDDIT_PASSWORD }}
           CROSSPOST_NOTE: ${{ inputs.note }}
-        run: python scripts/auto_crosspost.py --video-id "${{ inputs.video_id }}"
+          VIDEO_ID: ${{ inputs.video_id }}
+        run: python scripts/auto_crosspost.py --video-id "$VIDEO_ID"

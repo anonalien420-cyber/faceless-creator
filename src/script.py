@@ -70,6 +70,126 @@ EXTRA_SENTENCES = [
     "One good week beats one perfect day, every time.",
 ]
 
+# Distinct padding lines for long-form scripts. The old code repeated ONE
+# sentence 20-30 times to hit the word target; these rotate so the filler
+# is varied, and they are inserted BEFORE the CTA so the ending stays put.
+LONG_PADDING = [
+    "The point is not to do more, it is to do the same small thing often enough that it stops feeling like a decision.",
+    "Most of the progress here is invisible day to day, which is exactly why people quit right before it starts to compound.",
+    "If you only remember one idea, make it this: consistency beats intensity, and a rough plan you keep beats a perfect plan you drop.",
+    "It is worth slowing down at this point, because the temptation is to add complexity right when simplicity is doing the work.",
+    "Notice that none of this requires motivation on demand; it requires a setup that works on the days motivation does not show up.",
+    "A bad week is not a verdict on the system, it is feedback about one friction point you can remove before the next week starts.",
+    "The people who stick with this are rarely the most disciplined; they are the ones who made restarting cheap and drama-free.",
+    "Keep the bar low enough that a tired version of you can still clear it, and raise it only once the habit runs on its own.",
+    "What looks like a small choice today is really a vote for the kind of routine you want to be living a month from now.",
+    "When in doubt, shrink the step rather than skip it, because a tiny rep keeps the chain alive where a skipped one breaks it.",
+]
+
+HISTORY_LONG_PADDING = [
+    "It helps to separate what the record actually supports from what later retellings added, because the two are easy to confuse once a story becomes popular.",
+    "Researchers who disagree about the conclusion often agree about the evidence; the argument is about what that evidence is allowed to mean.",
+    "A useful discipline here is to ask what would change the answer, and whether anyone has actually gone looking for that test.",
+    "New instruments do not settle old questions by themselves; they only narrow the range of answers the existing evidence can still support.",
+    "When a detail survives every retelling unchanged, it is worth checking whether it was ever verified, or simply repeated until it felt true.",
+    "The honest move when the trail goes cold is to say so plainly, and to leave the question open rather than dress up a guess as a finding.",
+    "Context matters as much as the artifact: the same object can look ordinary or extraordinary depending on what else was found beside it.",
+    "Every reconstruction carries the assumptions of the people who built it, so read it as a model to test, not a photograph of the past.",
+    "What makes a mystery durable is not a lack of clues but an excess of explanations that each fit some of the clues and none of them fit all.",
+    "If fresh evidence ever surfaces, the right response is to update the story in public, not to quietly leave an older, wrong version standing.",
+]
+
+# A second structural paragraph per long section, to raise the real content
+# word count so less padding is needed. No concrete historical claims.
+LONG_SECTION_EXTRA = {
+    "The problem, honestly":
+        "So before any tactic, name the real constraint: your actual week, with its "
+        "actual energy and its actual interruptions. A system designed for that week "
+        "will outlast one designed for an imaginary, freer version of your life.",
+    "The mistake most people make":
+        "The repair is unglamorous. Subtract before you add. Take the list of changes "
+        "you were going to make and cross out all but the first, then give that one "
+        "room to become automatic before you even think about the second.",
+    "The simple system":
+        "The reason this works is that it removes the need to decide. Once the action "
+        "is tied to a time and a place you already pass through every day, starting "
+        "stops being a negotiation and becomes a default.",
+    "What it looks like in practice":
+        "Judge the system by its restarts, not its streaks. A routine that survives a "
+        "missed day and resumes the next morning is stronger than one that looks "
+        "perfect for two weeks and then collapses for a month.",
+    "Common traps":
+        "All three traps share a root: treating the habit as a statement about who you "
+        "are instead of a small thing you do. Keep it small and behavioral, and the "
+        "traps lose most of their grip.",
+    "Your 7-day plan":
+        "At the end of the week, resist the urge to overhaul what worked. Keep the "
+        "version that survived, change at most one thing, and let the next seven days "
+        "build quietly on the first seven.",
+}
+
+HISTORY_SECTION_EXTRA = {
+    "The mystery":
+        "Part of what keeps {topic} alive as a question is that every new generation of "
+        "researchers brings tools the last one did not have, and each pass reframes "
+        "what counts as a clue without ever quite closing the case.",
+    "What the evidence actually shows":
+        "It is worth stating the limits of the record out loud: what was found, what "
+        "was only reported secondhand, and what has never been found at all. Keeping "
+        "those three categories apart is most of the work.",
+    "Theory one":
+        "The strength of this reading is its economy; it asks for the fewest unusual "
+        "assumptions. Its weakness is the residue it leaves behind, the details it "
+        "explains by shrugging rather than by evidence.",
+    "Theory two":
+        "The appeal of this reading is that it takes the awkward details seriously "
+        "instead of explaining them away. The cost is that it asks for more, and "
+        "extraordinary explanations need correspondingly strong support.",
+    "What modern tech reveals":
+        "The pattern across these tools is the same: they trade speculation for "
+        "measurement wherever measurement is possible, and they are honest about the "
+        "places where it still is not.",
+    "What is still unexplained":
+        "Naming the open questions precisely is itself progress, because a well-posed "
+        "question tells the next researcher where to dig, while a vague sense of "
+        "mystery tells them nothing.",
+}
+
+
+def _pad_to_target(body, cta, target, pool):
+    """Pad the body toward the word target BEFORE appending the CTA, using
+    rotating distinct lines, so the closing question/tease is never buried
+    or trimmed off. Trims the body (never the CTA) if it is already long."""
+    budget = max(0, target - len(cta.split()))
+    if len(body.split()) > budget + 100:
+        body = _trim_to_words(body, budget)
+    i = 0
+    while len(body.split()) < budget and i < len(pool) * 2:
+        body = f"{body} {pool[i % len(pool)]}"
+        i += 1
+    return f"{body} {cta}"
+
+
+def _fit_short(hook, beats, cta, target):
+    """Fit a Short to ~target words while ALWAYS keeping the hook and the
+    closing CTA/tease. Trims whole sentences from the longest beat instead
+    of chopping the ending off. Returns (text, fitted_beats)."""
+    target = max(120, target)
+    beats = list(beats)
+
+    def total():
+        return len(" ".join([hook] + beats + [cta]).split())
+
+    guard = 0
+    while total() > target + 10 and guard < 200:
+        guard += 1
+        idx = max(range(len(beats)), key=lambda i: len(beats[i].split()))
+        sents = _sentences(beats[idx])
+        if len(sents) <= 1:
+            break  # every beat is one sentence; keep the structure intact
+        beats[idx] = " ".join(sents[:-1])
+    return " ".join([hook] + beats + [cta]), beats
+
 
 def topic_from_candidate(candidate):
     topic = (candidate.get("topic") or "").strip()
@@ -138,17 +258,16 @@ def build_script(topic, hook_style="statement", target_words=None):
         "Try it today, save this video so you can find it again, and tell me "
         "in the comments which small win you are picking first."
     )
-    text = " ".join([hook, beat1, beat2, beat3, cta])
     target = target_words or 150
+    beats = [beat1, beat2, beat3]
     i = 0
-    while len(text.split()) < target and i < len(EXTRA_SENTENCES):
-        text = f"{text} {EXTRA_SENTENCES[i]}"
+    while len(" ".join([hook] + beats + [cta]).split()) < target and i < len(EXTRA_SENTENCES):
+        beats.append(EXTRA_SENTENCES[i])
         i += 1
-    if len(text.split()) > target + 30:
-        text = _trim_to_words(text, target)
+    text, beats = _fit_short(hook, beats, cta, target)
     return {
         "hook": hook,
-        "beats": [beat1, beat2, beat3],
+        "beats": beats,
         "cta": cta,
         "text": text,
         "word_count": len(text.split()),
@@ -388,7 +507,8 @@ def build_history_short_script(topic, hook_style="question", target_words=150,
         "and it stays speculation until evidence proves otherwise. "
         f"{tease}"
     )
-    text = " ".join([hook, evidence, theories, unexplained, cta])
+    text, fitted = _fit_short(hook, [evidence, theories, unexplained], cta, target_words)
+    evidence, theories, unexplained = fitted
     sections = [
         {"title": "What the evidence actually shows", "tier": "KNOWN",
          "text": evidence},
@@ -400,7 +520,7 @@ def build_history_short_script(topic, hook_style="question", target_words=150,
         "hook": hook,
         "shock_hook": shock_hook,
         "next_episode_tease": tease,
-        "beats": [evidence, theories, unexplained],
+        "beats": fitted,
         "sections": sections,
         "claim_tiers": CLAIM_TIERS,
         "cta": cta,
@@ -503,6 +623,9 @@ def build_history_long_script(topic, hook_style="question", target_words=1500,
     sections = []
     for title, paragraphs in HISTORY_LONG_SECTIONS:
         body = " ".join(p.format(topic=topic) for p in paragraphs)
+        extra = HISTORY_SECTION_EXTRA.get(title)
+        if extra:
+            body += " " + extra.format(topic=topic)
         # Curiosity loop: the question the NEXT section answers.
         body = body + LONG_CURIOSITY_LOOPS.get(title, "")
         sections.append({"title": title, "text": body,
@@ -517,16 +640,8 @@ def build_history_long_script(topic, hook_style="question", target_words=1500,
         "the theories disagree, and the mystery is still open. "
         f"{tease}"
     )
-    parts = [hook, intro] + [s["text"] for s in sections] + [cta]
-    text = " ".join(parts)
-    while len(text.split()) < target_words:
-        text = (f"{text} One point worth repeating: a theory is not a fact "
-                "until the evidence proves it, and an open question is not a "
-                "failure — it is the reason to keep investigating.")
-        if len(text.split()) >= target_words:
-            break
-    if len(text.split()) > target_words + 100:
-        text = _trim_to_words(text, target_words)
+    body = " ".join([hook, intro] + [s["text"] for s in sections])
+    text = _pad_to_target(body, cta, target_words, HISTORY_LONG_PADDING)
     chapters = ["Intro"] + [s["title"] for s in sections] + ["Summary"]
     return {
         "hook": hook,
@@ -625,6 +740,9 @@ def build_long_script(topic, hook_style="statement", target_words=1500):
     sections = []
     for title, paragraphs in LONG_SECTIONS:
         body = " ".join(p.format(topic=topic) for p in paragraphs)
+        extra = LONG_SECTION_EXTRA.get(title)
+        if extra:
+            body += " " + extra.format(topic=topic)
         sections.append({"title": title, "text": body})
     cta = (
         "If this helped, subscribe for the next deep dive, and tell me in the comments "
@@ -632,15 +750,8 @@ def build_long_script(topic, hook_style="statement", target_words=1500):
         "attach it to something you already do, track it for seven days, and never miss "
         "twice. Start tonight, and let the streak do the talking."
     )
-    parts = [hook, intro] + [s["text"] for s in sections] + [cta]
-    text = " ".join(parts)
-    while len(text.split()) < target_words:
-        text = (f"{text} One more thing worth repeating: simple survives, "
-                "complicated gets abandoned, so keep the system small until it is automatic.")
-        if len(text.split()) >= target_words:
-            break
-    if len(text.split()) > target_words + 100:
-        text = _trim_to_words(text, target_words)
+    body = " ".join([hook, intro] + [s["text"] for s in sections])
+    text = _pad_to_target(body, cta, target_words, LONG_PADDING)
     chapters = ["Intro"] + [s["title"] for s in sections] + ["Summary"]
     return {
         "hook": hook,

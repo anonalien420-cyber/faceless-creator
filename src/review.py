@@ -46,6 +46,7 @@ import re
 import statistics
 import sys
 from datetime import datetime, timedelta, timezone
+from zoneinfo import ZoneInfo
 
 try:
     from src.config import load_config
@@ -153,8 +154,12 @@ def analyse(videos):
     scored = [v for v in videos if isinstance(v.get("views"), (int, float))]
     no_data = [v for v in videos if not isinstance(v.get("views"), (int, float))]
     scored.sort(key=lambda v: v["views"], reverse=True)
-    top = scored[:3] if len(scored) >= 3 else scored
-    bottom = scored[-3:] if len(scored) >= 3 else []
+    top = scored[:3]
+    # Bottom performers must be distinct from the top — with only 3-5 scored
+    # videos the old scored[-3:] overlapped the top and flagged winners as
+    # "not working".
+    remaining = scored[3:]
+    bottom = remaining[-3:] if remaining else []
     median_views = _median([v["views"] for v in scored])
     shared = {}
     if top:
@@ -219,11 +224,22 @@ def apply_adjustments(config_path, shared, top):
     if shared.get("music_mood"):
         after["review_music_mood"] = shared["music_mood"]
     # Peak shift: median winning publish hour vs default 18:00 weekday
-    # peak, clamped to +/-60 minutes. Only if publish hours are known.
+    # peak, clamped to +/-60 minutes. publish_time is UTC (YouTube
+    # publishedAt), so convert to the channel's local timezone first —
+    # comparing a UTC hour to a local 18:00 peak skewed the shift by the
+    # whole UTC offset.
+    try:
+        tz = ZoneInfo(config.get("channel_timezone", "America/Chicago") or "America/Chicago")
+    except Exception:
+        tz = timezone.utc
     hours = []
-    for hour in shared.get("publish_hours", []):
+    for v in top:
+        raw = v.get("publish_time") or v.get("published_date") or ""
         try:
-            hours.append(int(hour))
+            dt = datetime.fromisoformat(str(raw).replace("Z", "+00:00"))
+            if dt.tzinfo is None:
+                dt = dt.replace(tzinfo=timezone.utc)
+            hours.append(dt.astimezone(tz).hour)
         except ValueError:
             pass
     if hours:

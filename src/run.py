@@ -43,6 +43,26 @@ def log_step(log, name, status, detail=""):
     return entry
 
 
+def write_log(log):
+    """Write run_log.json, merging steps that subprocesses (narrate/music)
+    appended to the on-disk log during this run. run.py keeps its own steps
+    in memory; without this merge the final dump would erase the voice and
+    music-match details those subprocesses logged."""
+    try:
+        if os.path.exists("data/run_log.json"):
+            with open("data/run_log.json", encoding="utf-8") as fh:
+                disk = json.load(fh)
+            have = {s.get("step") for s in log.get("steps", [])}
+            for s in disk.get("steps", []):
+                if s.get("step") not in have:
+                    log["steps"].append(s)
+    except Exception:
+        pass
+    os.makedirs("data", exist_ok=True)
+    with open("data/run_log.json", "w", encoding="utf-8") as fh:
+        json.dump(log, fh, indent=2)
+
+
 def run_cmd(cmd, step, log):
     result = subprocess.run(cmd, capture_output=True, text=True)
     if result.returncode != 0:
@@ -190,7 +210,12 @@ def build_format(log, fmt, scripts, config, niche, args):
         video = os.path.join(video_dir, f"{name}.mp4")
         narration = os.path.join(mixed_dir, f"{name}.mp3")
         if not os.path.exists(video):
-            continue
+            if args.skip_video:
+                continue
+            raise SystemExit(
+                f"Render produced no video for {name} ({fmt}) — refusing to "
+                "continue with a missing output (a silent drop would post "
+                "fewer videos than the run promised).")
         report_path = f"data/qa_report_{fmt}_{name}.json"
         ok = run_qa(video, narration=narration, script_text=script["text"],
                     title=script["topic"], report_path=report_path, fmt=fmt,
@@ -210,8 +235,16 @@ def build_format(log, fmt, scripts, config, niche, args):
     return outputs, qa_reports
 
 
-def upload_outputs(log, outputs, niche, args, seo_entries=None, long_title=""):
+def upload_outputs(log, outputs, niche, config, args, seo_entries=None, long_title=""):
+    try:
+        from src.scheduler import next_peak_window
+    except ImportError:
+        from scheduler import next_peak_window
     seo_by_topic = {e["topic"]: e for e in (seo_entries or [])}
+    # Stagger publish times PER FORMAT so two Shorts in one run do not share
+    # a single publishAt (midday + evening), without pushing Shorts past the
+    # long-form's evening slot.
+    last_scheduled = {}
     for item in outputs:
         script, video, fmt = item["script"], item["video"], item["format"]
         name = os.path.basename(video)
@@ -235,7 +268,13 @@ def upload_outputs(log, outputs, niche, args, seo_entries=None, long_title=""):
         if args.public or args.auto_public:
             cmd.append("--auto-public" if args.auto_public else "--public")
         if args.publish_at_peak:
-            cmd.append("--publish-at-peak")
+            start, _end = next_peak_window(niche, config, fmt=fmt, after=last_scheduled.get(fmt))
+            if start is not None:
+                last_scheduled[fmt] = start
+                item["scheduled_peak"] = start.isoformat()
+                cmd += ["--publish-at", start.astimezone(timezone.utc).isoformat()]
+            else:
+                cmd.append("--publish-at-peak")
         if not args.upload:
             cmd.append("--dry-run")
         run_cmd(cmd, f"upload:{fmt}:{name}", log)
@@ -271,8 +310,10 @@ def write_review_queue(outputs, niche, config, args, seo_entries, thumb_map):
     for item in outputs:
         script, video, fmt = item["script"], item["video"], item["format"]
         seo = seo_by_topic.get(script["topic"], {})
-        start, _end = next_peak_window(niche, config, fmt=fmt)
-        peak = start.isoformat() if start else "no peak window found"
+        peak = item.get("scheduled_peak")
+        if not peak:
+            start, _end = next_peak_window(niche, config, fmt=fmt)
+            peak = start.isoformat() if start else "no peak window found"
         thumbs = thumb_map.get(script["topic"], [])
         lines.append(f"## [{fmt}] {item.get('upload_title', script['topic'])}")
         lines.append(f"- Video: {video}")
@@ -321,10 +362,10 @@ def main(argv=None):
     parser.add_argument("--list-niches", action="store_true",
                         help="Print the niche ranking and stop (no videos, no upload).")
     parser.add_argument("--skip-video", action="store_true")
-    parser.add_argument("--long-count", type=int, default=0,
-                        help="Override long_videos_per_day (default from config).")
-    parser.add_argument("--short-count", type=int, default=0,
-                        help="Override shorts_per_day (default from config).")
+    parser.add_argument("--long-count", type=int, default=None,
+                        help="Override long_videos_per_day (default from config; 0 disables long-form).")
+    parser.add_argument("--short-count", type=int, default=None,
+                        help="Override shorts_per_day (default from config; 0 disables Shorts).")
     args = parser.parse_args(argv)
 
     config = load_config(args.config)
@@ -343,12 +384,20 @@ def main(argv=None):
         niche = choose_niche(config, args.trends_input)
         save_niche_lock(niche)
         print(f"Niche lock set: '{niche}' for {config.get('niche_lock_days', 90)} days.")
-    long_count = args.long_count or int(config.get("long_videos_per_day", 1) or 1)
-    short_count = args.short_count or int(config.get("shorts_per_day", 2) or 2)
+    long_count = (args.long_count if args.long_count is not None
+                  else int(config.get("long_videos_per_day", 1) or 1))
+    short_count = (args.short_count if args.short_count is not None
+                   else int(config.get("shorts_per_day", 2) or 2))
+    long_count, short_count = max(0, long_count), max(0, short_count)
     log = {"started_at": datetime.now(timezone.utc).isoformat(),
            "niche": niche, "long_videos": long_count,
            "shorts": short_count, "steps": []}
     os.makedirs("data", exist_ok=True)
+    # Reset the on-disk log now (plain overwrite, no merge) so subprocess
+    # appends (narrate/music) during this run accumulate on THIS run's log,
+    # not the previous run's. The final write_log() merges them back in.
+    with open("data/run_log.json", "w", encoding="utf-8") as fh:
+        json.dump(log, fh, indent=2)
     all_outputs, all_qa = [], []
     try:
         run_cmd([sys.executable, "-m", "src.trends", "--input", args.trends_input,
@@ -365,12 +414,19 @@ def main(argv=None):
             json.dump(long_cands, fh, indent=2)
         with open("data/top5_shorts.json", "w", encoding="utf-8") as fh:
             json.dump(short_cands, fh, indent=2)
+        # Style follows the niche ACTUALLY running this run (which --niche
+        # may override), not just the first configured niche — otherwise a
+        # finance topic under a history lock still gets history-mystery scripts.
+        niche_lower = niche.lower()
+        style = ("history_mystery"
+                 if ("history" in niche_lower and "myster" in niche_lower)
+                 else "general")
         run_cmd([sys.executable, "-m", "src.script", "--input", "data/top5_long.json",
                  "--output", "data/scripts_long.json", "--format", "long",
-                 "--count", str(long_count)], "scripts:long", log)
+                 "--style", style, "--count", str(long_count)], "scripts:long", log)
         run_cmd([sys.executable, "-m", "src.script", "--input", "data/top5_shorts.json",
                  "--output", "data/scripts_shorts.json", "--format", "short",
-                 "--count", str(short_count)], "scripts:short", log)
+                 "--style", style, "--count", str(short_count)], "scripts:short", log)
         for fmt, scripts_file in (("long", "data/scripts_long.json"),
                                   ("short", "data/scripts_shorts.json")):
             outputs, qa_reports = build_format(log, fmt, scripts_file,
@@ -450,19 +506,23 @@ def main(argv=None):
                 long_title = entry["recommended_title"]
                 break
         # Upload step: dry-run unless explicitly enabled.
-        upload_outputs(log, all_outputs, niche, args,
+        upload_outputs(log, all_outputs, niche, config, args,
                        seo_entries=seo_entries, long_title=long_title)
         # Human review queue — always written, even for dry runs.
         write_review_queue(all_outputs, niche, config, args, seo_entries, thumb_map)
-    except SystemExit as exc:
+    except SystemExit:
         log["status"] = "FAILED"
-        with open("data/run_log.json", "w", encoding="utf-8") as fh:
-            json.dump(log, fh, indent=2)
+        write_log(log)
+        raise
+    except Exception:
+        # Unexpected errors (KeyError, FileNotFoundError, ...) must also
+        # leave a FAILED log, not a stale "ok" one from a previous run.
+        log["status"] = "FAILED"
+        write_log(log)
         raise
     log["status"] = "ok"
     log["finished_at"] = datetime.now(timezone.utc).isoformat()
-    with open("data/run_log.json", "w", encoding="utf-8") as fh:
-        json.dump(log, fh, indent=2)
+    write_log(log)
     print(f"Run complete: {long_count} long-form + {short_count} Shorts. "
           "Log: data/run_log.json")
     return 0

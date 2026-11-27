@@ -140,13 +140,24 @@ def select_track(config, profile):
                    "track": {k: track.get(k) for k in ("file", "url", "genre", "tempo_bpm", "mood", "license")}}
 
 
+def _download_music(url):
+    """Download a track with a timeout and a URL-keyed filename so two
+    different tracks never overwrite each other's cached file."""
+    import hashlib
+    os.makedirs("data", exist_ok=True)
+    digest = hashlib.sha1(url.encode("utf-8")).hexdigest()[:10]
+    dest = os.path.join("data", f"music_bed_{digest}.mp3")
+    if not os.path.exists(dest):
+        req = urllib.request.Request(url, headers={"User-Agent": "faceless-creator/1.0"})
+        with urllib.request.urlopen(req, timeout=60) as resp, open(dest, "wb") as fh:
+            shutil.copyfileobj(resp, fh)
+    return dest
+
+
 def ensure_track_file(track):
     path = track.get("file") or track.get("url") or ""
     if path.startswith("http"):
-        dest = os.path.join("data", "music_bed.mp3")
-        os.makedirs("data", exist_ok=True)
-        urllib.request.urlretrieve(path, dest)
-        return dest
+        return _download_music(path)
     return path
 
 
@@ -156,19 +167,13 @@ def legacy_music_file(config, music_arg):
     if music_arg and os.path.exists(music_arg):
         return music_arg
     if music_arg and music_arg.startswith("http"):
-        dest = os.path.join("data", "music_bed.mp3")
-        os.makedirs("data", exist_ok=True)
-        urllib.request.urlretrieve(music_arg, dest)
-        return dest
+        return _download_music(music_arg)
     local = config.get("music_file", "")
     if local and os.path.exists(local):
         return local
     for url in config.get("music_urls", []):
         if url.startswith("http"):
-            dest = os.path.join("data", "music_bed.mp3")
-            os.makedirs("data", exist_ok=True)
-            urllib.request.urlretrieve(url, dest)
-            return dest
+            return _download_music(url)
     return ""
 
 
@@ -265,9 +270,12 @@ def main(argv=None):
     if not shutil.which("ffmpeg"):
         print("ERROR: ffmpeg is required to mix music.", file=sys.stderr)
         return 1
+    # normalize=0 keeps the narration at full level; amix's default
+    # normalize=1 scales every input by 1/n, which halved the voice (~-6 dB)
+    # whenever a music bed was added.
     filt = (
         f"[1:a]volume={args.music_volume}[music];"
-        "[0:a][music]amix=inputs=2:duration=first:dropout_transition=0"
+        "[0:a][music]amix=inputs=2:duration=first:dropout_transition=0:normalize=0"
     )
     subprocess.run(
         ["ffmpeg", "-y", "-i", args.narration, "-i", music,

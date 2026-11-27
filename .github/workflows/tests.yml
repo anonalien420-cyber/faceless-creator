@@ -1,0 +1,27 @@
+name: Tests
+
+# Runs the unit + render regression suite on every push and PR. Before this,
+# nothing ran the tests, so regressions in the pure-Python logic (config
+# parsing, scheduler, QA detectors, script lengths, dedupe) went unnoticed.
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install ffmpeg
+        run: sudo apt-get update && sudo apt-get install -y ffmpeg
+      - name: Install Python deps
+        run: pip install -r requirements.txt
+      - name: Run unit + render tests
+        run: python -m unittest discover -s tests -v

@@ -36,6 +36,7 @@ import math
 import os
 import re
 import sys
+import time
 import xml.etree.ElementTree as ET
 from datetime import datetime, timezone
 from urllib.parse import quote, urlencode
@@ -213,6 +214,10 @@ def reddit_collector(config, manual, manual_only=False):
     keywords = config.get("niche_keywords") or [config.get("niche", "")]
     for sub in subreddits:
         for endpoint in ("hot", "top"):
+            # Be polite to Reddit's public JSON: a small delay between
+            # requests avoids the 429s that a tight loop across many
+            # niches/subreddits would otherwise trigger.
+            time.sleep(0.5)
             try:
                 data = _fetch_json(
                     f"https://www.reddit.com/r/{sub}/{endpoint}.json?limit=20",
@@ -350,9 +355,12 @@ def google_collector(config, manual_only=False):
         pass
     except Exception as exc:
         print(f"WARNING: pytrends failed ({exc}); trying RSS.", file=sys.stderr)
-    # Free fallback: daily trending-searches RSS (US).
+    # Free fallback: Google Trends "Trending Now" RSS (US). The old
+    # /trends/trendingsearches/daily/rss endpoint was retired when Google
+    # replaced Daily Search Trends with Trending Now and now redirects to
+    # an HTML page, so the XML parse silently yielded nothing.
     try:
-        req = Request("https://trends.google.com/trends/trendingsearches/daily/rss?geo=US",
+        req = Request("https://trends.google.com/trending/rss?geo=US",
                       headers={"User-Agent": USER_AGENT})
         with urlopen(req, timeout=20) as resp:
             root = ET.fromstring(resp.read())
@@ -420,10 +428,14 @@ def dedupe(entries):
         key = _norm(entry["title"]) or _norm(entry["topic"])
         if key in seen:
             existing = seen[key]
-            existing.setdefault("merged_sources", []).append(entry["source"])
+            merged = existing.get("merged_sources", [])
             if entry["score"] > existing["score"]:
                 existing.update({k: v for k, v in entry.items() if k != "merged_sources"})
-                existing.setdefault("merged_sources", []).append(entry["source"])
+            # Record each contributing source once (the old code appended the
+            # winning source twice when it replaced the existing entry).
+            if entry["source"] not in merged:
+                merged.append(entry["source"])
+            existing["merged_sources"] = merged
         else:
             entry["merged_sources"] = [entry["source"]]
             seen[key] = entry
