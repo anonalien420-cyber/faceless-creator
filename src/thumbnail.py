@@ -53,12 +53,48 @@ GENERIC_WORDS = {
 }
 
 
+def focal_from_energy(column_energy):
+    """Pick a horizontal focal fraction (0..1) from per-column visual
+    energy. Pure function (unit-testable without PIL): the focal point is
+    the energy-weighted centroid, biased toward the strongest region so a
+    face/object off-centre is kept in frame instead of cropped away."""
+    if not column_energy or sum(column_energy) <= 0:
+        return 0.5
+    n = len(column_energy)
+    if max(column_energy) == min(column_energy):
+        return 0.5  # uniform energy: no subject to bias toward, keep centre
+    total = sum(column_energy)
+    centroid = sum(i * e for i, e in enumerate(column_energy)) / total
+    peak = max(range(n), key=lambda i: column_energy[i])
+    # Blend centroid (stable) with the peak (sharp subject) 60/40.
+    frac = (0.6 * centroid + 0.4 * peak) / max(1, n - 1)
+    return max(0.0, min(1.0, frac))
+
+
+def _column_energy(image, cols=32):
+    """Per-column luminance variance (a cheap saliency proxy: edges and
+    detail = high energy). Downsamples for speed; no heavy deps."""
+    small = image.convert("L").resize((cols, max(2, image.height * cols // max(1, image.width))))
+    pixels = list(small.getdata())
+    w, h = small.size
+    energy = []
+    for x in range(w):
+        col = [pixels[y * w + x] for y in range(h)]
+        mean = sum(col) / len(col)
+        energy.append(sum((p - mean) ** 2 for p in col) / len(col))
+    return energy
+
+
 def _fill_crop(image, width, height, focal="center"):
     from PIL import Image
     iw, ih = image.size
     scale = max(width / iw, height / ih)
     resized = image.resize((int(iw * scale) + 1, int(ih * scale) + 1), Image.LANCZOS)
-    if focal == "left":
+    if focal == "saliency":
+        frac = focal_from_energy(_column_energy(image))
+        left = int((resized.width - width) * frac)
+        left = max(0, min(left, resized.width - width))
+    elif focal == "left":
         left = max(0, (resized.width - width) // 4)
     elif focal == "right":
         left = max(0, 3 * (resized.width - width) // 4)
@@ -135,8 +171,18 @@ def curiosity_lines(topic, script_text, n_items):
 def make_thumbnail(text, output, image=None, video=None, fmt="long",
                    script_text="", topic="", n_items=None,
                    focal="center", accent=(255, 203, 5),
-                   before_after=False):
+                   before_after=False, brand=None):
     from PIL import Image, ImageDraw, ImageFont
+    # Brand kit: accent colour + font fall back to the channel defaults
+    # when no brand is supplied, so thumbnails match the video cards.
+    font_name = "DejaVuSans-Bold.ttf"
+    if brand is not None:
+        try:
+            from src.brand import font_file, hex_to_rgb
+        except ImportError:
+            from brand import font_file, hex_to_rgb
+        accent = hex_to_rgb(getattr(brand, "accent", "#FFCB05"), accent)
+        font_name = font_file(getattr(brand, "font", "DejaVu Sans"))
     width, height = (1280, 720) if fmt == "long" else (1080, 1920)
     # Validate the claim BEFORE drawing; refuse + fall back visibly.
     ok, reason = validate_claim(text, script_text, topic=topic, n_items=n_items)
@@ -182,7 +228,7 @@ def make_thumbnail(text, output, image=None, video=None, fmt="long",
         draw.text((mid + 20, 20), "AFTER", font=small, fill="white",
                   stroke_width=3, stroke_fill="black")
     try:
-        font = ImageFont.truetype("DejaVuSans-Bold.ttf", 110 if fmt == "long" else 130)
+        font = ImageFont.truetype(font_name, 110 if fmt == "long" else 130)
     except OSError:
         font = ImageFont.load_default()
     # Wrap the (max 4) words into at most 2 lines.
@@ -217,24 +263,37 @@ def make_thumbnail(text, output, image=None, video=None, fmt="long",
 
 
 def generate_variants(topic, script_text, outdir, slug, image=None,
-                      video=None, fmt="long", n_items=None, custom_text=""):
-    """Generate 2 A/B variants. Returns list of (path, text, qa_ok, qa_detail)."""
+                      video=None, fmt="long", n_items=None, custom_text="",
+                      brand=None):
+    """Generate 2 A/B variants. Returns list of (path, text, qa_ok, qa_detail).
+
+    Variant A uses a saliency-aware focal crop (keeps the subject in
+    frame) and the brand accent; variant B uses a side crop + the brand's
+    alternate accent. Both carry the brand font so they match the cards."""
     before_after = ("before" in (script_text or "").lower()
                     and "after" in (script_text or "").lower())
     if custom_text:
         lines = [custom_text, curiosity_lines(topic, script_text, n_items)[1]]
     else:
         lines = curiosity_lines(topic, script_text, n_items)
+    alt_accent = (227, 53, 13)
+    if brand is not None:
+        try:
+            from src.brand import hex_to_rgb
+        except ImportError:
+            from brand import hex_to_rgb
+        alt_accent = hex_to_rgb(getattr(brand, "accent_alt", "#E3350D"), alt_accent)
     specs = [
-        ("a", lines[0], "center", (255, 203, 5)),   # yellow accent, centre crop
-        ("b", lines[1], "left", (227, 53, 13)),     # red accent, side crop
+        ("a", lines[0], "saliency", (255, 203, 5)),  # brand accent, subject crop
+        ("b", lines[1], "left", alt_accent),         # alt accent, side crop
     ]
     results = []
     for suffix, line, focal, accent in specs:
         path = os.path.join(outdir, f"{slug}-thumb-{suffix}.png")
         make_thumbnail(line, path, image=image, video=video, fmt=fmt,
                        script_text=script_text, topic=topic, n_items=n_items,
-                       focal=focal, accent=accent, before_after=before_after)
+                       focal=focal, accent=accent, before_after=before_after,
+                       brand=brand)
         ok, detail = check_thumbnail(path, fmt=fmt)
         print(f"Thumbnail QA {'PASS' if ok else 'FAIL'} (variant {suffix}): {detail}")
         results.append({"path": path, "text": line, "variant": suffix,
@@ -244,8 +303,9 @@ def generate_variants(topic, script_text, outdir, slug, image=None,
 
 def check_thumbnail(path, fmt="long"):
     """QA: exists, exact expected size, not blank. Returns (ok, detail)."""
-    from PIL import Image
     import statistics
+
+    from PIL import Image
     want = (1280, 720) if fmt == "long" else (1080, 1920)
     if not os.path.exists(path) or os.path.getsize(path) == 0:
         return False, "missing or empty"

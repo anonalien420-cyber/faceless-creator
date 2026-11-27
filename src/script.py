@@ -614,7 +614,7 @@ def build_history_long_script(topic, hook_style="question", target_words=1500,
         "as theories, and an honest account of what is still unexplained."
     )
     intro = (
-        f"We will cover the mystery itself, what the evidence actually shows, "
+        "We will cover the mystery itself, what the evidence actually shows, "
         "two competing theories and what each one explains — and fails to "
         "explain — what modern tools like satellite imagery, forensic "
         "analysis, and AI reconstruction reveal, and what remains unexplained. "
@@ -772,6 +772,120 @@ def load_candidates(path):
     return data.get("candidates", data.get("videos", []))
 
 
+# ----------------------------------------------------- hook variants (Phase 2)
+HOOK_STYLES = ("statement", "question", "shock", "story")
+
+
+def hook_variants(topic):
+    """All four hook phrasings for a topic, for A/B selection. The winning
+    style (from review.py performance data) is used as the script's hook;
+    the rest are kept in `hook_variants` so the creator can swap them."""
+    return {style: hook_for(style, topic) for style in HOOK_STYLES}
+
+
+def select_hook_style(config, explicit=""):
+    """Pick the hook style: explicit flag wins, else the review-derived
+    preference (review_preferred_hook_style), else 'statement'."""
+    if explicit:
+        return explicit
+    preferred = (config or {}).get("review_preferred_hook_style", "")
+    return preferred if preferred in HOOK_STYLES else "statement"
+
+
+# ----------------------------------------------------- topic memory (Phase 2)
+def load_topic_history(path="data/topic_history.json"):
+    try:
+        with open(path, encoding="utf-8") as fh:
+            data = json.load(fh)
+        return data if isinstance(data, list) else data.get("topics", [])
+    except (OSError, ValueError):
+        return []
+
+
+def _topic_key(topic):
+    return re.sub(r"[^a-z0-9]+", " ", (topic or "").lower()).strip()
+
+
+def is_recent_topic(topic, history, days=30, now=None):
+    """True when a normalized topic was already covered within `days`."""
+    from datetime import datetime, timezone
+    now = now or datetime.now(timezone.utc)
+    key = _topic_key(topic)
+    if not key:
+        return False
+    for entry in history:
+        if _topic_key(entry.get("topic", "")) != key:
+            continue
+        raw = entry.get("date", "")
+        try:
+            dt = datetime.fromisoformat(str(raw).replace("Z", "+00:00"))
+            if dt.tzinfo is None:
+                dt = dt.replace(tzinfo=timezone.utc)
+        except ValueError:
+            return True  # undated entry: treat as covered (conservative)
+        if (now - dt).days < days:
+            return True
+    return False
+
+
+def record_topics(topics, path="data/topic_history.json", now=None):
+    """Append covered topics (with date) to the topic-memory file."""
+    from datetime import datetime, timezone
+    now = now or datetime.now(timezone.utc)
+    history = load_topic_history(path)
+    for topic in topics:
+        if topic:
+            history.append({"topic": topic, "date": now.isoformat()})
+    os.makedirs(os.path.dirname(path) or ".", exist_ok=True)
+    with open(path, "w", encoding="utf-8") as fh:
+        json.dump(history, fh, indent=2)
+    return history
+
+
+# ----------------------------------------------------- research (Phase 2)
+def apply_research(script, research):
+    """Fill a history-mystery script's sources + shock hook from verified
+    Wikipedia/Wikidata research, WITHOUT inventing anything.
+
+    - Replaces the placeholder `sources` with the real {title, url} sources
+      research found (only when research actually returned sources).
+    - Sets the shock hook to research's sourced shock_candidate when the
+      script has none, and makes it the opening hook line.
+    - Appends verified facts to the first KNOWN section so the evidence
+      section carries real, sourced content.
+
+    Everything still flows through drop_unverified + the QA accuracy gate:
+    a shock hook without a source is never set, and placeholder sources
+    are only replaced by real ones. Returns the updated script dict.
+    """
+    if not research or not research.get("facts"):
+        return script
+    sources = research.get("sources") or []
+    if sources and script.get("style") == "history_mystery":
+        script["sources"] = [
+            {"title": s.get("title", ""), "url": s.get("url"),
+             "no_public_url": bool(s.get("no_public_url")) or not s.get("url")}
+            for s in sources]
+    shock = research.get("shock_candidate")
+    if shock and shock.get("text") and shock.get("source") and not script.get("shock_hook"):
+        script["shock_hook"] = {"text": shock["text"], "tier": "KNOWN",
+                                "source": shock["source"]}
+        script["hook"] = shock["text"]
+        # Lead the body with the sourced shock fact.
+        if script.get("text") and not script["text"].startswith(shock["text"]):
+            script["text"] = shock["text"] + " " + script["text"]
+    # Enrich the first KNOWN section with verified facts (sourced).
+    facts = research.get("facts") or []
+    for section in script.get("sections", []):
+        if section.get("tier") == "KNOWN" and facts:
+            addition = " ".join(f["text"] for f in facts[:3])
+            section["text"] = (section.get("text", "") + " " + addition).strip()
+            break
+    script["research_provider"] = research.get("provider", "none")
+    script["word_count"] = len(script.get("text", "").split())
+    return script
+
+
 def main(argv=None):
     parser = argparse.ArgumentParser()
     parser.add_argument("--input", default="data/top5.json")
@@ -812,6 +926,18 @@ def main(argv=None):
         target = args.target_words or (int(length) * 150 // 60 if length else 150)
         builder = build_history_short_script if style == "history_mystery" else build_script
     candidates = load_candidates(args.input)
+    # Topic memory: skip topics already covered recently so the channel
+    # does not repeat itself across days (opt-out via topic_memory).
+    if config.get("topic_memory", True):
+        history = load_topic_history()
+        days = int(config.get("topic_memory_days", 30) or 30)
+        fresh = [c for c in candidates
+                 if not is_recent_topic(topic_from_candidate(c), history, days)]
+        skipped = len(candidates) - len(fresh)
+        if skipped:
+            print(f"Topic memory: skipped {skipped} recently-covered topic(s).")
+        candidates = fresh or candidates  # never starve a run entirely
+    research_enabled = bool(config.get("research_enabled", False))
     scripts = []
     for rank, cand in enumerate(candidates[: args.count], start=1):
         topic = topic_from_candidate(cand)
@@ -823,11 +949,19 @@ def main(argv=None):
             extra = {"shock_fact": cand.get("shock_fact"),
                      "shock_source": cand.get("shock_source"),
                      "next_topic": cand.get("next_topic")}
-        if args.format == "long":
-            script = builder(topic, hook_style=hook_style, target_words=target, **extra)
-        else:
-            script = builder(topic, hook_style=hook_style, target_words=target, **extra)
+        script = builder(topic, hook_style=hook_style, target_words=target, **extra)
+        # Free Wikipedia/Wikidata research fills real sources + a sourced
+        # shock hook when the candidate did not supply them (opt-in).
+        if research_enabled and style == "history_mystery":
+            try:
+                from src.research import research_topic
+            except ImportError:
+                from research import research_topic
+            apply_research(script, research_topic(topic, config))
         script.setdefault("dropped_unverified", [])
+        # Hook A/B variants: the review-preferred style is the hook; the
+        # other phrasings are kept so the creator can swap them.
+        variants = hook_variants(topic)
         scripts.append({
             "rank": rank,
             "topic": topic,
@@ -835,6 +969,7 @@ def main(argv=None):
             "source_channel": cand.get("channel", ""),
             "original_script": True,
             "hook_style": hook_style,
+            "hook_variants": variants,
             "style": script.get("style", style),
             **script,
         })

@@ -151,4 +151,55 @@ reddit_subreddits:
   - AskHistorians
 # Optional: set API keys/tokens as environment variables, never in this file.
 # YT_API_KEY, TIKTOK_RESEARCH_TOKEN, FACEBOOK_GRAPH_TOKEN,
-# PEXELS_API_KEY, PIXABAY_API_KEY, ELEVENLABS_API_KEY.
+# PEXELS_API_KEY, PIXABAY_API_KEY, ELEVENLABS_API_KEY, LLM_API_KEY.
+
+# --- Brand kit (drives cards, captions, watermark, thumbnails) ---
+# One consistent look across every output. accent/accent_alt are hex;
+# font is a DejaVu family name; logo/watermark are optional image paths
+# (own assets only). Leave logo/watermark empty to skip them.
+brand:
+  accent: "#FFCB05"
+  accent_alt: "#E3350D"
+  font: "DejaVu Sans"
+  text_color: "#FFFFFF"
+  outline_color: "#000000"
+  logo: ""
+  watermark: ""
+
+# --- Audio mastering (music.py) ---
+# Every video is mastered to the same loudness so the channel sounds
+# produced. music_volume is the bed level under the (ducked) narration.
+music_volume: 0.15
+loudness_i: -14        # integrated loudness target (LUFS)
+loudness_tp: -1.5      # true-peak ceiling (dBTP)
+
+# --- Captions + transitions (video.py) ---
+# captions_karaoke: highlight the active word using narration word timings.
+# captions_safe_zone: keep captions out of the bottom fraction of a Short
+#   (the Shorts UI covers roughly the bottom 25%).
+# transitions: "varied" (zoom-punch on emphasis + crossfade) or "fade".
+captions_karaoke: true
+captions_safe_zone: 0.25
+transitions: "varied"
+
+# --- Research + topic memory (Phase 2, all $0 / key-less) ---
+# research_enabled: pull verified Wikipedia/Wikidata facts + real sources
+#   into the KNOWN tier and shock hook (opt-in; needs network).
+# research_llm_tier: template (default, offline) | local | api (LLM_API_KEY).
+# topic_memory: skip topics already covered in the last topic_memory_days.
+# trend_velocity: score trends by views-per-day velocity + recency decay.
+research_enabled: false
+research_language: "en"
+research_llm_tier: "template"
+topic_memory: true
+topic_memory_days: 30
+trend_velocity: true
+
+# --- Engine / DX (Phase 3) ---
+# cache_enabled: skip re-TTS/re-render when script+voice+visuals unchanged.
+# max_workers: parallel render workers (0 = auto, capped at CPU count).
+# scene_broll: fetch stock per script section (needs a stock API key;
+#   falls back to the shared visual pool without one).
+cache_enabled: true
+max_workers: 0
+scene_broll: true

@@ -1,0 +1,85 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "faceless-creator"
+version = "1.1.0"
+description = "Niche-configurable, $0-budget faceless YouTube pipeline: trends -> scripts -> narration -> music -> video -> QA -> upload."
+readme = "README.md"
+requires-python = ">=3.11"
+license = { text = "MIT" }
+authors = [{ name = "The Deep Scan" }]
+keywords = ["youtube", "faceless", "shorts", "tts", "ffmpeg", "automation"]
+dependencies = [
+    "edge-tts>=6.1.0,<8.0.0",
+    "requests>=2.31,<3",
+    "google-api-python-client>=2.100,<3",
+    "google-auth-oauthlib>=1.1,<2",
+    "Pillow>=10.0,<12",
+    "PyYAML>=6.0,<7",
+]
+
+[project.optional-dependencies]
+local = ["kokoro", "soundfile"]
+paid = ["elevenlabs"]
+llm = ["openai"]
+schema = ["pydantic>=2,<3"]
+dev = [
+    "ruff>=0.6,<1",
+    "mypy>=1.10,<2",
+    "coverage>=7.4,<8",
+    "pre-commit>=3.7,<4",
+    "pip-tools>=7.4,<8",
+    "types-PyYAML",
+    "types-requests",
+]
+
+[project.scripts]
+faceless = "src.cli:main"
+
+[project.urls]
+Repository = "https://github.com/anonalien420-cyber/faceless-creator"
+
+[tool.setuptools]
+packages = ["src", "scripts"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+extend-exclude = ["data", "music", ".venv"]
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "B", "UP"]
+ignore = [
+    "E501",  # line length handled by formatter; long filtergraph strings are intentional
+    "E741",  # ambiguous variable names (l, I) used in tight math loops
+    "B008",  # function calls in defaults (argparse patterns)
+    "UP017", # datetime.timezone.utc is valid and used throughout; alias is cosmetic
+]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/*" = ["E402"]
+
+[tool.mypy]
+python_version = "3.11"
+ignore_missing_imports = true
+follow_imports = "silent"
+warn_unused_ignores = false
+check_untyped_defs = false
+# The pipeline is dict-heavy and incrementally typed; mypy runs in
+# advisory mode (non-blocking) until annotations are complete.
+exclude = ["data/", "music/"]
+
+[tool.coverage.run]
+source = ["src"]
+omit = ["src/cli.py", "*/__init__.py"]
+
+[tool.coverage.report]
+show_missing = true
+skip_covered = false
+# Advisory floor; raise as test coverage grows. New modules ship with tests.
+fail_under = 0
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

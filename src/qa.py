@@ -47,7 +47,6 @@ import json
 import os
 import re
 import subprocess
-import sys
 
 try:
     from src.video import build_video

@@ -7,5 +7,14 @@ google-auth-oauthlib>=1.1,<2
 # Thumbnails (src/thumbnail.py) need Pillow; without it every CI run logged
 # "thumbnail generation failed (No module named 'PIL')" and shipped none.
 Pillow>=10.0,<12
+# Full YAML config parsing (nested brand: block, anchors). The stdlib
+# fallback parser still works without it, but PyYAML is recommended.
+PyYAML>=6.0,<7
 # Optional, for Google Trends interest data (RSS fallback works without it):
 # pytrends
+# Optional paid/local voice + LLM tiers (never required, never default):
+#   kokoro, soundfile        (local narrator tier)
+#   elevenlabs               (paid narrator tier; or use the REST path)
+#   openai                   (research LLM api tier; or use the REST path)
+# Optional stricter config schema:
+#   pydantic>=2,<3

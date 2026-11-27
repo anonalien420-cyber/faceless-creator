@@ -52,16 +52,16 @@ def plan(video, title, description, privacy, publish_at=None, category_id="27"):
 
 def upload(video, title, description, privacy, publish_at=None, tags=None, category_id="27"):
     try:
-        from google_auth_oauthlib.flow import InstalledAppFlow
         from google.auth.transport.requests import Request
         from google.oauth2.credentials import Credentials
+        from google_auth_oauthlib.flow import InstalledAppFlow
         from googleapiclient.discovery import build
-        from googleapiclient.http import MediaFileUpload
         from googleapiclient.errors import HttpError
+        from googleapiclient.http import MediaFileUpload
     except ImportError as exc:
         print(f"ERROR: Google API libraries missing ({exc}). "
               "pip install google-api-python-client google-auth-oauthlib", file=sys.stderr)
-        raise SystemExit(1)
+        raise SystemExit(1) from exc
     # upload + readonly: the same channel owner's token also feeds the weekly
     # review's stats read (src/review.py needs youtube.readonly). With an
     # upload-only token that read silently always fell back to manual stats.

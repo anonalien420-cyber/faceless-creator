@@ -85,38 +85,100 @@ def _check_audio(path, label):
     return True
 
 
+def _srt_to_timings(srt_path, timings_path):
+    """Convert an edge-tts CLI SRT (sentence cues) into the timings sidecar
+    format video.py understands. Used when the library path is unavailable."""
+    import json
+    cues = []
+    try:
+        with open(srt_path, encoding="utf-8") as fh:
+            content = fh.read()
+    except OSError:
+        return
+    blocks = re.split(r"\n\s*\n", content.strip())
+    for block in blocks:
+        lines = [ln for ln in block.splitlines() if ln.strip()]
+        if len(lines) < 2:
+            continue
+        time_line = next((ln for ln in lines if "-->" in ln), "")
+        text_lines = [ln for ln in lines if "-->" not in ln and not ln.strip().isdigit()]
+        if not time_line or not text_lines:
+            continue
+        try:
+            start_s, end_s = time_line.split("-->")
+            cues.append({"text": " ".join(text_lines).strip(),
+                         "start": _srt_seconds(start_s), "end": _srt_seconds(end_s)})
+        except ValueError:
+            continue
+    if cues:
+        with open(timings_path, "w", encoding="utf-8") as fh:
+            json.dump({"sentences": cues}, fh)
+
+
+def _srt_seconds(value):
+    value = value.strip().replace(",", ".")
+    h, m, s = value.split(":")
+    return int(h) * 3600 + int(m) * 60 + float(s)
+
+
 def narrate_edge(text, voice, output, speed):
     """Edge TTS neural voice via the library, else the CLI.
 
     Pass plain (paced) text — never SSML — and apply the configured
-    speaking rate through the rate parameter. The CLI writes audio with
-    --write-media (--file is an INPUT flag, not an output flag).
+    speaking rate through the rate parameter. The library path streams
+    WordBoundary metadata and writes a <output>.timings.json sidecar so
+    video.py can render accurate, word-highlighted captions. The CLI
+    fallback writes SRT sentence cues and converts them to the same
+    sidecar. The CLI writes audio with --write-media (--file is an INPUT
+    flag, not an output flag).
     """
     rate = f"{int(round((speed - 1.0) * 100)):+d}%"
+    timings_path = output + ".timings.json"
     try:
-        import edge_tts
         import asyncio
-        communicate = edge_tts.Communicate(text, voice, rate=rate)
-        asyncio.run(communicate.save(output))
-        return f"edge-tts (rate {rate})"
+
+        import edge_tts
+
+        async def _run():
+            communicate = edge_tts.Communicate(text, voice, rate=rate,
+                                               boundary="WordBoundary")
+            words = []
+            with open(output, "wb") as audio:
+                async for chunk in communicate.stream():
+                    if chunk["type"] == "audio":
+                        audio.write(chunk["data"])
+                    elif chunk["type"] == "WordBoundary":
+                        # Offsets/durations are 100-nanosecond ticks.
+                        words.append({"text": chunk["text"],
+                                      "start": chunk["offset"] / 1e7,
+                                      "end": (chunk["offset"] + chunk["duration"]) / 1e7})
+            return words
+
+        words = asyncio.run(_run())
+        if words:
+            with open(timings_path, "w", encoding="utf-8") as fh:
+                json.dump({"words": words}, fh)
+        return f"edge-tts (rate {rate}, word timings)"
     except ImportError:
         pass
     except Exception as exc:
         print(f"WARNING: edge-tts library failed ({exc}); trying CLI.", file=sys.stderr)
+    srt_path = output + ".srt"
     subprocess.run(
         ["edge-tts", "--voice", voice, "--text", text, "--rate", rate,
-         "--write-media", output],
+         "--write-media", output, "--write-subtitles", srt_path],
         check=True,
     )
-    return f"edge-tts CLI (rate {rate})"
+    _srt_to_timings(srt_path, timings_path)
+    return f"edge-tts CLI (rate {rate}, sentence timings)"
 
 
 def narrate_kokoro(text, voice, output, speed):
     """Kokoro open-weight TTS (local, free). Voice names are Kokoro voices
     (e.g. af_heart, am_adam); the config voice is passed through only if
     it looks like a Kokoro voice, otherwise Kokoro's default is used."""
-    from kokoro import KPipeline
     import soundfile as sf
+    from kokoro import KPipeline
     lang = "a"  # American English
     pipeline = KPipeline(lang_code=lang)
     kokoro_voice = voice if re.match(r"^[ab][fm]_", voice or "") else "af_heart"
@@ -190,8 +252,22 @@ def main(argv=None):
     with open(args.input, encoding="utf-8") as fh:
         scripts = json.load(fh)
     os.makedirs(args.outdir, exist_ok=True)
+    try:
+        from src import cache
+    except ImportError:
+        import cache
+    cache_enabled = bool(config.get("cache_enabled", True))
     for script in scripts:
         output = os.path.join(args.outdir, f"{script['rank']:02d}-{slug(script['topic'])}.mp3")
+        # Cache: skip re-TTS when the script text + voice settings are
+        # unchanged (the timings sidecar is cached alongside the audio).
+        key = cache.make_key(script["text"], voice, tier, speed, pause_ms)
+        if cache_enabled and cache.is_cached("narration", key, output):
+            print(f"Narrated -> {output} (cached, unchanged script/voice)")
+            append_run_log(f"narrate:{script['topic']}",
+                           {"voice": voice, "tier": tier, "used": "cached",
+                            "speed": speed, "pause_ms": pause_ms})
+            continue
         plain = humanize_text(script["text"], pause_ms=pause_ms)
         used = ""
         try:
@@ -227,6 +303,8 @@ def main(argv=None):
         detail = {"voice": voice, "tier": tier, "used": used,
                   "speed": speed, "pause_ms": pause_ms}
         append_run_log(f"narrate:{script['topic']}", detail)
+        if cache_enabled:
+            cache.mark_cached("narration", key, output)
         print(f"Narrated -> {output} [{used}, tier={tier}]")
     return 0
 

@@ -64,11 +64,14 @@ def _parse_date(value):
 
 
 def _recency_bonus(published):
+    """Tuned recency decay: an exponential half-life (~7 days) instead of
+    a hard 30-day cliff, so a week-old story still ranks but a month-old
+    one fades smoothly rather than dropping to zero overnight."""
     dt = _parse_date(published)
     if not dt:
         return 0, None
     days = max(0, (datetime.now(timezone.utc) - dt).days)
-    return max(0, 30 - days), days
+    return round(30 * math.exp(-days / 7.0), 2), days
 
 
 def _norm(text):
@@ -85,6 +88,14 @@ def base_entry(source, title, topic="", channel="", url="", published="",
     if isinstance(engagement, (int, float)) and engagement > 0:
         breakdown["engagement_log"] = round(math.log10(engagement + 1) * 10, 2)
         score += breakdown["engagement_log"]
+        # Velocity: views-per-day rewards fast-rising content over old
+        # videos with a large but stale cumulative count. Log-scaled so a
+        # viral newcomer can outrank an established back-catalogue clip.
+        if days is not None:
+            vpd = engagement / max(1, days)
+            breakdown["velocity_per_day"] = round(vpd, 1)
+            breakdown["velocity_log"] = round(math.log10(vpd + 1) * 8, 2)
+            score += breakdown["velocity_log"]
     if days is not None:
         breakdown["recency_days_ago"] = days
     return {

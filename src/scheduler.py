@@ -49,7 +49,6 @@ def parse_peak_windows(config):
     for entry in config.get("peak_windows") or []:
         if not isinstance(entry, str):
             continue
-        parts = entry.split(":")
         # Format: "niche:weekday:17:00-20:00" — niche may itself contain
         # no colon in practice; split from the right for the window part.
         match = re.match(r"^(.+):(weekday|weekend):(\d{2}:\d{2})-(\d{2}:\d{2})$",

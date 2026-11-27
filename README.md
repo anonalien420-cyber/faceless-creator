@@ -10,6 +10,18 @@ Audience growth depends on topic choice, quality, consistency, and luck,
 and no tool can promise it. Anyone selling that promise is overselling.
 Peak times help timing; they do not guarantee popularity.
 
+## Documentation
+
+- [Setup](docs/setup.md) — install, ffmpeg, keys, Docker, quick start.
+- [Architecture](docs/architecture.md) — pipeline, modules, data flow, engine.
+- [Operations](docs/operations.md) — daily run, scheduling, review, caching, metrics.
+- [Content policy](docs/content-policy.md) — accuracy tiers, shock honestly, originality.
+- [Roadmap](docs/roadmap.md) — the production-quality roadmap (implemented).
+- [Changelog](CHANGELOG.md) — release history.
+
+One CLI for every stage: `faceless <run|trends|script|narrate|music|video|qa|seo|thumbnail|review|research|upload>`.
+See `faceless --help`. The `python -m src.<module>` form still works.
+
 ## What is free vs. what needs a key
 
 | Source / step | Free? | Needs a key/token? |

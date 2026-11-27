@@ -73,6 +73,34 @@ def run_cmd(cmd, step, log):
     return result
 
 
+def run_step(log, step, cmd, args, module=None, argv=None):
+    """Run a pipeline stage either in-process (--in-process) or as a
+    subprocess (default). In-process mode calls the stage's main(argv)
+    directly, saving ~one Python interpreter startup per stage and
+    keeping everything in one process; the subprocess default isolates
+    stages and is unchanged. Both log identically and fail loudly."""
+    if getattr(args, "in_process", False) and module is not None:
+        import contextlib
+        import importlib
+        import io
+        mod = importlib.import_module(module)
+        buf = io.StringIO()
+        rc = 0
+        try:
+            with contextlib.redirect_stdout(buf), contextlib.redirect_stderr(buf):
+                rc = mod.main(argv)
+        except SystemExit as exc:
+            rc = exc.code or 0
+        out = buf.getvalue()
+        if rc not in (0, None):
+            log_step(log, step, "FAILED", out[-500:])
+            raise SystemExit(f"Step failed: {step} (exit {rc})")
+        last = out.strip().splitlines()[-1] if out.strip() else ""
+        log_step(log, step, "ok", last)
+        return out
+    return run_cmd(cmd, step, log)
+
+
 def slug(text):
     return re.sub(r"[^a-z0-9]+", "-", text.lower()).strip("-") or "script"
 
@@ -183,8 +211,10 @@ def build_format(log, fmt, scripts, config, niche, args):
     audio_dir = f"data/audio_{fmt}"
     mixed_dir = f"data/audio_mixed_{fmt}"
     video_dir = f"data/videos_{fmt}"
-    run_cmd([sys.executable, "-m", "src.narrate", "--input", scripts,
-             "--outdir", audio_dir], f"narrate:{fmt}", log)
+    narrate_argv = ["--input", scripts, "--outdir", audio_dir]
+    run_step(log, f"narrate:{fmt}",
+             [sys.executable, "-m", "src.narrate"] + narrate_argv,
+             args, module="src.narrate", argv=narrate_argv)
     with open(scripts, encoding="utf-8") as fh:
         items = json.load(fh)
     os.makedirs(mixed_dir, exist_ok=True)
@@ -192,18 +222,26 @@ def build_format(log, fmt, scripts, config, niche, args):
     for script in items:
         name = f"{script['rank']:02d}-{slug(script['topic'])}"
         mixed = os.path.join(mixed_dir, f"{name}.mp3")
-        run_cmd([sys.executable, "-m", "src.music", "--narration",
-                 os.path.join(audio_dir, f"{name}.mp3"), "--output", mixed,
-                 "--top5", "data/top5.json"], f"music:{fmt}:{name}", log)
+        music_argv = ["--narration", os.path.join(audio_dir, f"{name}.mp3"),
+                      "--output", mixed, "--top5", "data/top5.json"]
+        run_step(log, f"music:{fmt}:{name}",
+                 [sys.executable, "-m", "src.music"] + music_argv,
+                 args, module="src.music", argv=music_argv)
     if not args.skip_video:
         # Funnel end card: Shorts push to the same-day long video;
         # longs tease the next episode.
         end_card = ("Watch the full video today" if fmt == "short"
                     else "Next episode tomorrow")
-        run_cmd([sys.executable, "-m", "src.video", "--input", scripts,
-                 "--audio-dir", mixed_dir, "--outdir", video_dir,
-                 "--format", fmt, "--end-card-text", end_card],
-                f"video:{fmt}", log)
+        video_argv = ["--input", scripts, "--audio-dir", mixed_dir,
+                      "--outdir", video_dir, "--format", fmt,
+                      "--end-card-text", end_card]
+        import time as _time
+        t0 = _time.monotonic()
+        run_step(log, f"video:{fmt}",
+                 [sys.executable, "-m", "src.video"] + video_argv,
+                 args, module="src.video", argv=video_argv)
+        log.setdefault("metrics", {}).setdefault("render_seconds", {})[fmt] = round(
+            _time.monotonic() - t0, 2)
     qa_reports = []
     for script in items:
         name = f"{script['rank']:02d}-{slug(script['topic'])}"
@@ -277,7 +315,8 @@ def upload_outputs(log, outputs, niche, config, args, seo_entries=None, long_tit
                 cmd.append("--publish-at-peak")
         if not args.upload:
             cmd.append("--dry-run")
-        run_cmd(cmd, f"upload:{fmt}:{name}", log)
+        run_step(log, f"upload:{fmt}:{name}", cmd, args,
+                 module="src.upload", argv=cmd[3:])
         item["upload_title"] = title
         item["upload_description"] = description
 
@@ -362,6 +401,10 @@ def main(argv=None):
     parser.add_argument("--list-niches", action="store_true",
                         help="Print the niche ranking and stop (no videos, no upload).")
     parser.add_argument("--skip-video", action="store_true")
+    parser.add_argument("--in-process", action="store_true",
+                        help="Run stages in one process (calls each module's main "
+                             "directly) instead of spawning a subprocess per stage. "
+                             "Faster (no interpreter startups); subprocess is the default.")
     parser.add_argument("--long-count", type=int, default=None,
                         help="Override long_videos_per_day (default from config; 0 disables long-form).")
     parser.add_argument("--short-count", type=int, default=None,
@@ -400,10 +443,10 @@ def main(argv=None):
         json.dump(log, fh, indent=2)
     all_outputs, all_qa = [], []
     try:
-        run_cmd([sys.executable, "-m", "src.trends", "--input", args.trends_input,
-                 "--niche", niche,
-                 "--output", "data/top5.json", "--compare", "data/compare.md"],
-                "trends", log)
+        trends_argv = ["--input", args.trends_input, "--niche", niche,
+                       "--output", "data/top5.json", "--compare", "data/compare.md"]
+        run_step(log, "trends", [sys.executable, "-m", "src.trends"] + trends_argv,
+                 args, module="src.trends", argv=trends_argv)
         with open("data/top5.json", encoding="utf-8") as fh:
             top5 = json.load(fh)["candidates"]
         # Long-form uses #1 in depth; Shorts use #2 and #3 (or fewer if
@@ -421,12 +464,14 @@ def main(argv=None):
         style = ("history_mystery"
                  if ("history" in niche_lower and "myster" in niche_lower)
                  else "general")
-        run_cmd([sys.executable, "-m", "src.script", "--input", "data/top5_long.json",
-                 "--output", "data/scripts_long.json", "--format", "long",
-                 "--style", style, "--count", str(long_count)], "scripts:long", log)
-        run_cmd([sys.executable, "-m", "src.script", "--input", "data/top5_shorts.json",
-                 "--output", "data/scripts_shorts.json", "--format", "short",
-                 "--style", style, "--count", str(short_count)], "scripts:short", log)
+        long_argv = ["--input", "data/top5_long.json", "--output", "data/scripts_long.json",
+                     "--format", "long", "--style", style, "--count", str(long_count)]
+        run_step(log, "scripts:long", [sys.executable, "-m", "src.script"] + long_argv,
+                 args, module="src.script", argv=long_argv)
+        short_argv = ["--input", "data/top5_shorts.json", "--output", "data/scripts_shorts.json",
+                      "--format", "short", "--style", style, "--count", str(short_count)]
+        run_step(log, "scripts:short", [sys.executable, "-m", "src.script"] + short_argv,
+                 args, module="src.script", argv=short_argv)
         for fmt, scripts_file in (("long", "data/scripts_long.json"),
                                   ("short", "data/scripts_shorts.json")):
             outputs, qa_reports = build_format(log, fmt, scripts_file,
@@ -468,6 +513,11 @@ def main(argv=None):
                 from thumbnail import generate_variants
             except ImportError:
                 generate_variants = None
+        try:
+            from src.models import Brand
+        except ImportError:
+            from models import Brand
+        brand = Brand.from_config(config)
         if generate_variants is not None:
             for item in all_outputs:
                 script, fmt = item["script"], item["format"]
@@ -476,7 +526,7 @@ def main(argv=None):
                     results = generate_variants(
                         script["topic"], script["text"], "data/thumbnails",
                         slug(script["topic"]), video=item["video"], fmt=fmt,
-                        n_items=n_items)
+                        n_items=n_items, brand=brand)
                     thumb_map[script["topic"]] = results
                     if not all(r["qa_ok"] for r in results):
                         log_step(log, f"thumbnail:{fmt}:{slug(script['topic'])}",
@@ -491,11 +541,12 @@ def main(argv=None):
             log_step(log, "thumbnails", "WARNING",
                      "Pillow/thumbnail module unavailable — no thumbnails generated")
         # SEO (titles, description, tags, pinned comment, thumbnails).
-        run_cmd([sys.executable, "-m", "src.seo", "--long", "data/scripts_long.json",
-                 "--short", "data/scripts_shorts.json", "--output", "data/seo.json",
-                 "--thumbnails-file", "data/thumbnails.json",
-                 "--series-name", series_name,
-                 "--episode", str(episode or 0)], "seo", log)
+        seo_argv = ["--long", "data/scripts_long.json",
+                    "--short", "data/scripts_shorts.json", "--output", "data/seo.json",
+                    "--thumbnails-file", "data/thumbnails.json",
+                    "--series-name", series_name, "--episode", str(episode or 0)]
+        run_step(log, "seo", [sys.executable, "-m", "src.seo"] + seo_argv,
+                 args, module="src.seo", argv=seo_argv)
         seo_entries = []
         if os.path.exists("data/seo.json"):
             with open("data/seo.json", encoding="utf-8") as fh:
@@ -523,9 +574,45 @@ def main(argv=None):
     log["status"] = "ok"
     log["finished_at"] = datetime.now(timezone.utc).isoformat()
     write_log(log)
+    # Per-run manifest: render time, QA pass rate, upload status — one
+    # glanceable metrics file per run (data/run_manifest.json).
+    _write_manifest(log, all_outputs, niche, args)
+    # Topic memory: record covered topics so future runs do not repeat them.
+    if config.get("topic_memory", True):
+        try:
+            from src.script import record_topics
+        except ImportError:
+            from script import record_topics
+        record_topics([o["script"]["topic"] for o in all_outputs])
     print(f"Run complete: {long_count} long-form + {short_count} Shorts. "
           "Log: data/run_log.json")
     return 0
+
+
+def _write_manifest(log, outputs, niche, args):
+    """Write data/run_manifest.json with per-run production metrics."""
+    qa_pass = sum(1 for o in outputs if o.get("qa_report"))
+    render_seconds = log.get("metrics", {}).get("render_seconds", {})
+    uploads = [{"video": o["video"], "format": o["format"],
+                "title": o.get("upload_title", ""),
+                "scheduled_peak": o.get("scheduled_peak", ""),
+                "uploaded": bool(args.upload)} for o in outputs]
+    manifest = {
+        "started_at": log.get("started_at"),
+        "finished_at": log.get("finished_at"),
+        "niche": niche,
+        "status": log.get("status"),
+        "videos": len(outputs),
+        "qa_passed": qa_pass,
+        "qa_pass_rate": round(qa_pass / len(outputs), 3) if outputs else 0.0,
+        "render_seconds": render_seconds,
+        "total_render_seconds": round(sum(render_seconds.values()), 2),
+        "in_process": bool(getattr(args, "in_process", False)),
+        "uploads": uploads,
+    }
+    os.makedirs("data", exist_ok=True)
+    with open("data/run_manifest.json", "w", encoding="utf-8") as fh:
+        json.dump(manifest, fh, indent=2)
 
 
 if __name__ == "__main__":

@@ -19,3 +19,34 @@ data/thumbnails/
 data/music_bed_*.mp3
 data/*.thumb_frame.jpg
 !data/trends_input.example.json
+# Build / tooling artifacts
+*.egg-info/
+build/
+dist/
+.coverage
+coverage.xml
+htmlcov/
+.ruff_cache/
+.mypy_cache/
+.pytest_cache/
+.venv/
+# Runtime pipeline state (regenerated each run; examples stay tracked)
+data/run_log.json
+data/run_manifest.json
+data/cache.json
+data/topic_history.json
+data/niche_lock.json
+data/series_state.json
+data/qa_report*.json
+data/review_queue.md
+data/seo.json
+data/thumbnails.json
+data/top5*.json
+data/scripts*.json
+data/compare.md
+data/weekly_review*
+data/review_history.json
+data/niche_ranking.json
+data/*.timings.json
+data/*.srt
+!data/video_stats.example.json
