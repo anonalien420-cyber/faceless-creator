@@ -306,6 +306,14 @@ def main(argv=None):
     args = parser.parse_args(argv)
 
     videos = load_youtube_stats() or load_manual_stats(args.stats)
+    # Retention loop: enrich with Analytics API retention (avg view
+    # duration / percentage) when enabled, so corrections are driven by
+    # watch time, not just views. No-op when disabled/unavailable.
+    try:
+        from src.analytics import enrich_with_retention
+    except ImportError:
+        from analytics import enrich_with_retention
+    videos = enrich_with_retention(videos, load_config(args.config))
     recent, older = last_7_days(videos)
     pool = recent if recent else videos
     scored, no_data, top, bottom, median_views, shared = analyse(pool)

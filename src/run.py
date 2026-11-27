@@ -300,7 +300,7 @@ def upload_outputs(log, outputs, niche, config, args, seo_entries=None, long_tit
             description += f"\n\nWatch the full deep dive today: {long_title}"
         cmd = [sys.executable, "-m", "src.upload", "--video", video,
                "--title", title, "--description", description,
-               "--niche", niche, "--format", fmt]
+               "--niche", niche, "--topic", script["topic"], "--format", fmt]
         if seo and seo.get("tags"):
             cmd += ["--tags", ",".join(seo["tags"])]
         if args.public or args.auto_public:
@@ -593,10 +593,25 @@ def _write_manifest(log, outputs, niche, args):
     """Write data/run_manifest.json with per-run production metrics."""
     qa_pass = sum(1 for o in outputs if o.get("qa_report"))
     render_seconds = log.get("metrics", {}).get("render_seconds", {})
-    uploads = [{"video": o["video"], "format": o["format"],
-                "title": o.get("upload_title", ""),
-                "scheduled_peak": o.get("scheduled_peak", ""),
-                "uploaded": bool(args.upload)} for o in outputs]
+    # Merge verified-upload feedback (video_id + processing status) so the
+    # manifest links each output to its published video for the review loop.
+    feedback_by_topic = {}
+    if os.path.exists("data/upload_feedback.json"):
+        try:
+            with open("data/upload_feedback.json", encoding="utf-8") as fh:
+                for entry in json.load(fh):
+                    feedback_by_topic[entry.get("topic", "")] = entry
+        except (OSError, ValueError):
+            pass
+    uploads = []
+    for o in outputs:
+        fb = feedback_by_topic.get(o["script"]["topic"], {})
+        uploads.append({"video": o["video"], "format": o["format"],
+                        "title": o.get("upload_title", ""),
+                        "scheduled_peak": o.get("scheduled_peak", ""),
+                        "uploaded": bool(args.upload),
+                        "video_id": fb.get("video_id", ""),
+                        "upload_status": fb.get("upload_status", "")})
     manifest = {
         "started_at": log.get("started_at"),
         "finished_at": log.get("finished_at"),

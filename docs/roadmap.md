@@ -49,6 +49,16 @@ constraints, all preserved:
 - [x] Saliency-aware thumbnail focal crop + brand template + tighter
       typography.
 
+## Tier 1 — feedback loop + trust (added in 1.2.0)
+- [x] **Retention analytics loop** (`src/analytics.py`): YouTube Analytics
+      API retention (avg view duration / percentage) feeds the weekly
+      review so corrections are driven by watch time, not just views.
+- [x] **Upload verification + video-ID feedback**: poll YouTube until
+      processing finishes; record `video_id` + status to
+      `data/upload_feedback.json` and the run manifest (closes the loop).
+- [x] **On-screen source citations**: verified sources shown on screen for
+      history videos (trust signal); only real, non-placeholder sources.
+
 ## Notes / deliberate scope decisions
 - The subprocess log-merge remains for the default isolated path;
   `--in-process` avoids per-stage interpreter startups while sharing the

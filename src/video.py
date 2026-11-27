@@ -503,6 +503,73 @@ def _chapter_lower_thirds(script, duration, drawtext_dir, width, height,
     return filters
 
 
+def _real_source_title(source):
+    """A real, non-placeholder source title, or '' (never invent one)."""
+    if isinstance(source, dict):
+        title = source.get("title", "") or source.get("url", "")
+    else:
+        title = str(source or "")
+    title = title.strip()
+    if not title or any(m in title.lower() for m in ("placeholder", "do not publish")):
+        return ""
+    return title
+
+
+def _citation_lower_thirds(script, duration, drawtext_dir, width, height,
+                           bfont, btext, boutline, baccent, fontsize):
+    """On-screen source citations for history-mystery videos — a trust
+    signal that visibly separates accurate content from misinformation.
+
+    Shows the shock hook's source at the opening, and the primary verified
+    source at each KNOWN section (timed by word-count share of runtime).
+    Only real, non-placeholder source titles are shown; nothing invented.
+    Returns [] for non-history scripts or when no real source exists.
+    """
+    if script.get("style") != "history_mystery":
+        return []
+    primary = ""
+    for source in script.get("sources") or []:
+        primary = _real_source_title(source)
+        if primary:
+            break
+    shock_src = _real_source_title((script.get("shock_hook") or {}).get("source") or {})
+    if not primary and not shock_src:
+        return []
+    filters = []
+    cite_font = max(18, fontsize - 28)
+    vertical = height > width
+    # Top badge on Shorts (above the caption safe zone); lower-third on long.
+    y = 110 if vertical else height - 90
+    counter = [0]
+
+    def badge(label, start, end):
+        text = "Source: " + label[:50]
+        path = _drawtext_path(_write_drawtext_file(
+            drawtext_dir, f"cite_{counter[0]}", text))
+        counter[0] += 1
+        enable = f"between(t,{start:.2f},{end:.2f})"
+        filters.append(
+            f"drawbox=x=30:y={y - 6}:w=8:h={cite_font + 12}:color={baccent}@0.95:t=fill:enable='{enable}'")
+        filters.append(
+            f"drawtext=textfile={path}:expansion=none:font={bfont}:fontsize={cite_font}:"
+            f"fontcolor={btext}:borderw=2:bordercolor={boutline}:x=48:y={y}:enable='{enable}'")
+
+    if shock_src:
+        badge(shock_src, 0.5, 5.0)
+    sections = script.get("sections") or []
+    total_words = max(1, len(script.get("text", "").split()))
+    intro_words = max(1, total_words - sum(len(s.get("text", "").split()) for s in sections)
+                      - len(script.get("cta", "").split()))
+    elapsed = duration * intro_words / total_words
+    for section in sections:
+        words = len(section.get("text", "").split())
+        start = elapsed
+        elapsed += duration * words / total_words
+        if section.get("tier") == "KNOWN" and primary:
+            badge(primary, start, start + 4.0)
+    return filters
+
+
 def _watermark_filter(brand, width, in_label, out_label):
     """Semi-transparent brand watermark overlay (own asset), top-right.
 
@@ -522,7 +589,8 @@ def _watermark_filter(brand, width, in_label, out_label):
 def build_video(script, audio_path, output, visuals=None, duration=None,
                 bitrate="10M", min_resolution=1080, width=1080, height=1920,
                 end_card_text="Subscribe for the next one", brand=None,
-                transitions="varied", safe_zone=0.25, karaoke=True):
+                transitions="varied", safe_zone=0.25, karaoke=True,
+                show_citations=True):
     """Render one video. Shorts default 1080x1920; long-form 1920x1080.
 
     `script` is a dict with text/topic/hook (see script.py). Captions are
@@ -610,6 +678,12 @@ def build_video(script, audio_path, output, visuals=None, duration=None,
     # branded bar at its approximate start (word-count share of runtime).
     if width > height and script.get("sections"):
         overlay.extend(_chapter_lower_thirds(
+            script, duration, drawtext_dir, width, height, bfont, btext,
+            boutline, baccent, fontsize))
+    # On-screen source citations (history-mystery trust signal): show the
+    # verified source when a KNOWN fact / the shock hook is on screen.
+    if show_citations:
+        overlay.extend(_citation_lower_thirds(
             script, duration, drawtext_dir, width, height, bfont, btext,
             boutline, baccent, fontsize))
     end_card = _drawtext_path(
@@ -753,6 +827,7 @@ def main(argv=None):
     transitions = config.get("transitions", "varied") or "varied"
     safe_zone = float(config.get("captions_safe_zone", 0.25) or 0.25)
     karaoke = bool(config.get("captions_karaoke", True))
+    show_citations = bool(config.get("show_citations", True))
     if args.format == "long":
         width, height = 1920, 1080
         bitrate = args.bitrate or config.get("long_video_bitrate", "12M")
@@ -805,7 +880,8 @@ def main(argv=None):
                     bitrate=bitrate, min_resolution=min_resolution,
                     width=width, height=height,
                     end_card_text=args.end_card_text, brand=brand,
-                    transitions=transitions, safe_zone=safe_zone, karaoke=karaoke)
+                    transitions=transitions, safe_zone=safe_zone, karaoke=karaoke,
+                    show_citations=show_citations)
         if cache_enabled:
             cache.mark_cached("video", key, output)
         return output

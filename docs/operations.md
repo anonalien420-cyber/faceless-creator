@@ -34,6 +34,20 @@ config corrections (niche demand bonus, hook style, length, music profile,
 peak shift ≤60 min). Bigger changes are recommendations, never auto-applied.
 The views-weighted hook-style winner feeds the next run's hook selection.
 
+## Feedback loop + trust (Tier 1)
+- **Retention analytics.** Set `analytics_enabled: true` and provide a token
+  with the `youtube-analytics.readonly` scope. The weekly review then pulls
+  average view duration / percentage from the Analytics API, so hook/length
+  corrections are driven by watch time. Without it, manual/Data-API stats
+  are used (no breakage).
+- **Upload verification.** Real uploads poll YouTube until processing
+  finishes and record the `video_id` + status to `data/upload_feedback.json`
+  and the run manifest. A failed/rejected upload is never logged as
+  published. Disable with `verify_upload: false`.
+- **On-screen citations.** History videos show verified sources on screen
+  (`show_citations: true`). Only real, non-placeholder sources are shown —
+  verify them in the review queue before publishing.
+
 ## Caching + resume
 `cache.json` skips re-TTS/re-render when script + voice + visuals are
 unchanged, so a re-run after a failure resumes cheaply. Disable with

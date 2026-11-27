@@ -25,6 +25,7 @@ aborts the run — a broken video never uploads.
 | `scheduler.py` | Per-format peak windows; staggered publish times |
 | `upload.py` | YouTube upload (dry-run default); private + publishAt |
 | `review.py` | Weekly self-review; safe-bounded config corrections |
+| `analytics.py` | YouTube Analytics API retention (watch time) for the review loop |
 | `models.py` | Typed dataclasses (Script/Scene/VideoReport/Brand/Source) |
 | `brand.py` | Colour conversion + ASS/drawtext styling helpers |
 | `cache.py` | Content-hash skip cache + ffprobe memoization |

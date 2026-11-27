@@ -4,6 +4,38 @@ All notable changes to this project are documented here. The format is
 based on [Keep a Changelog](https://keepachangelog.com/), and the project
 adheres to semantic versioning.
 
+## [1.2.0] — 2026-11-27
+
+Tier 1 feedback-loop + trust enhancements (the highest-leverage next
+additions). $0 default preserved; all opt-in capabilities degrade
+gracefully.
+
+### Added
+- **Retention analytics loop (`src/analytics.py`).** Pulls average view
+  duration / average view percentage / estimated minutes watched from the
+  YouTube **Analytics API** (free, opt-in `analytics_enabled`, needs the
+  `youtube-analytics.readonly` scope) into the weekly review, so
+  hook/length/pacing corrections are driven by watch time, not just views.
+  Falls back to manual/Data-API stats when unavailable.
+- **Upload verification + video-ID feedback.** After a real upload,
+  `upload.py` polls YouTube until processing finishes (`verify_processed`)
+  and records the `video_id`, privacy, publishAt, and processing status to
+  `data/upload_feedback.json`. A failed/rejected upload is never logged as
+  published. The run manifest now links each output to its published
+  video_id, closing the review loop.
+- **On-screen source citations.** History-mystery videos show the verified
+  source as a branded badge when the shock hook / a KNOWN fact is on screen
+  (`show_citations`, default true). Only real, non-placeholder sources are
+  shown — a visible trust signal that separates accurate content from
+  misinformation.
+
+### Tests
+- 16 new regressions (`tests/test_feedback_loop.py`): analytics parsing +
+  enrichment, upload status interpretation + verification polling +
+  feedback append, citation emission + placeholder rejection + render,
+  and Tier 1 config validation. Suite now 81 tests, green under stdlib and
+  Pillow/PyYAML; ruff clean.
+
 ## [1.1.0] — 2026-11-27
 
 The "more efficient, professional, high-quality production" roadmap,

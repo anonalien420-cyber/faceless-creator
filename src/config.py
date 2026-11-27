@@ -70,17 +70,25 @@ DEFAULTS = {
     "cache_enabled": True,
     "max_workers": 0,
     "scene_broll": True,
+    # --- Feedback loop + trust (Tier 1) ---
+    "analytics_enabled": False,
+    "analytics_lookback_days": 28,
+    "verify_upload": True,
+    "upload_process_timeout": 300,
+    "show_citations": True,
 }
 
 # Keys that must be numeric / list / bool when present (fail-fast checks).
 _NUMERIC_KEYS = ("narrator_speed", "narrator_pause_ms", "min_resolution",
                  "videos_per_run", "music_volume", "loudness_i", "loudness_tp",
-                 "captions_safe_zone", "topic_memory_days", "max_workers")
+                 "captions_safe_zone", "topic_memory_days", "max_workers",
+                 "analytics_lookback_days", "upload_process_timeout")
 _LIST_KEYS = ("niches", "niche_keywords", "music_urls", "music_library",
               "stock_image_urls", "stock_video_urls", "peak_windows",
               "reddit_subreddits")
 _BOOL_KEYS = ("series_enabled", "research_enabled", "topic_memory",
-              "trend_velocity", "cache_enabled", "captions_karaoke", "scene_broll")
+              "trend_velocity", "cache_enabled", "captions_karaoke", "scene_broll",
+              "analytics_enabled", "verify_upload", "show_citations")
 
 
 def _strip_comment(value):

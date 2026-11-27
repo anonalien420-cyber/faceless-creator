@@ -203,3 +203,19 @@ trend_velocity: true
 cache_enabled: true
 max_workers: 0
 scene_broll: true
+
+# --- Feedback loop + trust (Tier 1) ---
+# analytics_enabled: pull retention (avg view duration / percentage) from
+#   the YouTube Analytics API into the weekly review so hook/length/pacing
+#   corrections are driven by watch time, not just views. Needs a token
+#   with the youtube-analytics.readonly scope (free; opt-in).
+# verify_upload: after a real upload, poll YouTube until processing
+#   finishes and record the video_id to data/upload_feedback.json (closes
+#   the review loop). A failed/rejected upload is never logged as published.
+# show_citations: show verified source citations on screen for history
+#   videos (a trust signal). Only real, non-placeholder sources are shown.
+analytics_enabled: false
+analytics_lookback_days: 28
+verify_upload: true
+upload_process_timeout: 300
+show_citations: true
