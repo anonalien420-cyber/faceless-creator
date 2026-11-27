@@ -172,6 +172,45 @@ def hook_style_performance(videos):
     return out
 
 
+def learn_publish_hours(videos, tz_name="America/Chicago", min_samples=5):
+    """Learn the best publish hour per niche from real performance.
+
+    Views-weighted histogram of local publish hours; the hour with the
+    most total views wins, but only when the niche has >= min_samples
+    scored videos with a publish time (one lucky upload never rewires
+    the schedule). Returns {niche_lower: {hour, samples, total_views}}.
+    scheduler.py exploits this INSIDE existing safe windows only."""
+    try:
+        tz = ZoneInfo(tz_name or "America/Chicago")
+    except Exception:
+        tz = timezone.utc
+    per_niche = {}
+    for video in videos:
+        niche = (video.get("niche") or "").strip().lower()
+        views = video.get("views")
+        raw = video.get("publish_time") or video.get("published_date") or ""
+        if not niche or not isinstance(views, (int, float)) or not raw:
+            continue
+        try:
+            dt = datetime.fromisoformat(str(raw).replace("Z", "+00:00"))
+            if dt.tzinfo is None:
+                dt = dt.replace(tzinfo=timezone.utc)
+        except ValueError:
+            continue
+        bucket = per_niche.setdefault(niche, {"hours": {}, "samples": 0})
+        hour = dt.astimezone(tz).hour
+        bucket["hours"][hour] = bucket["hours"].get(hour, 0) + views
+        bucket["samples"] += 1
+    out = {}
+    for niche, bucket in per_niche.items():
+        if bucket["samples"] < min_samples or not bucket["hours"]:
+            continue
+        best = max(bucket["hours"], key=bucket["hours"].get)
+        out[niche] = {"hour": best, "samples": bucket["samples"],
+                      "total_views": bucket["hours"][best]}
+    return out
+
+
 def analyse(videos):
     """Split into scored / no-data, top / bottom, and shared traits."""
     scored = [v for v in videos if isinstance(v.get("views"), (int, float))]
@@ -350,6 +389,18 @@ def main(argv=None):
         "adjustments_applied": applied,
         "recommendations": recommendations,
     }
+    # Learned publish hours (Tier 2): write the per-niche best hour for
+    # scheduler.py when publish_learning is enabled. Safe-bounded: the
+    # scheduler only exploits it inside existing windows.
+    review_config = load_config(args.config)
+    if review_config.get("publish_learning", False):
+        learned = learn_publish_hours(
+            pool, tz_name=review_config.get("channel_timezone", "America/Chicago"),
+            min_samples=int(review_config.get("publish_learning_min_samples", 5) or 5))
+        os.makedirs("data", exist_ok=True)
+        with open("data/publish_hours.json", "w", encoding="utf-8") as fh:
+            json.dump(learned, fh, indent=2)
+        report["learned_publish_hours"] = learned
     os.makedirs(os.path.dirname(args.output) or ".", exist_ok=True)
     with open(args.json_output, "w", encoding="utf-8") as fh:
         json.dump(report, fh, indent=2)

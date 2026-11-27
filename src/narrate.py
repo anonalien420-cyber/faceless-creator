@@ -246,6 +246,19 @@ def main(argv=None):
 
     config = load_config(args.config)
     voice = args.voice or config.get("narrator_voice", "en-US-ChristopherNeural")
+    # Multi-language: when the channel language is not English and no
+    # explicit --voice was passed, use that language's free neural voice
+    # (a configured voice already in the target language is kept).
+    language = config.get("language", "en") or "en"
+    if not args.voice and language.split("-")[0].lower() != "en":
+        try:
+            from src.localize import voice_for_language
+        except ImportError:
+            from localize import voice_for_language
+        chosen = voice_for_language(language, config.get("narrator_voice", ""))
+        if chosen != voice:
+            print(f"Language '{language}': narrator voice -> {chosen}")
+            voice = chosen
     tier = (args.tier or config.get("narrator_tier", "free") or "free").lower()
     speed = args.speed or float(config.get("narrator_speed", 1.0) or 1.0)
     pause_ms = args.pause_ms or int(config.get("narrator_pause_ms", 350) or 350)

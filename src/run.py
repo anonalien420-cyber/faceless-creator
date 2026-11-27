@@ -436,6 +436,19 @@ def main(argv=None):
            "niche": niche, "long_videos": long_count,
            "shorts": short_count, "steps": []}
     os.makedirs("data", exist_ok=True)
+    # State safety net (Tier 3): snapshot the pipeline's memory before a
+    # run mutates it. Best-effort — a backup failure never blocks a run.
+    if config.get("auto_backup", True):
+        try:
+            try:
+                from src.ops import backup_state, prune_backups
+            except ImportError:
+                from ops import backup_state, prune_backups
+            archive = backup_state()
+            prune_backups(keep=int(config.get("backup_keep", 14) or 14))
+            log_step(log, "backup", "ok", archive)
+        except Exception as exc:
+            log_step(log, "backup", "WARNING", f"state backup failed ({exc})")
     # Reset the on-disk log now (plain overwrite, no merge) so subprocess
     # appends (narrate/music) during this run accumulate on THIS run's log,
     # not the previous run's. The final write_log() merges them back in.
@@ -561,6 +574,25 @@ def main(argv=None):
                        seo_entries=seo_entries, long_title=long_title)
         # Human review queue — always written, even for dry runs.
         write_review_queue(all_outputs, niche, config, args, seo_entries, thumb_map)
+        # Engagement drafts (Tier 3): end-screen plan + community/pinned
+        # drafts for Studio. DRAFTS ONLY — nothing is auto-posted.
+        if config.get("engagement_drafts", True):
+            try:
+                try:
+                    from src.engage import write_drafts
+                except ImportError:
+                    from engage import write_drafts
+                engage_items = []
+                for item in all_outputs:
+                    duration = _audio_duration(item["narration"]) if os.path.exists(item["narration"]) else 0
+                    engage_items.append({"script": item["script"],
+                                         "format": item["format"],
+                                         "duration": duration})
+                write_drafts(engage_items)
+                log_step(log, "engagement", "ok",
+                         "data/engagement_drafts.json (+ .md) — human review, paste in Studio")
+            except Exception as exc:
+                log_step(log, "engagement", "WARNING", f"engagement drafts failed ({exc})")
     except SystemExit:
         log["status"] = "FAILED"
         write_log(log)

@@ -219,3 +219,46 @@ analytics_lookback_days: 28
 verify_upload: true
 upload_process_timeout: 300
 show_citations: true
+
+# --- Reach + learning (Tier 2) ---
+# language: channel narration/metadata language (BCP-47, e.g. "en", "es-MX").
+#   Non-English picks that language's free edge-tts neural voice unless an
+#   explicit narrator_voice in the same language is set. Upload sets
+#   snippet.defaultLanguage / defaultAudioLanguage so the video is
+#   discoverable in that language.
+# topic_similarity_threshold: semantic topic dedupe sensitivity in [0,1].
+#   Candidates scoring >= this TF-IDF cosine similarity against a recent
+#   topic are skipped as paraphrases (0.6 catches "Lost city of X" vs
+#   "X's forgotten ruins"). 1.0 = exact-match-only behaviour.
+# localization_tier: template (default; NO machine translation — a wrong
+#   translation is worse than none) | api (OpenAI-compatible endpoint via
+#   LLM_API_KEY; failures fall back to no localizations). Human review
+#   still applies to translated metadata.
+# publish_learning: learn the best publish hour per niche from your own
+#   video stats (weekly review writes data/publish_hours.json). The
+#   scheduler only exploits a learned hour INSIDE an existing peak window
+#   and only after publish_learning_min_samples scored videos — one lucky
+#   upload never rewires the schedule.
+language: "en"
+topic_similarity_threshold: 0.6
+localization_tier: "template"
+publish_learning: false
+publish_learning_min_samples: 5
+
+# --- Quality + operations (Tier 3) ---
+# loop_ending: Shorts end on a clean held frame that matches the opening
+#   card, so the auto-loop replay reads as intentional (last ~0.4s hold).
+# cover_frame: extract a clean cover JPEG (first hook frame) beside each
+#   rendered video for the Shorts shelf / custom thumbnail use.
+# engagement_drafts: write human-reviewed end-screen + community-post
+#   drafts (data/engagement_drafts.json) after each run. Drafts only —
+#   nothing is auto-posted; you paste them in YouTube Studio.
+# auto_backup: snapshot pipeline state (niche lock, topic history, cache,
+#   upload feedback, ...) to data/backups/*.tar.gz at the start of a run;
+#   backup_keep archives are retained. Restore: faceless ops restore
+#   --archive data/backups/<file>.tar.gz
+loop_ending: true
+cover_frame: true
+engagement_drafts: true
+auto_backup: true
+backup_keep: 14

@@ -129,6 +129,28 @@ def remux_gain(video, gain_db):
     return True
 
 
+def _speech_rate_check(script_text, narration):
+    """Words-per-second gate (Tier 3 quality). Comfortable faceless
+    narration is roughly 2-4 words/sec; outside 1.5-5.5 it sounds robotic
+    or rushed. Warn-level: it flags, it does not block the pipeline."""
+    if not script_text or not narration or not os.path.exists(narration):
+        return None
+    words = len(script_text.split())
+    if not words:
+        return None
+    info = probe(narration)
+    try:
+        dur = float((info or {}).get("format", {}).get("duration", 0))
+    except (TypeError, ValueError):
+        return None
+    if dur <= 0:
+        return None
+    wps = words / dur
+    status = "pass" if 1.5 <= wps <= 5.5 else "warn"
+    return {"check": "speech_rate", "status": status,
+            "detail": f"{wps:.1f} words/sec (target 2-4)"}
+
+
 def check(video, narration=None, tolerance=2.0, scripts=None, script_text="",
           title="", fmt="short"):
     """fmt: 'short' expects 1080x1920, 'long' expects 1920x1080."""
@@ -401,12 +423,18 @@ def fix_and_recheck(video, checks, narration=None, script_text="", title="", fmt
 def run_qa(video, narration=None, script_text="", title="", report_path="data/qa_report.json", fmt="short", script=None):
     checks, _ = check(video, narration=narration, script_text=script_text, title=title, fmt=fmt)
     checks.extend(check_accuracy(script))
+    speech = _speech_rate_check(script_text, narration)
+    if speech:
+        checks.append(speech)
     fixes = []
     failed = [c for c in checks if c["status"] == "fail"]
     if failed:
         checks, fixes = fix_and_recheck(video, checks, narration=narration,
                                         script_text=script_text, title=title, fmt=fmt,
                                         script=script)
+        if speech:
+            # Narration is not rebuilt by fix_and_recheck; keep its gate.
+            checks.append(speech)
         failed = [c for c in checks if c["status"] == "fail"]
     overall = "pass" if not failed else "fail"
     report = {"video": video, "overall": overall, "checks": checks,
@@ -414,9 +442,13 @@ def run_qa(video, narration=None, script_text="", title="", report_path="data/qa
     os.makedirs(os.path.dirname(report_path) or ".", exist_ok=True)
     with open(report_path, "w", encoding="utf-8") as fh:
         json.dump(report, fh, indent=2)
+    passed = sum(1 for c in checks if c["status"] == "pass")
+    warned = [c["check"] for c in checks if c["status"] == "warn"]
     print(f"QA {overall} for {video} "
-          f"({len(checks) - len(failed)}/{len(checks)} checks passed; "
+          f"({passed}/{len(checks)} checks passed; "
           f"fixes: {fixes or 'none'}) -> {report_path}")
+    if warned:
+        print(f"  warnings (non-blocking): {', '.join(warned)}")
     return overall == "pass"
 
 

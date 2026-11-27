@@ -38,7 +38,8 @@ except ImportError:
     from scheduler import next_peak_window
 
 
-def plan(video, title, description, privacy, publish_at=None, category_id="27"):
+def plan(video, title, description, privacy, publish_at=None, category_id="27",
+         language="", localizations=None):
     # Match what upload() actually does: scheduled publishing forces private,
     # so the dry run must not advertise "unlisted + publishAt".
     if publish_at:
@@ -47,6 +48,11 @@ def plan(video, title, description, privacy, publish_at=None, category_id="27"):
            "privacyStatus": privacy, "categoryId": category_id}
     if publish_at:
         out["publishAt"] = publish_at
+    if language:
+        out["defaultLanguage"] = language
+        out["defaultAudioLanguage"] = language
+    if localizations:
+        out["localizations"] = localizations
     return out
 
 
@@ -117,7 +123,8 @@ def record_upload_feedback(entry, path="data/upload_feedback.json"):
 
 
 def upload(video, title, description, privacy, publish_at=None, tags=None, category_id="27",
-           topic="", fmt="", verify=True, process_timeout=300):
+           topic="", fmt="", verify=True, process_timeout=300,
+           language="", localizations=None):
     try:
         from google.auth.transport.requests import Request
         from google.oauth2.credentials import Credentials
@@ -162,11 +169,33 @@ def upload(video, title, description, privacy, publish_at=None, tags=None, categ
     snippet = {"title": title, "description": description, "categoryId": category_id}
     if tags:
         snippet["tags"] = tags
+    if language:
+        # Discoverability: a Spanish-narrated video is a Spanish video.
+        snippet["defaultLanguage"] = language
+        snippet["defaultAudioLanguage"] = language
     body = {"snippet": snippet, "status": status}
+    if localizations:
+        # Additive localized titles/descriptions (original stays default).
+        body["localizations"] = localizations
+    # Quota guard (Tier 3): videos.insert costs 1600 units of the 10k/day
+    # default budget. Warn before spending the last of it; track after.
+    try:
+        try:
+            from src.ops import quota_status, track_api_call
+        except ImportError:
+            from ops import quota_status, track_api_call
+        quota = quota_status("youtube")
+        if quota["warn"]:
+            print(f"WARNING: YouTube API quota at {quota['used']}/{quota['budget']} "
+                  f"units today ({quota['remaining']} left; an upload costs 1600).",
+                  file=sys.stderr)
+    except Exception:
+        quota_status = track_api_call = None
     # Resumable, chunked upload with retry on transient server errors. A
     # single-shot chunksize=-1 request is fragile for ~1 GB long-form files.
     media = MediaFileUpload(video, chunksize=8 * 1024 * 1024, resumable=True)
-    request = youtube.videos().insert(part="snippet,status", body=body, media_body=media)
+    part = "snippet,status,localizations" if localizations else "snippet,status"
+    request = youtube.videos().insert(part=part, body=body, media_body=media)
     response = None
     retries = 0
     while response is None:
@@ -179,6 +208,11 @@ def upload(video, title, description, privacy, publish_at=None, tags=None, categ
                 continue
             raise
     video_id = response.get("id")
+    if track_api_call is not None:
+        try:
+            track_api_call("youtube", 1600)
+        except Exception:
+            pass
     print(f"Uploaded video id: {video_id}")
     print(f"https://www.youtube.com/watch?v={video_id}")
     # Verify YouTube actually finished processing before recording a
@@ -227,6 +261,18 @@ def main(argv=None):
     args = parser.parse_args(argv)
     config = load_config(args.config)
     category_id = str(config.get("youtube_category_id", "27") or "27")
+    language = (config.get("language", "en") or "en").strip()
+    localizations = None
+    if language and language.split("-")[0].lower() != "en":
+        try:
+            from src.localize import translate_metadata
+        except ImportError:
+            from localize import translate_metadata
+        translated = translate_metadata(
+            args.title, args.description, language,
+            tier=config.get("localization_tier", "template"))
+        if translated:
+            localizations = {language: translated}
     privacy = "public" if (args.public or args.auto_public) else "unlisted"
     publish_at = args.publish_at or None
     if args.publish_at_peak and not publish_at:
@@ -244,7 +290,8 @@ def main(argv=None):
     if args.dry_run:
         print("DRY RUN — nothing uploaded:")
         print(json.dumps(plan(args.video, args.title, args.description, privacy,
-                              publish_at=publish_at, category_id=category_id), indent=2))
+                              publish_at=publish_at, category_id=category_id,
+                              language=language, localizations=localizations), indent=2))
         return 0
     if os.environ.get("UPLOAD_ENABLED", "") != "true":
         print("ERROR: Refusing to upload: UPLOAD_ENABLED is not 'true'. "
@@ -255,7 +302,8 @@ def main(argv=None):
            publish_at=publish_at, tags=tags, category_id=category_id,
            topic=args.topic, fmt=args.format,
            verify=bool(config.get("verify_upload", True)),
-           process_timeout=int(config.get("upload_process_timeout", 300) or 300))
+           process_timeout=int(config.get("upload_process_timeout", 300) or 300),
+           language=language, localizations=localizations)
     return 0
 
 
