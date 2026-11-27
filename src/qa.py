@@ -47,7 +47,6 @@ import json
 import os
 import re
 import subprocess
-import sys
 
 try:
     from src.video import build_video
@@ -56,8 +55,12 @@ except ImportError:
 
 
 def run_cmd(cmd):
-    result = subprocess.run(cmd, capture_output=True, text=True, timeout=300)
-    return result
+    try:
+        return subprocess.run(cmd, capture_output=True, text=True, timeout=300)
+    except subprocess.TimeoutExpired:
+        # Surface a timeout as a failed command rather than an unhandled
+        # exception that would skip writing the QA report entirely.
+        return subprocess.CompletedProcess(cmd, 124, "", "QA command timed out after 300s")
 
 
 def probe(video):
@@ -70,7 +73,7 @@ def probe(video):
 
 def volumedetect(video):
     result = run_cmd(["ffmpeg", "-i", video, "-af", "volumedetect",
-                      "-vn", "-sn", "-dn", "-f", "null", "/dev/null"])
+                      "-vn", "-sn", "-dn", "-f", "null", os.devnull])
     mean, maximum = None, None
     for line in result.stderr.splitlines():
         if "mean_volume" in line:
@@ -81,17 +84,38 @@ def volumedetect(video):
 
 
 def detect(video, filter_name, threshold, min_duration):
-    """Return list of (start, duration) segments from a detect filter."""
-    result = run_cmd(["ffmpeg", "-i", video, "-vf",
-                      f"{filter_name}={threshold}:d={min_duration}",
-                      "-an", "-f", "null", "/dev/null"])
-    segments, current = [], None
+    """Return list of (start, duration) segments from a detect filter.
+
+    Audio detectors (silencedetect) MUST run via -af with video disabled;
+    video detectors (blackdetect) run via -vf with audio disabled. The old
+    code ran silencedetect through -vf AND -an, so ffmpeg errored out and
+    the silence gate silently passed everything. A non-zero exit now
+    raises so a broken detector fails the check loudly.
+    """
+    is_audio = filter_name == "silencedetect"
+    cmd = ["ffmpeg", "-i", video]
+    if is_audio:
+        cmd += ["-af", f"{filter_name}={threshold}:d={min_duration}", "-vn"]
+    else:
+        cmd += ["-vf", f"{filter_name}={threshold}:d={min_duration}", "-an"]
+    cmd += ["-f", "null", os.devnull]
+    result = run_cmd(cmd)
+    if result.returncode != 0:
+        raise RuntimeError(f"{filter_name} exited {result.returncode}: "
+                           f"{(result.stderr or '')[-200:]}")
+    segments, current_start = [], None
     for line in result.stderr.splitlines():
-        if f"{filter_name}" in line or "lavfi" in line:
-            start = re.search(r"start:\s*([\d.]+)", line)
-            dur = re.search(r"duration:\s*([\d.]+)", line)
-            if start and dur:
-                segments.append((float(start.group(1)), float(dur.group(1))))
+        if filter_name not in line:
+            continue
+        start = re.search(r"start:\s*([\d.]+)", line)
+        dur = re.search(r"duration:\s*([\d.]+)", line)
+        if start:
+            current_start = float(start.group(1))
+        # blackdetect reports start+duration on one line; silencedetect
+        # reports silence_start on one line and silence_duration on the next.
+        if dur is not None and current_start is not None:
+            segments.append((current_start, float(dur.group(1))))
+            current_start = None
     return segments
 
 
@@ -164,17 +188,26 @@ def check(video, narration=None, tolerance=2.0, scripts=None, script_text="",
         if maximum is not None:
             add("audio_not_clipping", maximum <= -0.5,
                 f"max_volume {maximum} dB (clipping above -0.5 dB)")
-    black = detect(video, "blackdetect", "pix_th=0.10", 2.0)
-    silent = detect(video, "silencedetect", "noise=-40dB", 2.0)
-    add("no_long_black_stretches", not black,
-        f"{len(black)} black stretch(es) >2s" + (f": {black}" if black else ""))
-    add("no_long_silent_stretches", not silent,
-        f"{len(silent)} silent stretch(es) >2s" + (f": {silent}" if silent else ""))
+    try:
+        black = detect(video, "blackdetect", "pix_th=0.10", 2.0)
+        add("no_long_black_stretches", not black,
+            f"{len(black)} black stretch(es) >2s" + (f": {black}" if black else ""))
+    except RuntimeError as exc:
+        add("no_long_black_stretches", False, f"blackdetect failed: {exc}")
+    try:
+        silent = detect(video, "silencedetect", "noise=-40dB", 2.0)
+        add("no_long_silent_stretches", not silent,
+            f"{len(silent)} silent stretch(es) >2s" + (f": {silent}" if silent else ""))
+    except RuntimeError as exc:
+        add("no_long_silent_stretches", False, f"silencedetect failed: {exc}")
     # Title card: black in the first 3 seconds only.
-    early_black = detect(video, "blackdetect", "pix_th=0.10", 1.0)
-    early = [s for s in early_black if s[0] < 3.0]
-    add("title_card_not_black", not early,
-        "first 3s contain black" if early else "first 3s are not black")
+    try:
+        early_black = detect(video, "blackdetect", "pix_th=0.10", 1.0)
+        early = [s for s in early_black if s[0] < 3.0]
+        add("title_card_not_black", not early,
+            "first 3s contain black" if early else "first 3s are not black")
+    except RuntimeError as exc:
+        add("title_card_not_black", False, f"blackdetect failed: {exc}")
     # video.py writes captions to video + ".ass"; also accept video stem + ".ass".
     captions = video + ".ass"
     alt = os.path.splitext(video)[0] + ".ass"

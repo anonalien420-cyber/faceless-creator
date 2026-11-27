@@ -104,18 +104,16 @@ class ASSCaptionRegressionTests(unittest.TestCase):
             reference = os.path.join(directory, "reference.ass")
             video.make_ass(CAPTION, 2, generated, width=WIDTH, height=HEIGHT,
                            fontsize=24)
-            reference_content = "\n".join([
-                "[Script Info]",
-                "ScriptType: v4.00+",
-                f"PlayResX: {WIDTH}",
-                f"PlayResY: {HEIGHT}",
-                "",
-                "[V4+ Styles]",
-                "Format: Name, Fontname, Fontsize, PrimaryColour, BackColour, Bold, Alignment, MarginL, MarginR, MarginV, BorderStyle, Outline",
-                "Style: Default,DejaVu Sans,24,&H00FFFFFF,&H80000000,-1,2,60,60,400,1,5",
-                "",
-                "[Events]",
-                "Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text",
+            # Reference = the SAME style header make_ass produces (brand +
+            # Shorts-safe-zone layout) with ONE clean hand-written caption
+            # event. Comparing generated pixels against this clean reference
+            # still proves no ASS event fields leak into the rendered text,
+            # while staying robust to the intentional caption-layout change.
+            with open(generated, encoding="utf-8") as handle:
+                generated_lines = handle.read().splitlines()
+            events_start = generated_lines.index("[Events]")
+            header = generated_lines[:events_start + 2]  # through Format: line
+            reference_content = "\n".join(header + [
                 f"Dialogue: 0,0:00:00.00,0:00:02.00,Default,,0,0,0,,{CAPTION}",
             ])
             with open(reference, "w", encoding="utf-8") as handle:

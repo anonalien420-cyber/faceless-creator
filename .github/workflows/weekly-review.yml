@@ -38,6 +38,13 @@ jobs:
         run: |
           git config user.name "faceless-creator-bot"
           git config user.email "faceless-creator-bot@users.noreply.github.com"
-          git add data/weekly_review.md data/weekly_review.json data/review_history.json config.yaml || true
-          git diff --cached --quiet || git commit -m "Weekly self-review: safe-bounded adjustments (see data/review_history.json)"
-          git push || echo "Push skipped (no changes or no write access)."
+          git add data/weekly_review.md data/weekly_review.json data/review_history.json config.yaml
+          if git diff --cached --quiet; then
+            echo "No review changes to commit."
+          else
+            git commit -m "Weekly self-review: safe-bounded adjustments (see data/review_history.json)"
+            # Rebase before pushing so a concurrent push does not reject it,
+            # and let a real push failure fail the step (no masked error).
+            git pull --rebase origin "${GITHUB_REF_NAME}"
+            git push origin "HEAD:${GITHUB_REF_NAME}"
+          fi

@@ -43,6 +43,26 @@ def log_step(log, name, status, detail=""):
     return entry
 
 
+def write_log(log):
+    """Write run_log.json, merging steps that subprocesses (narrate/music)
+    appended to the on-disk log during this run. run.py keeps its own steps
+    in memory; without this merge the final dump would erase the voice and
+    music-match details those subprocesses logged."""
+    try:
+        if os.path.exists("data/run_log.json"):
+            with open("data/run_log.json", encoding="utf-8") as fh:
+                disk = json.load(fh)
+            have = {s.get("step") for s in log.get("steps", [])}
+            for s in disk.get("steps", []):
+                if s.get("step") not in have:
+                    log["steps"].append(s)
+    except Exception:
+        pass
+    os.makedirs("data", exist_ok=True)
+    with open("data/run_log.json", "w", encoding="utf-8") as fh:
+        json.dump(log, fh, indent=2)
+
+
 def run_cmd(cmd, step, log):
     result = subprocess.run(cmd, capture_output=True, text=True)
     if result.returncode != 0:
@@ -51,6 +71,34 @@ def run_cmd(cmd, step, log):
     log_step(log, step, "ok", (result.stdout or "").strip().splitlines()[-1]
              if result.stdout.strip() else "")
     return result
+
+
+def run_step(log, step, cmd, args, module=None, argv=None):
+    """Run a pipeline stage either in-process (--in-process) or as a
+    subprocess (default). In-process mode calls the stage's main(argv)
+    directly, saving ~one Python interpreter startup per stage and
+    keeping everything in one process; the subprocess default isolates
+    stages and is unchanged. Both log identically and fail loudly."""
+    if getattr(args, "in_process", False) and module is not None:
+        import contextlib
+        import importlib
+        import io
+        mod = importlib.import_module(module)
+        buf = io.StringIO()
+        rc = 0
+        try:
+            with contextlib.redirect_stdout(buf), contextlib.redirect_stderr(buf):
+                rc = mod.main(argv)
+        except SystemExit as exc:
+            rc = exc.code or 0
+        out = buf.getvalue()
+        if rc not in (0, None):
+            log_step(log, step, "FAILED", out[-500:])
+            raise SystemExit(f"Step failed: {step} (exit {rc})")
+        last = out.strip().splitlines()[-1] if out.strip() else ""
+        log_step(log, step, "ok", last)
+        return out
+    return run_cmd(cmd, step, log)
 
 
 def slug(text):
@@ -163,8 +211,10 @@ def build_format(log, fmt, scripts, config, niche, args):
     audio_dir = f"data/audio_{fmt}"
     mixed_dir = f"data/audio_mixed_{fmt}"
     video_dir = f"data/videos_{fmt}"
-    run_cmd([sys.executable, "-m", "src.narrate", "--input", scripts,
-             "--outdir", audio_dir], f"narrate:{fmt}", log)
+    narrate_argv = ["--input", scripts, "--outdir", audio_dir]
+    run_step(log, f"narrate:{fmt}",
+             [sys.executable, "-m", "src.narrate"] + narrate_argv,
+             args, module="src.narrate", argv=narrate_argv)
     with open(scripts, encoding="utf-8") as fh:
         items = json.load(fh)
     os.makedirs(mixed_dir, exist_ok=True)
@@ -172,25 +222,38 @@ def build_format(log, fmt, scripts, config, niche, args):
     for script in items:
         name = f"{script['rank']:02d}-{slug(script['topic'])}"
         mixed = os.path.join(mixed_dir, f"{name}.mp3")
-        run_cmd([sys.executable, "-m", "src.music", "--narration",
-                 os.path.join(audio_dir, f"{name}.mp3"), "--output", mixed,
-                 "--top5", "data/top5.json"], f"music:{fmt}:{name}", log)
+        music_argv = ["--narration", os.path.join(audio_dir, f"{name}.mp3"),
+                      "--output", mixed, "--top5", "data/top5.json"]
+        run_step(log, f"music:{fmt}:{name}",
+                 [sys.executable, "-m", "src.music"] + music_argv,
+                 args, module="src.music", argv=music_argv)
     if not args.skip_video:
         # Funnel end card: Shorts push to the same-day long video;
         # longs tease the next episode.
         end_card = ("Watch the full video today" if fmt == "short"
                     else "Next episode tomorrow")
-        run_cmd([sys.executable, "-m", "src.video", "--input", scripts,
-                 "--audio-dir", mixed_dir, "--outdir", video_dir,
-                 "--format", fmt, "--end-card-text", end_card],
-                f"video:{fmt}", log)
+        video_argv = ["--input", scripts, "--audio-dir", mixed_dir,
+                      "--outdir", video_dir, "--format", fmt,
+                      "--end-card-text", end_card]
+        import time as _time
+        t0 = _time.monotonic()
+        run_step(log, f"video:{fmt}",
+                 [sys.executable, "-m", "src.video"] + video_argv,
+                 args, module="src.video", argv=video_argv)
+        log.setdefault("metrics", {}).setdefault("render_seconds", {})[fmt] = round(
+            _time.monotonic() - t0, 2)
     qa_reports = []
     for script in items:
         name = f"{script['rank']:02d}-{slug(script['topic'])}"
         video = os.path.join(video_dir, f"{name}.mp4")
         narration = os.path.join(mixed_dir, f"{name}.mp3")
         if not os.path.exists(video):
-            continue
+            if args.skip_video:
+                continue
+            raise SystemExit(
+                f"Render produced no video for {name} ({fmt}) — refusing to "
+                "continue with a missing output (a silent drop would post "
+                "fewer videos than the run promised).")
         report_path = f"data/qa_report_{fmt}_{name}.json"
         ok = run_qa(video, narration=narration, script_text=script["text"],
                     title=script["topic"], report_path=report_path, fmt=fmt,
@@ -210,8 +273,16 @@ def build_format(log, fmt, scripts, config, niche, args):
     return outputs, qa_reports
 
 
-def upload_outputs(log, outputs, niche, args, seo_entries=None, long_title=""):
+def upload_outputs(log, outputs, niche, config, args, seo_entries=None, long_title=""):
+    try:
+        from src.scheduler import next_peak_window
+    except ImportError:
+        from scheduler import next_peak_window
     seo_by_topic = {e["topic"]: e for e in (seo_entries or [])}
+    # Stagger publish times PER FORMAT so two Shorts in one run do not share
+    # a single publishAt (midday + evening), without pushing Shorts past the
+    # long-form's evening slot.
+    last_scheduled = {}
     for item in outputs:
         script, video, fmt = item["script"], item["video"], item["format"]
         name = os.path.basename(video)
@@ -235,10 +306,17 @@ def upload_outputs(log, outputs, niche, args, seo_entries=None, long_title=""):
         if args.public or args.auto_public:
             cmd.append("--auto-public" if args.auto_public else "--public")
         if args.publish_at_peak:
-            cmd.append("--publish-at-peak")
+            start, _end = next_peak_window(niche, config, fmt=fmt, after=last_scheduled.get(fmt))
+            if start is not None:
+                last_scheduled[fmt] = start
+                item["scheduled_peak"] = start.isoformat()
+                cmd += ["--publish-at", start.astimezone(timezone.utc).isoformat()]
+            else:
+                cmd.append("--publish-at-peak")
         if not args.upload:
             cmd.append("--dry-run")
-        run_cmd(cmd, f"upload:{fmt}:{name}", log)
+        run_step(log, f"upload:{fmt}:{name}", cmd, args,
+                 module="src.upload", argv=cmd[3:])
         item["upload_title"] = title
         item["upload_description"] = description
 
@@ -271,8 +349,10 @@ def write_review_queue(outputs, niche, config, args, seo_entries, thumb_map):
     for item in outputs:
         script, video, fmt = item["script"], item["video"], item["format"]
         seo = seo_by_topic.get(script["topic"], {})
-        start, _end = next_peak_window(niche, config, fmt=fmt)
-        peak = start.isoformat() if start else "no peak window found"
+        peak = item.get("scheduled_peak")
+        if not peak:
+            start, _end = next_peak_window(niche, config, fmt=fmt)
+            peak = start.isoformat() if start else "no peak window found"
         thumbs = thumb_map.get(script["topic"], [])
         lines.append(f"## [{fmt}] {item.get('upload_title', script['topic'])}")
         lines.append(f"- Video: {video}")
@@ -321,10 +401,14 @@ def main(argv=None):
     parser.add_argument("--list-niches", action="store_true",
                         help="Print the niche ranking and stop (no videos, no upload).")
     parser.add_argument("--skip-video", action="store_true")
-    parser.add_argument("--long-count", type=int, default=0,
-                        help="Override long_videos_per_day (default from config).")
-    parser.add_argument("--short-count", type=int, default=0,
-                        help="Override shorts_per_day (default from config).")
+    parser.add_argument("--in-process", action="store_true",
+                        help="Run stages in one process (calls each module's main "
+                             "directly) instead of spawning a subprocess per stage. "
+                             "Faster (no interpreter startups); subprocess is the default.")
+    parser.add_argument("--long-count", type=int, default=None,
+                        help="Override long_videos_per_day (default from config; 0 disables long-form).")
+    parser.add_argument("--short-count", type=int, default=None,
+                        help="Override shorts_per_day (default from config; 0 disables Shorts).")
     args = parser.parse_args(argv)
 
     config = load_config(args.config)
@@ -343,18 +427,26 @@ def main(argv=None):
         niche = choose_niche(config, args.trends_input)
         save_niche_lock(niche)
         print(f"Niche lock set: '{niche}' for {config.get('niche_lock_days', 90)} days.")
-    long_count = args.long_count or int(config.get("long_videos_per_day", 1) or 1)
-    short_count = args.short_count or int(config.get("shorts_per_day", 2) or 2)
+    long_count = (args.long_count if args.long_count is not None
+                  else int(config.get("long_videos_per_day", 1) or 1))
+    short_count = (args.short_count if args.short_count is not None
+                   else int(config.get("shorts_per_day", 2) or 2))
+    long_count, short_count = max(0, long_count), max(0, short_count)
     log = {"started_at": datetime.now(timezone.utc).isoformat(),
            "niche": niche, "long_videos": long_count,
            "shorts": short_count, "steps": []}
     os.makedirs("data", exist_ok=True)
+    # Reset the on-disk log now (plain overwrite, no merge) so subprocess
+    # appends (narrate/music) during this run accumulate on THIS run's log,
+    # not the previous run's. The final write_log() merges them back in.
+    with open("data/run_log.json", "w", encoding="utf-8") as fh:
+        json.dump(log, fh, indent=2)
     all_outputs, all_qa = [], []
     try:
-        run_cmd([sys.executable, "-m", "src.trends", "--input", args.trends_input,
-                 "--niche", niche,
-                 "--output", "data/top5.json", "--compare", "data/compare.md"],
-                "trends", log)
+        trends_argv = ["--input", args.trends_input, "--niche", niche,
+                       "--output", "data/top5.json", "--compare", "data/compare.md"]
+        run_step(log, "trends", [sys.executable, "-m", "src.trends"] + trends_argv,
+                 args, module="src.trends", argv=trends_argv)
         with open("data/top5.json", encoding="utf-8") as fh:
             top5 = json.load(fh)["candidates"]
         # Long-form uses #1 in depth; Shorts use #2 and #3 (or fewer if
@@ -365,12 +457,21 @@ def main(argv=None):
             json.dump(long_cands, fh, indent=2)
         with open("data/top5_shorts.json", "w", encoding="utf-8") as fh:
             json.dump(short_cands, fh, indent=2)
-        run_cmd([sys.executable, "-m", "src.script", "--input", "data/top5_long.json",
-                 "--output", "data/scripts_long.json", "--format", "long",
-                 "--count", str(long_count)], "scripts:long", log)
-        run_cmd([sys.executable, "-m", "src.script", "--input", "data/top5_shorts.json",
-                 "--output", "data/scripts_shorts.json", "--format", "short",
-                 "--count", str(short_count)], "scripts:short", log)
+        # Style follows the niche ACTUALLY running this run (which --niche
+        # may override), not just the first configured niche — otherwise a
+        # finance topic under a history lock still gets history-mystery scripts.
+        niche_lower = niche.lower()
+        style = ("history_mystery"
+                 if ("history" in niche_lower and "myster" in niche_lower)
+                 else "general")
+        long_argv = ["--input", "data/top5_long.json", "--output", "data/scripts_long.json",
+                     "--format", "long", "--style", style, "--count", str(long_count)]
+        run_step(log, "scripts:long", [sys.executable, "-m", "src.script"] + long_argv,
+                 args, module="src.script", argv=long_argv)
+        short_argv = ["--input", "data/top5_shorts.json", "--output", "data/scripts_shorts.json",
+                      "--format", "short", "--style", style, "--count", str(short_count)]
+        run_step(log, "scripts:short", [sys.executable, "-m", "src.script"] + short_argv,
+                 args, module="src.script", argv=short_argv)
         for fmt, scripts_file in (("long", "data/scripts_long.json"),
                                   ("short", "data/scripts_shorts.json")):
             outputs, qa_reports = build_format(log, fmt, scripts_file,
@@ -412,6 +513,11 @@ def main(argv=None):
                 from thumbnail import generate_variants
             except ImportError:
                 generate_variants = None
+        try:
+            from src.models import Brand
+        except ImportError:
+            from models import Brand
+        brand = Brand.from_config(config)
         if generate_variants is not None:
             for item in all_outputs:
                 script, fmt = item["script"], item["format"]
@@ -420,7 +526,7 @@ def main(argv=None):
                     results = generate_variants(
                         script["topic"], script["text"], "data/thumbnails",
                         slug(script["topic"]), video=item["video"], fmt=fmt,
-                        n_items=n_items)
+                        n_items=n_items, brand=brand)
                     thumb_map[script["topic"]] = results
                     if not all(r["qa_ok"] for r in results):
                         log_step(log, f"thumbnail:{fmt}:{slug(script['topic'])}",
@@ -435,11 +541,12 @@ def main(argv=None):
             log_step(log, "thumbnails", "WARNING",
                      "Pillow/thumbnail module unavailable — no thumbnails generated")
         # SEO (titles, description, tags, pinned comment, thumbnails).
-        run_cmd([sys.executable, "-m", "src.seo", "--long", "data/scripts_long.json",
-                 "--short", "data/scripts_shorts.json", "--output", "data/seo.json",
-                 "--thumbnails-file", "data/thumbnails.json",
-                 "--series-name", series_name,
-                 "--episode", str(episode or 0)], "seo", log)
+        seo_argv = ["--long", "data/scripts_long.json",
+                    "--short", "data/scripts_shorts.json", "--output", "data/seo.json",
+                    "--thumbnails-file", "data/thumbnails.json",
+                    "--series-name", series_name, "--episode", str(episode or 0)]
+        run_step(log, "seo", [sys.executable, "-m", "src.seo"] + seo_argv,
+                 args, module="src.seo", argv=seo_argv)
         seo_entries = []
         if os.path.exists("data/seo.json"):
             with open("data/seo.json", encoding="utf-8") as fh:
@@ -450,22 +557,62 @@ def main(argv=None):
                 long_title = entry["recommended_title"]
                 break
         # Upload step: dry-run unless explicitly enabled.
-        upload_outputs(log, all_outputs, niche, args,
+        upload_outputs(log, all_outputs, niche, config, args,
                        seo_entries=seo_entries, long_title=long_title)
         # Human review queue — always written, even for dry runs.
         write_review_queue(all_outputs, niche, config, args, seo_entries, thumb_map)
-    except SystemExit as exc:
+    except SystemExit:
         log["status"] = "FAILED"
-        with open("data/run_log.json", "w", encoding="utf-8") as fh:
-            json.dump(log, fh, indent=2)
+        write_log(log)
+        raise
+    except Exception:
+        # Unexpected errors (KeyError, FileNotFoundError, ...) must also
+        # leave a FAILED log, not a stale "ok" one from a previous run.
+        log["status"] = "FAILED"
+        write_log(log)
         raise
     log["status"] = "ok"
     log["finished_at"] = datetime.now(timezone.utc).isoformat()
-    with open("data/run_log.json", "w", encoding="utf-8") as fh:
-        json.dump(log, fh, indent=2)
+    write_log(log)
+    # Per-run manifest: render time, QA pass rate, upload status — one
+    # glanceable metrics file per run (data/run_manifest.json).
+    _write_manifest(log, all_outputs, niche, args)
+    # Topic memory: record covered topics so future runs do not repeat them.
+    if config.get("topic_memory", True):
+        try:
+            from src.script import record_topics
+        except ImportError:
+            from script import record_topics
+        record_topics([o["script"]["topic"] for o in all_outputs])
     print(f"Run complete: {long_count} long-form + {short_count} Shorts. "
           "Log: data/run_log.json")
     return 0
+
+
+def _write_manifest(log, outputs, niche, args):
+    """Write data/run_manifest.json with per-run production metrics."""
+    qa_pass = sum(1 for o in outputs if o.get("qa_report"))
+    render_seconds = log.get("metrics", {}).get("render_seconds", {})
+    uploads = [{"video": o["video"], "format": o["format"],
+                "title": o.get("upload_title", ""),
+                "scheduled_peak": o.get("scheduled_peak", ""),
+                "uploaded": bool(args.upload)} for o in outputs]
+    manifest = {
+        "started_at": log.get("started_at"),
+        "finished_at": log.get("finished_at"),
+        "niche": niche,
+        "status": log.get("status"),
+        "videos": len(outputs),
+        "qa_passed": qa_pass,
+        "qa_pass_rate": round(qa_pass / len(outputs), 3) if outputs else 0.0,
+        "render_seconds": render_seconds,
+        "total_render_seconds": round(sum(render_seconds.values()), 2),
+        "in_process": bool(getattr(args, "in_process", False)),
+        "uploads": uploads,
+    }
+    os.makedirs("data", exist_ok=True)
+    with open("data/run_manifest.json", "w", encoding="utf-8") as fh:
+        json.dump(manifest, fh, indent=2)
 
 
 if __name__ == "__main__":

@@ -27,6 +27,7 @@ import argparse
 import json
 import os
 import sys
+import time
 from datetime import timezone
 
 try:
@@ -37,26 +38,35 @@ except ImportError:
     from scheduler import next_peak_window
 
 
-def plan(video, title, description, privacy, publish_at=None):
+def plan(video, title, description, privacy, publish_at=None, category_id="27"):
+    # Match what upload() actually does: scheduled publishing forces private,
+    # so the dry run must not advertise "unlisted + publishAt".
+    if publish_at:
+        privacy = "private"
     out = {"video": video, "title": title, "description": description,
-           "privacyStatus": privacy, "categoryId": "27"}
+           "privacyStatus": privacy, "categoryId": category_id}
     if publish_at:
         out["publishAt"] = publish_at
     return out
 
 
-def upload(video, title, description, privacy, publish_at=None, tags=None):
+def upload(video, title, description, privacy, publish_at=None, tags=None, category_id="27"):
     try:
-        from google_auth_oauthlib.flow import InstalledAppFlow
         from google.auth.transport.requests import Request
         from google.oauth2.credentials import Credentials
+        from google_auth_oauthlib.flow import InstalledAppFlow
         from googleapiclient.discovery import build
+        from googleapiclient.errors import HttpError
         from googleapiclient.http import MediaFileUpload
     except ImportError as exc:
         print(f"ERROR: Google API libraries missing ({exc}). "
               "pip install google-api-python-client google-auth-oauthlib", file=sys.stderr)
-        raise SystemExit(1)
-    scopes = ["https://www.googleapis.com/auth/youtube.upload"]
+        raise SystemExit(1) from exc
+    # upload + readonly: the same channel owner's token also feeds the weekly
+    # review's stats read (src/review.py needs youtube.readonly). With an
+    # upload-only token that read silently always fell back to manual stats.
+    scopes = ["https://www.googleapis.com/auth/youtube.upload",
+              "https://www.googleapis.com/auth/youtube.readonly"]
     creds = None
     if os.path.exists("token.json"):
         creds = Credentials.from_authorized_user_file("token.json", scopes)
@@ -64,6 +74,12 @@ def upload(video, title, description, privacy, publish_at=None, tags=None):
         if creds and creds.expired and creds.refresh_token:
             creds.refresh(Request())
         else:
+            if os.environ.get("CI") or not os.path.exists("client_secrets.json"):
+                raise SystemExit(
+                    "No valid token.json and an interactive OAuth flow is not "
+                    "possible here (headless/CI). Provide a token.json with a "
+                    "refresh token (e.g. from the YT_TOKEN secret), or run "
+                    "src.upload locally once to consent.")
             flow = InstalledAppFlow.from_client_secrets_file("client_secrets.json", scopes)
             creds = flow.run_local_server(port=0)
         with open("token.json", "w", encoding="utf-8") as fh:
@@ -76,14 +92,25 @@ def upload(video, title, description, privacy, publish_at=None, tags=None):
         # an immediate public status — the API rejects that.
         status["privacyStatus"] = "private"
         status["publishAt"] = publish_at
-    snippet = {"title": title, "description": description, "categoryId": "27"}
+    snippet = {"title": title, "description": description, "categoryId": category_id}
     if tags:
         snippet["tags"] = tags
     body = {"snippet": snippet, "status": status}
-    request = youtube.videos().insert(
-        part="snippet,status", body=body,
-        media_body=MediaFileUpload(video, chunksize=-1, resumable=True))
-    response = request.execute()
+    # Resumable, chunked upload with retry on transient server errors. A
+    # single-shot chunksize=-1 request is fragile for ~1 GB long-form files.
+    media = MediaFileUpload(video, chunksize=8 * 1024 * 1024, resumable=True)
+    request = youtube.videos().insert(part="snippet,status", body=body, media_body=media)
+    response = None
+    retries = 0
+    while response is None:
+        try:
+            _progress, response = request.next_chunk()
+        except HttpError as exc:
+            if exc.resp.status in (500, 502, 503, 504) and retries < 5:
+                retries += 1
+                time.sleep(2 ** retries)
+                continue
+            raise
     video_id = response.get("id")
     print(f"Uploaded video id: {video_id}")
     print(f"https://www.youtube.com/watch?v={video_id}")
@@ -113,10 +140,11 @@ def main(argv=None):
                         help="Use this format's peak window for --publish-at-peak.")
     parser.add_argument("--config", default="config.yaml")
     args = parser.parse_args(argv)
+    config = load_config(args.config)
+    category_id = str(config.get("youtube_category_id", "27") or "27")
     privacy = "public" if (args.public or args.auto_public) else "unlisted"
     publish_at = args.publish_at or None
     if args.publish_at_peak and not publish_at:
-        config = load_config(args.config)
         niche = args.niche or (config.get("niches") or [config.get("niche", "")])[0]
         start, _end = next_peak_window(niche, config, fmt=args.format or None)
         if start is None:
@@ -131,7 +159,7 @@ def main(argv=None):
     if args.dry_run:
         print("DRY RUN — nothing uploaded:")
         print(json.dumps(plan(args.video, args.title, args.description, privacy,
-                              publish_at=publish_at), indent=2))
+                              publish_at=publish_at, category_id=category_id), indent=2))
         return 0
     if os.environ.get("UPLOAD_ENABLED", "") != "true":
         print("ERROR: Refusing to upload: UPLOAD_ENABLED is not 'true'. "
@@ -139,7 +167,7 @@ def main(argv=None):
         return 1
     tags = [t.strip() for t in args.tags.split(",") if t.strip()] or None
     upload(args.video, args.title, args.description, privacy,
-           publish_at=publish_at, tags=tags)
+           publish_at=publish_at, tags=tags, category_id=category_id)
     return 0
 
 

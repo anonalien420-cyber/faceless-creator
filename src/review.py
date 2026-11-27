@@ -42,10 +42,10 @@ NEVER (this module does not do any of these, by design):
 import argparse
 import json
 import os
-import re
 import statistics
 import sys
 from datetime import datetime, timedelta, timezone
+from zoneinfo import ZoneInfo
 
 try:
     from src.config import load_config
@@ -148,19 +148,52 @@ def last_7_days(videos):
     return recent, older
 
 
+def hook_style_performance(videos):
+    """Rank hook styles by total views (views-weighted, not just count).
+
+    Returns a list of {hook_style, total_views, videos, avg_views} sorted
+    best-first. This is the performance signal script.py uses to pick the
+    winning hook phrasing for the next run (review_preferred_hook_style).
+    """
+    agg = {}
+    for v in videos:
+        style = v.get("hook_style") or ""
+        views = v.get("views")
+        if not style or not isinstance(views, (int, float)):
+            continue
+        bucket = agg.setdefault(style, {"hook_style": style, "total_views": 0,
+                                        "videos": 0})
+        bucket["total_views"] += views
+        bucket["videos"] += 1
+    out = list(agg.values())
+    for bucket in out:
+        bucket["avg_views"] = round(bucket["total_views"] / max(1, bucket["videos"]), 1)
+    out.sort(key=lambda b: b["total_views"], reverse=True)
+    return out
+
+
 def analyse(videos):
     """Split into scored / no-data, top / bottom, and shared traits."""
     scored = [v for v in videos if isinstance(v.get("views"), (int, float))]
     no_data = [v for v in videos if not isinstance(v.get("views"), (int, float))]
     scored.sort(key=lambda v: v["views"], reverse=True)
-    top = scored[:3] if len(scored) >= 3 else scored
-    bottom = scored[-3:] if len(scored) >= 3 else []
+    top = scored[:3]
+    # Bottom performers must be distinct from the top — with only 3-5 scored
+    # videos the old scored[-3:] overlapped the top and flagged winners as
+    # "not working".
+    remaining = scored[3:]
+    bottom = remaining[-3:] if remaining else []
     median_views = _median([v["views"] for v in scored])
     shared = {}
     if top:
+        # Hook preference: views-weighted winner across all scored videos
+        # (more signal than the mode of just the top 3), falling back to
+        # the top performers' most common style.
+        ranking = hook_style_performance(scored)
+        weighted_hook = ranking[0]["hook_style"] if ranking else ""
         shared = {
             "niche": _mode([v.get("niche") for v in top]),
-            "hook_style": _mode([v.get("hook_style") for v in top]),
+            "hook_style": weighted_hook or _mode([v.get("hook_style") for v in top]),
             "length_seconds": _median([v.get("length_seconds") for v in top]),
             "music_genre": _mode([v.get("music_genre") for v in top]),
             "music_tempo_bpm": _median([v.get("music_tempo_bpm") for v in top]),
@@ -219,11 +252,22 @@ def apply_adjustments(config_path, shared, top):
     if shared.get("music_mood"):
         after["review_music_mood"] = shared["music_mood"]
     # Peak shift: median winning publish hour vs default 18:00 weekday
-    # peak, clamped to +/-60 minutes. Only if publish hours are known.
+    # peak, clamped to +/-60 minutes. publish_time is UTC (YouTube
+    # publishedAt), so convert to the channel's local timezone first —
+    # comparing a UTC hour to a local 18:00 peak skewed the shift by the
+    # whole UTC offset.
+    try:
+        tz = ZoneInfo(config.get("channel_timezone", "America/Chicago") or "America/Chicago")
+    except Exception:
+        tz = timezone.utc
     hours = []
-    for hour in shared.get("publish_hours", []):
+    for v in top:
+        raw = v.get("publish_time") or v.get("published_date") or ""
         try:
-            hours.append(int(hour))
+            dt = datetime.fromisoformat(str(raw).replace("Z", "+00:00"))
+            if dt.tzinfo is None:
+                dt = dt.replace(tzinfo=timezone.utc)
+            hours.append(dt.astimezone(tz).hour)
         except ValueError:
             pass
     if hours:
@@ -292,6 +336,7 @@ def main(argv=None):
         "top_performers": top,
         "bottom_performers": bottom,
         "shared_top_traits": shared,
+        "hook_style_ranking": hook_style_performance(scored),
         "median_views": median_views,
         "hypotheses": hyps,
         "adjustments_applied": applied,

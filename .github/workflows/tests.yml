@@ -1,0 +1,52 @@
+name: Tests
+
+# Runs the unit + render regression suite on every push and PR, plus
+# lint (ruff), an advisory type-check (mypy), and coverage. Before this,
+# nothing ran the tests, so regressions in the pure-Python logic (config
+# parsing, scheduler, QA detectors, script lengths, dedupe) went unnoticed.
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install ruff + mypy
+        run: pip install "ruff>=0.6,<1" "mypy>=1.10,<2" types-PyYAML types-requests
+      - name: Ruff lint (gate)
+        run: ruff check src scripts
+      - name: Mypy (advisory — pipeline is incrementally typed)
+        continue-on-error: true
+        run: mypy src
+
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install ffmpeg
+        run: sudo apt-get update && sudo apt-get install -y ffmpeg
+      - name: Install Python deps
+        run: pip install -r requirements.txt coverage
+      - name: Run unit + render tests under coverage
+        run: |
+          python -m coverage run -m unittest discover -s tests -v
+          python -m coverage report
+      - name: Upload coverage artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-report
+          path: .coverage
+          if-no-files-found: ignore

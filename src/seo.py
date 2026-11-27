@@ -86,6 +86,32 @@ def short_titles(topic, hook_style):
     return candidates[:3]
 
 
+def history_long_titles(topic):
+    """Title options for the history-mystery niche. The generic templates
+    ('The Simple System That Works', 'Stop Starting Over') are productivity
+    boilerplate that does not fit an investigation channel."""
+    base = _title_case(topic)
+    candidates = [
+        f"{base}: Evidence vs. Theory",
+        f"{base} — Still Unexplained",
+        f"Investigating {base}",
+        f"What Modern Tech Reveals About {base}",
+    ]
+    kept = [t for t in candidates if _under_60(t)]
+    return (kept or [base[:60]])[:3]
+
+
+def history_short_titles(topic):
+    base = _title_case(topic)
+    candidates = [
+        f"{base}: Still Unexplained",
+        f"What Happened? {base}",
+        f"{base} — The Evidence",
+    ]
+    kept = [t for t in candidates if _under_60(t)]
+    return (kept or [base[:60]])[:3]
+
+
 def normalize_sources(sources):
     """Normalize script sources to [{title, url, no_public_url}].
 
@@ -147,7 +173,10 @@ def tags_for(topic, config):
 def build_entry(script, config, fmt, series_name="", episode=None, thumbnails=None):
     topic = script["topic"]
     hook_style = script.get("hook_style", "statement")
-    titles = long_titles(topic, hook_style) if fmt == "long" else short_titles(topic, hook_style)
+    if script.get("style") == "history_mystery":
+        titles = history_long_titles(topic) if fmt == "long" else history_short_titles(topic)
+    else:
+        titles = long_titles(topic, hook_style) if fmt == "long" else short_titles(topic, hook_style)
     recommended = titles[0]
     if series_name and episode is not None:
         prefix = f"{series_name} EP {episode}: "

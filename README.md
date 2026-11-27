@@ -10,6 +10,18 @@ Audience growth depends on topic choice, quality, consistency, and luck,
 and no tool can promise it. Anyone selling that promise is overselling.
 Peak times help timing; they do not guarantee popularity.
 
+## Documentation
+
+- [Setup](docs/setup.md) — install, ffmpeg, keys, Docker, quick start.
+- [Architecture](docs/architecture.md) — pipeline, modules, data flow, engine.
+- [Operations](docs/operations.md) — daily run, scheduling, review, caching, metrics.
+- [Content policy](docs/content-policy.md) — accuracy tiers, shock honestly, originality.
+- [Roadmap](docs/roadmap.md) — the production-quality roadmap (implemented).
+- [Changelog](CHANGELOG.md) — release history.
+
+One CLI for every stage: `faceless <run|trends|script|narrate|music|video|qa|seo|thumbnail|review|research|upload>`.
+See `faceless --help`. The `python -m src.<module>` form still works.
+
 ## What is free vs. what needs a key
 
 | Source / step | Free? | Needs a key/token? |
@@ -26,7 +38,7 @@ Peak times help timing; they do not guarantee popularity.
 | Music bed — trending-style match | Yes, if you use free Mixkit/Pixabay tracks | No — a Pexels/Pixabay key is only needed for their APIs, not for downloading a track URL you already have rights to use |
 | HD stock video | Yes, with a free API key | `PEXELS_API_KEY` or `PIXABAY_API_KEY` for `--fetch-stock`; otherwise paste stock video URLs into `stock_video_urls` |
 | Video rendering (ffmpeg) | Yes | No (ffmpeg is free software) |
-| YouTube upload | Yes, via the free Data API | Yes — OAuth client (`client_secrets.json`) from Google Cloud Console, upload scope only |
+| YouTube upload | Yes, via the free Data API | Yes — OAuth client (`client_secrets.json`) from Google Cloud Console, upload + readonly scopes (readonly feeds the weekly review's stats read) |
 
 Never put keys or tokens in `config.yaml` or in git. Use environment
 variables / GitHub Secrets. `token.json` and `client_secrets.json` are
@@ -48,8 +60,9 @@ python -m src.trends --manual-only --input data/trends_input.example.json
 python -m src.script --input data/top5.json
 #    -> data/scripts.json (also works directly from the example file)
 # 4. Full run for one niche (dry-run upload by default):
-python -m src.run --niche "personal finance tips"
-#    Without --niche it picks the top-ranked niche that has data.
+python -m src.run
+#    Uses the locked niche (or the top-ranked niche with data). Pass
+#    --niche "personal finance" to override for a single run.
 ```
 
 The demo example file is clearly marked EXAMPLE — its titles and any
@@ -117,16 +130,19 @@ configured at all, narration ships without a music bed and warns.
 
 | Tier | Voice | Cost | How human does it sound? |
 |---|---|---|---|
-| `free` (default) | Edge TTS neural (Christopher/Aria) + SSML prosody | Free | Closest free option: neural synthesis, not robotic concatenative TTS |
+| `free` (default) | Edge TTS neural (Christopher/Aria) + rate/pacing | Free | Closest free option: neural synthesis, not robotic concatenative TTS |
 | `local` | Kokoro open-weight, if installed | Free, local | Often more natural than Edge TTS; falls back to Edge if not installed |
 | `paid` | ElevenLabs (key required) | Paid | Usually the most natural of the three; never required, never default |
 
 Set `narrator_tier`, `narrator_voice`, `narrator_speed`, and
-`narrator_pause_ms` in `config.yaml`. The humanizing pass emphasizes
-the hook sentence, adds natural pauses at commas/periods, and varies
-rate/pitch — those three things (neural synthesis + prosody + pacing)
-are why a voice sounds human instead of monotone. No AI voice is
-indistinguishable from a human, and this project never claims one is.
+`narrator_pause_ms` in `config.yaml`. edge-tts does not accept custom
+SSML (it XML-escapes its input), so the humanizing pass works two ways
+that actually take effect: a configurable speaking rate (the engine's
+rate parameter) and punctuation pacing — short beats at commas, longer
+ones at sentence ends, scaled by `narrator_pause_ms`. Neural synthesis
+plus rate plus pacing is what keeps a voice from sounding monotone. No
+AI voice is indistinguishable from a human, and this project never
+claims one is.
 Narration is verified after rendering: empty or silent audio fails
 loudly instead of shipping a silent video. Paid tier without a key
 also fails loudly rather than silently downgrading.
@@ -524,7 +540,7 @@ src/
   trends.py                  # YouTube/Reddit/TikTok/Facebook/Google compare + niche ranking
   scheduler.py               # next peak window per niche/format (+ review shift)
   script.py                  # original Short + long-form scripts (hooks, chapters)
-  narrate.py                 # voice tiers (Edge / Kokoro / ElevenLabs) + SSML prosody
+  narrate.py                 # voice tiers (Edge / Kokoro / ElevenLabs) + rate/pacing
   music.py                   # trending-style royalty-free music matching + mixing
   video.py                   # HD stock video/images, crossfades, captions, colour grade, pacing pass
   thumbnail.py               # clickbait-style, truth-checked thumbnails (2 variants/video)

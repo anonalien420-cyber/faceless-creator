@@ -49,7 +49,6 @@ def parse_peak_windows(config):
     for entry in config.get("peak_windows") or []:
         if not isinstance(entry, str):
             continue
-        parts = entry.split(":")
         # Format: "niche:weekday:17:00-20:00" — niche may itself contain
         # no colon in practice; split from the right for the window part.
         match = re.match(r"^(.+):(weekday|weekend):(\d{2}:\d{2})-(\d{2}:\d{2})$",
@@ -86,11 +85,15 @@ def windows_for_day(windows, niche, day, fmt=None):
     return windows.get(("default", day_type), [])
 
 
-def next_peak_window(niche, config, now=None, fmt=None):
+def next_peak_window(niche, config, now=None, fmt=None, after=None):
     """Return (window_start_local, window_end_local) datetimes, or (None, None).
 
     A weekly-review shift (config review_peak_shift_minutes, clamped to
     +/-60 by review.py) moves the window toward winning publish times.
+
+    `after` (a datetime) forces the result strictly later than that time,
+    so a run can stagger several videos into distinct windows instead of
+    scheduling two Shorts to the identical publishAt.
     """
     tz_name = config.get("channel_timezone", "America/Chicago") or "America/Chicago"
     try:
@@ -103,6 +106,10 @@ def next_peak_window(niche, config, now=None, fmt=None):
         now = now.replace(tzinfo=tz)
     now = now.astimezone(tz)
     earliest = now + timedelta(minutes=15)
+    if after is not None:
+        if after.tzinfo is None:
+            after = after.replace(tzinfo=tz)
+        earliest = max(earliest, after.astimezone(tz) + timedelta(minutes=1))
     windows = parse_peak_windows(config)
     try:
         shift = int(config.get("review_peak_shift_minutes") or 0)

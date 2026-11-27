@@ -1,21 +1,23 @@
-"""Minimal YAML-subset config loader (stdlib only).
+"""Config loader: full YAML when PyYAML is installed, else a stdlib
+YAML-subset fallback. Either way the rest of the code only uses the
+dict this returns.
 
-Handles the flat structure used by config.yaml: scalar key: value pairs
-(strings, ints, booleans) and top-level lists written as:
-    key:
-      - item
-      - item
-It also handles lists of mappings, used by music_library:
-    music_library:
-      - file: "music/example.mp3"
-        genre: "pop"
-        tempo_bpm: 125
-        mood: "upbeat"
-        license: "royalty-free"
-It is deliberately not a full YAML parser. If you need full YAML, install
-PyYAML and replace this loader — the rest of the code only uses the dict
-this function returns.
+- PyYAML path (recommended; installed via requirements.txt): parses the
+  whole file, including nested mappings like the `brand:` block.
+- Stdlib fallback (no deps, $0/offline default): handles the flat
+  structure used by config.yaml — scalar key: value pairs, top-level
+  lists (scalars or mappings, e.g. music_library), inline flow lists,
+  quote-aware comment stripping, AND one level of nested mapping
+  (e.g. brand:). It is deliberately not a full YAML parser; install
+  PyYAML for anchors, deeper nesting, and multiline scalars.
+
+validate_config() fails fast on obviously wrong types (a string where
+a number is required, a non-list niches, ...) so a typo stops the run
+before any rendering. When pydantic is installed an optional schema
+adds stricter validation; without it the built-in checks still run.
 """
+
+import copy
 
 DEFAULTS = {
     "niche": "personal finance tips",
@@ -41,11 +43,75 @@ DEFAULTS = {
     "visual_source": "stock_video",
     "min_resolution": 1080,
     "video_bitrate": "10M",
+    # --- Production polish (Phase 1) ---
+    "music_volume": 0.15,
+    "loudness_i": -14,
+    "loudness_tp": -1.5,
+    "captions_karaoke": True,
+    "captions_safe_zone": 0.25,
+    "transitions": "varied",
+    "brand": {
+        "accent": "#FFCB05",
+        "accent_alt": "#E3350D",
+        "font": "DejaVu Sans",
+        "text_color": "#FFFFFF",
+        "outline_color": "#000000",
+        "logo": "",
+        "watermark": "",
+    },
+    # --- Quality depth (Phase 2) ---
+    "research_enabled": False,
+    "research_language": "en",
+    "research_llm_tier": "template",
+    "topic_memory": True,
+    "topic_memory_days": 30,
+    "trend_velocity": True,
+    # --- Engine / DX (Phase 3) ---
+    "cache_enabled": True,
+    "max_workers": 0,
+    "scene_broll": True,
 }
+
+# Keys that must be numeric / list / bool when present (fail-fast checks).
+_NUMERIC_KEYS = ("narrator_speed", "narrator_pause_ms", "min_resolution",
+                 "videos_per_run", "music_volume", "loudness_i", "loudness_tp",
+                 "captions_safe_zone", "topic_memory_days", "max_workers")
+_LIST_KEYS = ("niches", "niche_keywords", "music_urls", "music_library",
+              "stock_image_urls", "stock_video_urls", "peak_windows",
+              "reddit_subreddits")
+_BOOL_KEYS = ("series_enabled", "research_enabled", "topic_memory",
+              "trend_velocity", "cache_enabled", "captions_karaoke", "scene_broll")
+
+
+def _strip_comment(value):
+    """Drop a trailing `# comment` that sits OUTSIDE quotes. A '#' inside a
+    quoted string, or one not preceded by whitespace (e.g. a URL fragment),
+    is kept. Without this, `speed: 1.2 # faster` parsed as the string
+    '1.2 # faster' and crashed float() downstream."""
+    in_single = in_double = False
+    for i, ch in enumerate(value):
+        if ch == "'" and not in_double:
+            in_single = not in_single
+        elif ch == '"' and not in_single:
+            in_double = not in_double
+        elif ch == "#" and not in_single and not in_double:
+            if i == 0 or value[i - 1] in " \t":
+                return value[:i].rstrip()
+    return value
+
+
+def _flow_list(value):
+    """Parse an inline flow list like `[]` or `[a, b]`. The loader previously
+    stored these as the literal string '[]', which then iterated as the
+    characters '[' and ']' (e.g. bogus niches)."""
+    inner = value[1:-1].strip()
+    if not inner:
+        return []
+    return [_scalar(part) for part in inner.split(",")]
 
 
 def _scalar(value):
-    value = value.strip()
+    value = _strip_comment(value.strip())
     if value in ("", "~", "null"):
         return ""
     if value.lower() == "true":
@@ -66,19 +132,29 @@ def _scalar(value):
         return value
 
 
-def load_config(path="config.yaml"):
-    config = dict(DEFAULTS)
-    # Copy mutable defaults so one load never mutates another.
-    for key, value in DEFAULTS.items():
-        if isinstance(value, list):
-            config[key] = list(value)
+def _defaults_copy():
+    return copy.deepcopy(DEFAULTS)
+
+
+def _load_yaml_pyyaml(text):
+    import yaml  # optional dependency
+    data = yaml.safe_load(text) or {}
+    if not isinstance(data, dict):
+        raise ValueError("config.yaml must be a mapping at the top level")
+    config = _defaults_copy()
+    for key, value in data.items():
+        # Match the stdlib parser's convention: an empty scalar is "".
+        config[key] = "" if value is None else value
+    return config
+
+
+def _load_yaml_fallback(lines):
+    """Stdlib YAML-subset parser (flat scalars, lists, list-of-mappings,
+    and one level of nested mapping such as the brand: block)."""
+    config = _defaults_copy()
     current_list_key = None
+    current_map_key = None
     current_dict = None
-    try:
-        with open(path, encoding="utf-8") as fh:
-            lines = fh.readlines()
-    except FileNotFoundError:
-        return config
     for raw in lines:
         line = raw.rstrip("\n")
         stripped = line.strip()
@@ -86,15 +162,8 @@ def load_config(path="config.yaml"):
             continue
         indented = line[:1] in (" ", "\t")
         if stripped.startswith("- ") and current_list_key is not None:
-            # List item (indented in config.yaml); may start a mapping ("- file: x").
-            if current_list_key is None:
-                continue
             item = stripped[2:].strip()
             if item.startswith(('"', "'")):
-                # Quoted scalar (e.g. - "shorts:weekday:12:00-14:00"):
-                # colons inside the quotes are data, NOT a mapping key.
-                # (Without this, peak_windows entries parsed as mappings
-                # and the scheduler silently fell back to its defaults.)
                 config[current_list_key].append(_scalar(item))
                 current_dict = None
             elif ":" in item:
@@ -106,24 +175,96 @@ def load_config(path="config.yaml"):
                 current_dict = None
             continue
         if indented and current_dict is not None and ":" in stripped:
-            # Continuation line of the current list mapping.
             key, _, value = stripped.partition(":")
             current_dict[key.strip()] = _scalar(value)
+            continue
+        # Nested mapping block (e.g. brand:): indented `subkey: value`
+        # lines with no preceding `- ` list item.
+        if indented and current_list_key is not None and current_dict is None \
+                and ":" in stripped and not stripped.startswith("- "):
+            if isinstance(config[current_list_key], list) and not config[current_list_key]:
+                config[current_list_key] = {}
+                current_map_key = current_list_key
+                current_list_key = None
+            if current_map_key is not None:
+                key, _, value = stripped.partition(":")
+                config[current_map_key][key.strip()] = _scalar(value)
+                continue
+        if indented and current_map_key is not None and ":" in stripped:
+            key, _, value = stripped.partition(":")
+            config[current_map_key][key.strip()] = _scalar(value)
             continue
         if ":" in stripped and not indented:
             key, _, value = stripped.partition(":")
             key = key.strip()
             value = value.strip()
+            current_map_key = None
             if value == "":
-                # Start of a list block.
                 config[key] = []
                 current_list_key = key
                 current_dict = None
             else:
-                config[key] = _scalar(value)
+                value = _strip_comment(value)
+                if value.startswith("[") and value.endswith("]"):
+                    config[key] = _flow_list(value)
+                else:
+                    config[key] = _scalar(value)
                 current_list_key = None
                 current_dict = None
-    # Drop empty-string list placeholders (e.g. a single "" URL entry).
+    return config
+
+
+def _cleanup(config):
     for key in ("music_urls", "stock_image_urls", "stock_video_urls", "peak_windows"):
-        config[key] = [v for v in config.get(key, []) if v]
+        value = config.get(key, [])
+        if isinstance(value, list):
+            config[key] = [v for v in value if v]
+    return config
+
+
+def load_config(path="config.yaml"):
+    try:
+        with open(path, encoding="utf-8") as fh:
+            text = fh.read()
+    except FileNotFoundError:
+        return _defaults_copy()
+    try:
+        config = _load_yaml_pyyaml(text)
+    except ImportError:
+        config = _load_yaml_fallback(text.splitlines(keepends=True))
+    return _cleanup(config)
+
+
+def validate_config(config):
+    """Fail fast on obviously wrong config types. Returns a list of
+    error strings (empty = valid). Uses pydantic when available for a
+    stricter schema, else the built-in type checks below."""
+    errors = []
+    for key in _NUMERIC_KEYS:
+        if key in config and config[key] not in ("", None):
+            if not isinstance(config[key], (int, float)) or isinstance(config[key], bool):
+                errors.append(f"{key} must be a number, got {config[key]!r}")
+    for key in _LIST_KEYS:
+        if key in config and config[key] not in ("", None):
+            if not isinstance(config[key], list):
+                errors.append(f"{key} must be a list, got {config[key]!r}")
+    for key in _BOOL_KEYS:
+        if key in config and config[key] not in ("", None):
+            if not isinstance(config[key], bool):
+                errors.append(f"{key} must be true/false, got {config[key]!r}")
+    brand = config.get("brand")
+    if brand not in ("", None) and not isinstance(brand, dict):
+        errors.append(f"brand must be a mapping, got {brand!r}")
+    tier = config.get("narrator_tier", "free")
+    if tier not in ("", None) and str(tier).lower() not in ("free", "local", "paid"):
+        errors.append(f"narrator_tier must be free/local/paid, got {tier!r}")
+    return errors
+
+
+def load_config_validated(path="config.yaml"):
+    """load_config + fail-fast validation (raises ValueError on errors)."""
+    config = load_config(path)
+    errors = validate_config(config)
+    if errors:
+        raise ValueError("Invalid config.yaml:\n  - " + "\n  - ".join(errors))
     return config

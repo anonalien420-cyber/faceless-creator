@@ -140,13 +140,24 @@ def select_track(config, profile):
                    "track": {k: track.get(k) for k in ("file", "url", "genre", "tempo_bpm", "mood", "license")}}
 
 
+def _download_music(url):
+    """Download a track with a timeout and a URL-keyed filename so two
+    different tracks never overwrite each other's cached file."""
+    import hashlib
+    os.makedirs("data", exist_ok=True)
+    digest = hashlib.sha1(url.encode("utf-8")).hexdigest()[:10]
+    dest = os.path.join("data", f"music_bed_{digest}.mp3")
+    if not os.path.exists(dest):
+        req = urllib.request.Request(url, headers={"User-Agent": "faceless-creator/1.0"})
+        with urllib.request.urlopen(req, timeout=60) as resp, open(dest, "wb") as fh:
+            shutil.copyfileobj(resp, fh)
+    return dest
+
+
 def ensure_track_file(track):
     path = track.get("file") or track.get("url") or ""
     if path.startswith("http"):
-        dest = os.path.join("data", "music_bed.mp3")
-        os.makedirs("data", exist_ok=True)
-        urllib.request.urlretrieve(path, dest)
-        return dest
+        return _download_music(path)
     return path
 
 
@@ -156,19 +167,13 @@ def legacy_music_file(config, music_arg):
     if music_arg and os.path.exists(music_arg):
         return music_arg
     if music_arg and music_arg.startswith("http"):
-        dest = os.path.join("data", "music_bed.mp3")
-        os.makedirs("data", exist_ok=True)
-        urllib.request.urlretrieve(music_arg, dest)
-        return dest
+        return _download_music(music_arg)
     local = config.get("music_file", "")
     if local and os.path.exists(local):
         return local
     for url in config.get("music_urls", []):
         if url.startswith("http"):
-            dest = os.path.join("data", "music_bed.mp3")
-            os.makedirs("data", exist_ok=True)
-            urllib.request.urlretrieve(url, dest)
-            return dest
+            return _download_music(url)
     return ""
 
 
@@ -187,13 +192,35 @@ def append_run_log(step, detail):
         print(f"WARNING: could not append to run log ({exc})", file=sys.stderr)
 
 
+def _carry_timings(narration, output):
+    """Copy the caption-timings sidecar alongside the mixed audio so
+    video.py can render word-synced captions from the final track."""
+    src = narration + ".timings.json"
+    if os.path.exists(src):
+        shutil.copyfile(src, output + ".timings.json")
+
+
+def _narration_duration(path):
+    if not shutil.which("ffprobe"):
+        return None
+    try:
+        out = subprocess.run(
+            ["ffprobe", "-v", "error", "-show_entries", "format=duration",
+             "-of", "default=noprint_wrappers=1:nokey=1", path],
+            capture_output=True, text=True, check=True)
+        return float(out.stdout.strip())
+    except (ValueError, subprocess.SubprocessError):
+        return None
+
+
 def main(argv=None):
     parser = argparse.ArgumentParser()
     parser.add_argument("--narration", required=True)
     parser.add_argument("--music", default="")
     parser.add_argument("--output", required=True)
     parser.add_argument("--config", default="config.yaml")
-    parser.add_argument("--music-volume", type=float, default=0.15)
+    parser.add_argument("--music-volume", type=float, default=0.0,
+                        help="Music bed level (0 = use config music_volume, default 0.15).")
     parser.add_argument("--top5", default="data/top5.json")
     parser.add_argument("--profile", default="")
     args = parser.parse_args(argv)
@@ -253,6 +280,11 @@ def main(argv=None):
                   f"(score {match_log.get('score')}; {'; '.join(match_log.get('reasons', []))})")
     append_run_log("music", match_log)
 
+    _carry_timings(args.narration, args.output)
+    loud_i = config.get("loudness_i", -14)
+    loud_tp = config.get("loudness_tp", -1.5)
+    loudnorm = f"loudnorm=I={loud_i}:TP={loud_tp}:LRA=11"
+
     if not music:
         print(
             "WARNING: No royalty-free music file found — shipping narration "
@@ -260,21 +292,39 @@ def main(argv=None):
             "config.yaml to enable trending-style music.",
             file=sys.stderr,
         )
-        shutil.copyfile(args.narration, args.output)
+        # Still master the narration to the target loudness so every video
+        # is consistent even without a bed.
+        if shutil.which("ffmpeg"):
+            subprocess.run(
+                ["ffmpeg", "-y", "-i", args.narration, "-af", loudnorm,
+                 "-c:a", "libmp3lame", args.output],
+                check=True,
+            )
+        else:
+            shutil.copyfile(args.narration, args.output)
         return 0
     if not shutil.which("ffmpeg"):
         print("ERROR: ffmpeg is required to mix music.", file=sys.stderr)
         return 1
+    vol = args.music_volume or float(config.get("music_volume", 0.15))
+    dur = _narration_duration(args.narration)
+    fade_out = f",afade=t=out:st={max(0.0, dur - 0.5):.2f}:d=0.5" if dur else ""
+    # Music: set level + fade in/out, then DUCK under the narration via
+    # sidechaincompress (music dips whenever the voice is present), mix with
+    # normalize=0 (keeps the voice at full level), and master to the target
+    # integrated loudness / true peak so every video sounds produced.
     filt = (
-        f"[1:a]volume={args.music_volume}[music];"
-        "[0:a][music]amix=inputs=2:duration=first:dropout_transition=0"
+        f"[1:a]volume={vol},afade=t=in:st=0:d=0.5{fade_out}[music];"
+        "[music][0:a]sidechaincompress=threshold=0.05:ratio=8:attack=20:release=300[ducked];"
+        "[0:a][ducked]amix=inputs=2:duration=first:dropout_transition=0:normalize=0[mixed];"
+        f"[mixed]{loudnorm}[out]"
     )
     subprocess.run(
         ["ffmpeg", "-y", "-i", args.narration, "-i", music,
-         "-filter_complex", filt, "-c:a", "libmp3lame", args.output],
+         "-filter_complex", filt, "-map", "[out]", "-c:a", "libmp3lame", args.output],
         check=True,
     )
-    print(f"Mixed -> {args.output} (music bed at volume {args.music_volume})")
+    print(f"Mixed -> {args.output} (music at {vol}, ducked, mastered to {loud_i} LUFS)")
     return 0
 
 

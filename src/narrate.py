@@ -2,10 +2,12 @@
 
 Voice tiers (config: narrator_tier, default "free"):
 - Tier 1, free — Edge TTS neural voices (en-US-ChristopherNeural /
-  en-US-AriaNeural) with SSML prosody: slower rate on the hook, natural
-  pauses at commas/periods, emphasis on hook words. This is the default
-  and needs no key. It is the closest free option to a human voice, but
-  no AI voice is indistinguishable from a human — do not claim it is.
+  en-US-AriaNeural) with a configurable speaking rate and punctuation
+  pacing (short beats at commas, longer ones at sentence ends). edge-tts
+  does not accept custom SSML, so rate is set via its rate parameter, not
+  markup. This is the default and needs no key. It is the closest free
+  option to a human voice, but no AI voice is indistinguishable from a
+  human — do not claim it is.
 - Tier 2, free/local — Kokoro (open-weight, often more natural than
   Edge TTS) if installed (`pip install kokoro`). If Kokoro is not
   installed, this tier falls back to Edge TTS with a warning, because
@@ -18,10 +20,10 @@ Voice tiers (config: narrator_tier, default "free"):
   rather than silently downgrading — a paid tier was an explicit choice.
 
 Why some voices sound more human (README expands on this):
-neural synthesis (not concatenative/robotic TTS) + prosody (pitch/rate
-variation) + pacing (real pauses, not a flat stream) + emphasis on the
-words a human would stress. The "humanizing" pass below adds exactly
-those three things on top of the base voice.
+neural synthesis (not concatenative/robotic TTS) + a natural speaking
+rate + pacing (real pauses, not a flat stream). The "humanizing" pass
+below adds punctuation pacing on top of the base voice, and the rate
+parameter sets the overall speed.
 
 Safety: after narration, the output file is checked — it must exist,
 be non-trivial in size, and (when ffprobe is available) have a
@@ -48,32 +50,20 @@ def slug(text):
     return text or "script"
 
 
-def humanize_text(text, pause_ms=350, speed=1.0):
-    """Return (ssml, plain_with_pauses) for one script.
+def humanize_text(text, pause_ms=350):
+    """Return plain text with pacing punctuation for natural delivery.
 
-    - First sentence (the hook) is emphasized.
-    - Commas get a short break, sentence ends get the full pause.
-    - Plain version uses extra punctuation spacing so even non-SSML
-      engines get some pacing instead of a flat monotone stream.
+    edge-tts does NOT accept custom SSML — it XML-escapes its input, so
+    sending <speak>/<break> tags would make the voice read the tag words
+    aloud. Prosody is therefore applied two ways that actually work:
+    speaking rate via the engine's rate parameter (see narrate_edge), and
+    pacing via punctuation — commas get a short beat, sentence ends a
+    longer one. The number of pause dots scales with pause_ms.
     """
-    sentences = re.split(r"(?<=[.!?])\s+", text.strip())
-    if not sentences:
-        return text, text
-    hook, rest = sentences[0], sentences[1:]
-    comma_pause = max(80, pause_ms // 2)
-    ssml_parts = [f'<emphasis level="strong">{hook}</emphasis>']
-    for sentence in rest:
-        ssml_parts.append(sentence)
-    ssml_body = " ".join(ssml_parts)
-    # Breaks after commas and sentence ends (SSML only).
-    ssml_body = re.sub(r",\s*", f',<break time="{comma_pause}ms"/> ', ssml_body)
-    ssml_body = re.sub(r"([.!?])\s+",
-                       f'\\1<break time="{pause_ms}ms"/> ', ssml_body)
-    rate_pct = int(round(speed * 100))
-    ssml = (f'<speak><prosody rate="{rate_pct}%" pitch="+1st">'
-            f"{ssml_body}</prosody></speak>")
-    plain = text.replace(", ", ", ... ").replace(". ", ". ... ")
-    return ssml, plain
+    beat = "." * max(1, min(6, int(pause_ms // 100)))
+    plain = text.replace(", ", ", " + beat + " ")
+    plain = re.sub(r"([.!?])\s+", r"\1 " + beat + " ", plain)
+    return plain
 
 
 def _check_audio(path, label):
@@ -95,32 +85,100 @@ def _check_audio(path, label):
     return True
 
 
-def narrate_edge(text, voice, output, ssml, speed):
-    """Edge TTS via its Python library if present (SSML), else CLI (plain)."""
+def _srt_to_timings(srt_path, timings_path):
+    """Convert an edge-tts CLI SRT (sentence cues) into the timings sidecar
+    format video.py understands. Used when the library path is unavailable."""
+    import json
+    cues = []
     try:
-        import edge_tts
+        with open(srt_path, encoding="utf-8") as fh:
+            content = fh.read()
+    except OSError:
+        return
+    blocks = re.split(r"\n\s*\n", content.strip())
+    for block in blocks:
+        lines = [ln for ln in block.splitlines() if ln.strip()]
+        if len(lines) < 2:
+            continue
+        time_line = next((ln for ln in lines if "-->" in ln), "")
+        text_lines = [ln for ln in lines if "-->" not in ln and not ln.strip().isdigit()]
+        if not time_line or not text_lines:
+            continue
+        try:
+            start_s, end_s = time_line.split("-->")
+            cues.append({"text": " ".join(text_lines).strip(),
+                         "start": _srt_seconds(start_s), "end": _srt_seconds(end_s)})
+        except ValueError:
+            continue
+    if cues:
+        with open(timings_path, "w", encoding="utf-8") as fh:
+            json.dump({"sentences": cues}, fh)
+
+
+def _srt_seconds(value):
+    value = value.strip().replace(",", ".")
+    h, m, s = value.split(":")
+    return int(h) * 3600 + int(m) * 60 + float(s)
+
+
+def narrate_edge(text, voice, output, speed):
+    """Edge TTS neural voice via the library, else the CLI.
+
+    Pass plain (paced) text — never SSML — and apply the configured
+    speaking rate through the rate parameter. The library path streams
+    WordBoundary metadata and writes a <output>.timings.json sidecar so
+    video.py can render accurate, word-highlighted captions. The CLI
+    fallback writes SRT sentence cues and converts them to the same
+    sidecar. The CLI writes audio with --write-media (--file is an INPUT
+    flag, not an output flag).
+    """
+    rate = f"{int(round((speed - 1.0) * 100)):+d}%"
+    timings_path = output + ".timings.json"
+    try:
         import asyncio
-        communicate = edge_tts.Communicate(ssml, voice)
-        asyncio.run(communicate.save(output))
-        return "edge-tts (SSML prosody)"
+
+        import edge_tts
+
+        async def _run():
+            communicate = edge_tts.Communicate(text, voice, rate=rate,
+                                               boundary="WordBoundary")
+            words = []
+            with open(output, "wb") as audio:
+                async for chunk in communicate.stream():
+                    if chunk["type"] == "audio":
+                        audio.write(chunk["data"])
+                    elif chunk["type"] == "WordBoundary":
+                        # Offsets/durations are 100-nanosecond ticks.
+                        words.append({"text": chunk["text"],
+                                      "start": chunk["offset"] / 1e7,
+                                      "end": (chunk["offset"] + chunk["duration"]) / 1e7})
+            return words
+
+        words = asyncio.run(_run())
+        if words:
+            with open(timings_path, "w", encoding="utf-8") as fh:
+                json.dump({"words": words}, fh)
+        return f"edge-tts (rate {rate}, word timings)"
     except ImportError:
         pass
     except Exception as exc:
-        print(f"WARNING: edge-tts library SSML failed ({exc}); trying CLI.", file=sys.stderr)
-    plain = text
+        print(f"WARNING: edge-tts library failed ({exc}); trying CLI.", file=sys.stderr)
+    srt_path = output + ".srt"
     subprocess.run(
-        ["edge-tts", "--voice", voice, "--file", output, "--text", plain],
+        ["edge-tts", "--voice", voice, "--text", text, "--rate", rate,
+         "--write-media", output, "--write-subtitles", srt_path],
         check=True,
     )
-    return "edge-tts CLI (plain text, pause punctuation)"
+    _srt_to_timings(srt_path, timings_path)
+    return f"edge-tts CLI (rate {rate}, sentence timings)"
 
 
 def narrate_kokoro(text, voice, output, speed):
     """Kokoro open-weight TTS (local, free). Voice names are Kokoro voices
     (e.g. af_heart, am_adam); the config voice is passed through only if
     it looks like a Kokoro voice, otherwise Kokoro's default is used."""
-    from kokoro import KPipeline
     import soundfile as sf
+    from kokoro import KPipeline
     lang = "a"  # American English
     pipeline = KPipeline(lang_code=lang)
     kokoro_voice = voice if re.match(r"^[ab][fm]_", voice or "") else "af_heart"
@@ -194,9 +252,23 @@ def main(argv=None):
     with open(args.input, encoding="utf-8") as fh:
         scripts = json.load(fh)
     os.makedirs(args.outdir, exist_ok=True)
+    try:
+        from src import cache
+    except ImportError:
+        import cache
+    cache_enabled = bool(config.get("cache_enabled", True))
     for script in scripts:
         output = os.path.join(args.outdir, f"{script['rank']:02d}-{slug(script['topic'])}.mp3")
-        ssml, plain = humanize_text(script["text"], pause_ms=pause_ms, speed=speed)
+        # Cache: skip re-TTS when the script text + voice settings are
+        # unchanged (the timings sidecar is cached alongside the audio).
+        key = cache.make_key(script["text"], voice, tier, speed, pause_ms)
+        if cache_enabled and cache.is_cached("narration", key, output):
+            print(f"Narrated -> {output} (cached, unchanged script/voice)")
+            append_run_log(f"narrate:{script['topic']}",
+                           {"voice": voice, "tier": tier, "used": "cached",
+                            "speed": speed, "pause_ms": pause_ms})
+            continue
+        plain = humanize_text(script["text"], pause_ms=pause_ms)
         used = ""
         try:
             if tier == "paid":
@@ -208,14 +280,14 @@ def main(argv=None):
                 except ImportError:
                     print("WARNING: Kokoro not installed; falling back to Edge TTS "
                           "(pip install kokoro for the local tier).", file=sys.stderr)
-                    used = narrate_edge(plain, voice, output, ssml, speed)
-            else:  # free (default): Edge TTS neural voice + SSML prosody
+                    used = narrate_edge(plain, voice, output, speed)
+            else:  # free (default): Edge TTS neural voice + rate/pacing
                 if shutil.which("edge-tts"):
-                    used = narrate_edge(plain, voice, output, ssml, speed)
+                    used = narrate_edge(plain, voice, output, speed)
                 else:
                     try:
                         import edge_tts  # noqa: F401 — library path, no CLI needed
-                        used = narrate_edge(plain, voice, output, ssml, speed)
+                        used = narrate_edge(plain, voice, output, speed)
                     except ImportError:
                         print("WARNING: edge-tts not found; trying pyttsx3 fallback.", file=sys.stderr)
                         import pyttsx3
@@ -231,6 +303,8 @@ def main(argv=None):
         detail = {"voice": voice, "tier": tier, "used": used,
                   "speed": speed, "pause_ms": pause_ms}
         append_run_log(f"narrate:{script['topic']}", detail)
+        if cache_enabled:
+            cache.mark_cached("narration", key, output)
         print(f"Narrated -> {output} [{used}, tier={tier}]")
     return 0
 
