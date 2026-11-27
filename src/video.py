@@ -194,7 +194,7 @@ def make_ass(script_text, duration, path, width=1080, height=1920, fontsize=72):
              "Alignment, MarginL, MarginR, MarginV, BorderStyle, Outline",
              f"Style: Default,DejaVu Sans,{fontsize},&H00FFFFFF,&H80000000,-1,2,60,60,400,1,5",
              "", "[Events]",
-             "Format: Layer, Start, End, Style, Text"]
+             "Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text"]
     for i, text in enumerate(chunks):
         start, end = i * per, (i + 1) * per
 
@@ -234,6 +234,48 @@ def _drawtext_path(path):
     return path.replace("\\", "\\\\").replace(":", "\\:")
 
 
+def _fit_hook_text(text, width, fontsize):
+    """Wrap a hook into lines that fit the video frame.
+
+    drawtext does not wrap text automatically. Keep a five-percent side
+    margin and conservatively budget one em per character (plus the
+    outline) so even wide glyphs do not clip. Scale the requested font
+    size for small render dimensions; full-size 1080p/1920p output keeps
+    its existing hook size.
+    """
+    normalized = " ".join(str(text).split())
+    fontsize = max(1, int(fontsize))
+    if not normalized:
+        return "", fontsize
+
+    scale = min(1.0, max(0.0, width) / 1080.0)
+    fitted_fontsize = max(12, int(fontsize * scale))
+    side_margin = int(width * 0.05)
+    available_width = max(1, width - 2 * side_margin - 4)  # 2px outline each side
+    max_chars = max(1, available_width // fitted_fontsize)
+
+    lines, current = [], ""
+    for word in normalized.split():
+        # Keep unusually long, unbroken words inside the same width limit.
+        while len(word) > max_chars:
+            if current:
+                lines.append(current)
+                current = ""
+            lines.append(word[:max_chars])
+            word = word[max_chars:]
+        if not word:
+            continue
+        if current and len(current) + 1 + len(word) > max_chars:
+            lines.append(current)
+            current = word
+        else:
+            current = f"{current} {word}".strip()
+    if current:
+        lines.append(current)
+
+    return "\n".join(lines), fitted_fontsize
+
+
 def _fill_filter(width, height):
     """Scale to fill WxH and crop, preserving aspect (no stretch, no bars)."""
     return (f"scale={width}:{height}:force_original_aspect_ratio=increase,"
@@ -269,13 +311,16 @@ def build_video(script, audio_path, output, visuals=None, duration=None,
              fontsize=fontsize)
     title = script["topic"].title()[:60]
     hook_line = (script.get("hook", "") or "").split(". ")[0][:80]
+    hook_fontsize = max(28, fontsize - 18)
     # Dynamic overlay text is read from files, never embedded in the
     # filtergraph (apostrophes in prompts broke the render, rc=234).
     drawtext_dir = tempfile.mkdtemp(prefix="deep_scan_drawtext_")
     title = _drawtext_path(_write_drawtext_file(drawtext_dir, "title", title))
     if hook_line:
+        hook_text, hook_fontsize = _fit_hook_text(
+            hook_line, width, hook_fontsize)
         hook_line = _drawtext_path(
-            _write_drawtext_file(drawtext_dir, "hook", hook_line))
+            _write_drawtext_file(drawtext_dir, "hook", hook_text))
     accepted, _rejected = resolve_visuals(visuals or [], min_resolution)
     # Pattern-interrupt interval: 25s longs, 10s Shorts.
     interrupt = 25.0 if width > height else 10.0
@@ -291,7 +336,7 @@ def build_video(script, audio_path, output, visuals=None, duration=None,
     ]
     if hook_line:
         overlay.append(
-            f"drawtext=textfile={hook_line}:expansion=none:font=DejaVu Sans:fontsize={max(28, fontsize - 18)}:"
+            f"drawtext=textfile={hook_line}:expansion=none:font=DejaVu Sans:fontsize={hook_fontsize}:"
             f"fontcolor=white:borderw=2:bordercolor=black:x=(w-text_w)/2:"
             f"y={200 + fontsize + 20}:enable='lt(t,5)'")
     prompts = ["The key part:", "Here's why it works:", "Don't miss this:", "Quick check:"]
