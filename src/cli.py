@@ -15,6 +15,9 @@ One command dispatches to every stage, so you do not need to remember
     faceless seo --long data/scripts_long.json --short data/scripts_shorts.json
     faceless review --stats data/video_stats.json
     faceless upload --video out.mp4 --title "..." --dry-run
+    faceless doctor
+    faceless ops backup | restore --archive ... | quota --service youtube
+    faceless engage --scripts data/scripts_long.json
 
 Each subcommand forwards its remaining args to that module's main(),
 so every existing flag keeps working. `faceless` with no subcommand
@@ -44,6 +47,9 @@ COMMANDS = {
     "upload": "src.upload",
     "scheduler": "src.scheduler",
     "crosspost": "scripts.auto_crosspost",
+    "doctor": "src.doctor",
+    "ops": "src.ops",
+    "engage": "src.engage",
 }
 
 

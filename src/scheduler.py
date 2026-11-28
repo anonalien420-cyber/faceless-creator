@@ -85,6 +85,27 @@ def windows_for_day(windows, niche, day, fmt=None):
     return windows.get(("default", day_type), [])
 
 
+def learned_hour_for(niche, path="data/publish_hours.json", min_samples=5):
+    """The channel's own best publish hour for a niche, learned from real
+    performance (review.py writes data/publish_hours.json). Returns an
+    int hour 0-23 or None. Requires min_samples scored videos so one
+    lucky upload never rewires the schedule."""
+    import json
+    import os
+    if not os.path.exists(path):
+        return None
+    try:
+        with open(path, encoding="utf-8") as fh:
+            data = json.load(fh)
+        entry = data.get((niche or "").strip().lower())
+        if not entry or int(entry.get("samples", 0)) < min_samples:
+            return None
+        hour = int(entry["hour"])
+        return hour if 0 <= hour <= 23 else None
+    except (OSError, ValueError, KeyError, TypeError):
+        return None
+
+
 def next_peak_window(niche, config, now=None, fmt=None, after=None):
     """Return (window_start_local, window_end_local) datetimes, or (None, None).
 
@@ -116,6 +137,13 @@ def next_peak_window(niche, config, now=None, fmt=None, after=None):
     except (TypeError, ValueError):
         shift = 0
     shift = max(-60, min(60, shift))
+    # Learned publish hour (bandit-lite "exploit"): when the channel's own
+    # data has a clear best hour for this niche, prefer it — but only
+    # INSIDE an existing safe window. Learning never invents new windows.
+    learned = None
+    if config.get("publish_learning", False):
+        learned = learned_hour_for(
+            niche, min_samples=int(config.get("publish_learning_min_samples", 5) or 5))
     for day_offset in range(14):
         day = (now + timedelta(days=day_offset)).date()
         for start_s, end_s in windows_for_day(windows, niche, day, fmt=fmt):
@@ -123,6 +151,11 @@ def next_peak_window(niche, config, now=None, fmt=None, after=None):
             end = datetime.combine(day, _parse_hhmm(end_s), tzinfo=tz)
             start = start + timedelta(minutes=shift)
             end = end + timedelta(minutes=shift)
+            if learned is not None:
+                candidate = datetime.combine(day, time(learned, 0), tzinfo=tz)
+                candidate = candidate + timedelta(minutes=shift)
+                if start <= candidate < end and candidate >= earliest:
+                    return candidate, end
             if start >= earliest:
                 return start, end
     return None, None

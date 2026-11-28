@@ -18,6 +18,7 @@ adds stricter validation; without it the built-in checks still run.
 """
 
 import copy
+import re
 
 DEFAULTS = {
     "niche": "personal finance tips",
@@ -70,17 +71,40 @@ DEFAULTS = {
     "cache_enabled": True,
     "max_workers": 0,
     "scene_broll": True,
+    # --- Feedback loop + trust (Tier 1) ---
+    "analytics_enabled": False,
+    "analytics_lookback_days": 28,
+    "verify_upload": True,
+    "upload_process_timeout": 300,
+    "show_citations": True,
+    # --- Reach + learning (Tier 2) ---
+    "topic_similarity_threshold": 0.6,
+    "localization_tier": "template",
+    "publish_learning": False,
+    "publish_learning_min_samples": 5,
+    # --- Quality + operations (Tier 3) ---
+    "loop_ending": True,
+    "cover_frame": True,
+    "engagement_drafts": True,
+    "auto_backup": True,
+    "backup_keep": 14,
 }
 
 # Keys that must be numeric / list / bool when present (fail-fast checks).
 _NUMERIC_KEYS = ("narrator_speed", "narrator_pause_ms", "min_resolution",
                  "videos_per_run", "music_volume", "loudness_i", "loudness_tp",
-                 "captions_safe_zone", "topic_memory_days", "max_workers")
+                 "captions_safe_zone", "topic_memory_days", "max_workers",
+                 "analytics_lookback_days", "upload_process_timeout",
+                 "topic_similarity_threshold", "publish_learning_min_samples",
+                 "backup_keep")
 _LIST_KEYS = ("niches", "niche_keywords", "music_urls", "music_library",
               "stock_image_urls", "stock_video_urls", "peak_windows",
               "reddit_subreddits")
 _BOOL_KEYS = ("series_enabled", "research_enabled", "topic_memory",
-              "trend_velocity", "cache_enabled", "captions_karaoke", "scene_broll")
+              "trend_velocity", "cache_enabled", "captions_karaoke", "scene_broll",
+              "analytics_enabled", "verify_upload", "show_citations",
+              "publish_learning", "loop_ending", "cover_frame",
+              "engagement_drafts", "auto_backup")
 
 
 def _strip_comment(value):
@@ -258,6 +282,17 @@ def validate_config(config):
     tier = config.get("narrator_tier", "free")
     if tier not in ("", None) and str(tier).lower() not in ("free", "local", "paid"):
         errors.append(f"narrator_tier must be free/local/paid, got {tier!r}")
+    loc_tier = config.get("localization_tier", "template")
+    if loc_tier not in ("", None) and str(loc_tier).lower() not in ("template", "api"):
+        errors.append(f"localization_tier must be template/api, got {loc_tier!r}")
+    threshold = config.get("topic_similarity_threshold")
+    if isinstance(threshold, (int, float)) and not isinstance(threshold, bool):
+        if not 0.0 <= threshold <= 1.0:
+            errors.append(f"topic_similarity_threshold must be in [0, 1], got {threshold!r}")
+    lang = config.get("language")
+    if lang not in ("", None) and (not isinstance(lang, str)
+                                   or not re.match(r"^[a-zA-Z]{2,3}(-[a-zA-Z0-9]{2,8})*$", lang)):
+        errors.append(f"language must be a BCP-47 code like 'en' or 'es-MX', got {lang!r}")
     return errors
 
 

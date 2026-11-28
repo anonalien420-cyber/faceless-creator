@@ -38,7 +38,8 @@ except ImportError:
     from scheduler import next_peak_window
 
 
-def plan(video, title, description, privacy, publish_at=None, category_id="27"):
+def plan(video, title, description, privacy, publish_at=None, category_id="27",
+         language="", localizations=None):
     # Match what upload() actually does: scheduled publishing forces private,
     # so the dry run must not advertise "unlisted + publishAt".
     if publish_at:
@@ -47,10 +48,83 @@ def plan(video, title, description, privacy, publish_at=None, category_id="27"):
            "privacyStatus": privacy, "categoryId": category_id}
     if publish_at:
         out["publishAt"] = publish_at
+    if language:
+        out["defaultLanguage"] = language
+        out["defaultAudioLanguage"] = language
+    if localizations:
+        out["localizations"] = localizations
     return out
 
 
-def upload(video, title, description, privacy, publish_at=None, tags=None, category_id="27"):
+def interpret_upload_status(response):
+    """Map a videos.list(status) response to (state, detail). Pure function.
+
+    state is one of: processed, processing, failed, rejected, deleted,
+    unknown. YouTube sets status.uploadStatus to 'uploaded'/'processed'
+    once the video is ready; 'failed'/'rejected'/'deleted' are terminal
+    failures that must never be reported as a successful publish.
+    """
+    items = (response or {}).get("items", [])
+    if not items:
+        return "unknown", "video not found (yet)"
+    status = items[0].get("status", {})
+    upload_status = status.get("uploadStatus", "")
+    rejection = status.get("rejectionReason", "")
+    failure = status.get("failureReason", "")
+    if upload_status == "processed":
+        return "processed", "processed and ready"
+    if upload_status == "rejected":
+        return "rejected", rejection or "rejected by YouTube"
+    if upload_status == "failed":
+        return "failed", failure or "processing failed"
+    if upload_status == "deleted":
+        return "deleted", "video deleted"
+    if upload_status in ("uploaded", "processing"):
+        return "processing", upload_status
+    return "unknown", upload_status or "no uploadStatus"
+
+
+def verify_processed(youtube, video_id, timeout=300, interval=10, sleep=time.sleep):
+    """Poll YouTube until the uploaded video finishes processing.
+
+    Returns the final (state, detail). Raises RuntimeError on a terminal
+    failure (failed/rejected/deleted) so a broken upload is never recorded
+    as published. Returns ('processing', ...) if the timeout elapses while
+    YouTube is still processing (the caller can re-check later)."""
+    deadline = time.monotonic() + timeout
+    state, detail = "processing", "starting"
+    while time.monotonic() < deadline:
+        response = youtube.videos().list(part="status", id=video_id).execute()
+        state, detail = interpret_upload_status(response)
+        if state in ("processed", "failed", "rejected", "deleted"):
+            break
+        sleep(interval)
+    if state in ("failed", "rejected", "deleted"):
+        raise RuntimeError(f"Upload {video_id} did not process: {state} ({detail})")
+    return state, detail
+
+
+def record_upload_feedback(entry, path="data/upload_feedback.json"):
+    """Append a verified-upload record so the review loop can match a
+    published video_id back to its script/hook/thumbnail. This closes the
+    feedback loop: review.py + analytics.py key on video_id."""
+    feedback = []
+    if os.path.exists(path):
+        try:
+            with open(path, encoding="utf-8") as fh:
+                feedback = json.load(fh)
+        except (OSError, ValueError):
+            feedback = []
+    feedback.append(entry)
+    os.makedirs(os.path.dirname(path) or ".", exist_ok=True)
+    with open(path, "w", encoding="utf-8") as fh:
+        json.dump(feedback, fh, indent=2)
+    return entry
+
+
+def upload(video, title, description, privacy, publish_at=None, tags=None, category_id="27",
+           topic="", fmt="", verify=True, process_timeout=300,
+           language="", localizations=None):
     try:
         from google.auth.transport.requests import Request
         from google.oauth2.credentials import Credentials
@@ -95,11 +169,33 @@ def upload(video, title, description, privacy, publish_at=None, tags=None, categ
     snippet = {"title": title, "description": description, "categoryId": category_id}
     if tags:
         snippet["tags"] = tags
+    if language:
+        # Discoverability: a Spanish-narrated video is a Spanish video.
+        snippet["defaultLanguage"] = language
+        snippet["defaultAudioLanguage"] = language
     body = {"snippet": snippet, "status": status}
+    if localizations:
+        # Additive localized titles/descriptions (original stays default).
+        body["localizations"] = localizations
+    # Quota guard (Tier 3): videos.insert costs 1600 units of the 10k/day
+    # default budget. Warn before spending the last of it; track after.
+    try:
+        try:
+            from src.ops import quota_status, track_api_call
+        except ImportError:
+            from ops import quota_status, track_api_call
+        quota = quota_status("youtube")
+        if quota["warn"]:
+            print(f"WARNING: YouTube API quota at {quota['used']}/{quota['budget']} "
+                  f"units today ({quota['remaining']} left; an upload costs 1600).",
+                  file=sys.stderr)
+    except Exception:
+        quota_status = track_api_call = None
     # Resumable, chunked upload with retry on transient server errors. A
     # single-shot chunksize=-1 request is fragile for ~1 GB long-form files.
     media = MediaFileUpload(video, chunksize=8 * 1024 * 1024, resumable=True)
-    request = youtube.videos().insert(part="snippet,status", body=body, media_body=media)
+    part = "snippet,status,localizations" if localizations else "snippet,status"
+    request = youtube.videos().insert(part=part, body=body, media_body=media)
     response = None
     retries = 0
     while response is None:
@@ -112,8 +208,29 @@ def upload(video, title, description, privacy, publish_at=None, tags=None, categ
                 continue
             raise
     video_id = response.get("id")
+    if track_api_call is not None:
+        try:
+            track_api_call("youtube", 1600)
+        except Exception:
+            pass
     print(f"Uploaded video id: {video_id}")
     print(f"https://www.youtube.com/watch?v={video_id}")
+    # Verify YouTube actually finished processing before recording a
+    # publish. A video stuck in 'failed'/'rejected' must never be logged
+    # as successfully uploaded (the review loop would learn from a video
+    # that does not exist).
+    state, detail = ("processed", "verification disabled")
+    if verify and video_id:
+        state, detail = verify_processed(youtube, video_id, timeout=process_timeout)
+        print(f"Upload processing: {state} ({detail})")
+    record_upload_feedback({
+        "video_id": video_id,
+        "url": f"https://www.youtube.com/watch?v={video_id}" if video_id else "",
+        "title": title, "topic": topic, "format": fmt,
+        "privacy": status.get("privacyStatus"), "publish_at": publish_at,
+        "upload_status": state, "detail": detail,
+        "at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+    })
     return video_id
 
 
@@ -136,12 +253,26 @@ def main(argv=None):
     parser.add_argument("--publish-at", default="",
                         help="Explicit ISO publishAt timestamp (overrides --publish-at-peak).")
     parser.add_argument("--niche", default="")
+    parser.add_argument("--topic", default="",
+                        help="Script topic, recorded with the video_id for the review loop.")
     parser.add_argument("--format", default="", choices=["", "short", "long"],
                         help="Use this format's peak window for --publish-at-peak.")
     parser.add_argument("--config", default="config.yaml")
     args = parser.parse_args(argv)
     config = load_config(args.config)
     category_id = str(config.get("youtube_category_id", "27") or "27")
+    language = (config.get("language", "en") or "en").strip()
+    localizations = None
+    if language and language.split("-")[0].lower() != "en":
+        try:
+            from src.localize import translate_metadata
+        except ImportError:
+            from localize import translate_metadata
+        translated = translate_metadata(
+            args.title, args.description, language,
+            tier=config.get("localization_tier", "template"))
+        if translated:
+            localizations = {language: translated}
     privacy = "public" if (args.public or args.auto_public) else "unlisted"
     publish_at = args.publish_at or None
     if args.publish_at_peak and not publish_at:
@@ -159,7 +290,8 @@ def main(argv=None):
     if args.dry_run:
         print("DRY RUN — nothing uploaded:")
         print(json.dumps(plan(args.video, args.title, args.description, privacy,
-                              publish_at=publish_at, category_id=category_id), indent=2))
+                              publish_at=publish_at, category_id=category_id,
+                              language=language, localizations=localizations), indent=2))
         return 0
     if os.environ.get("UPLOAD_ENABLED", "") != "true":
         print("ERROR: Refusing to upload: UPLOAD_ENABLED is not 'true'. "
@@ -167,7 +299,11 @@ def main(argv=None):
         return 1
     tags = [t.strip() for t in args.tags.split(",") if t.strip()] or None
     upload(args.video, args.title, args.description, privacy,
-           publish_at=publish_at, tags=tags, category_id=category_id)
+           publish_at=publish_at, tags=tags, category_id=category_id,
+           topic=args.topic, fmt=args.format,
+           verify=bool(config.get("verify_upload", True)),
+           process_timeout=int(config.get("upload_process_timeout", 300) or 300),
+           language=language, localizations=localizations)
     return 0
 
 

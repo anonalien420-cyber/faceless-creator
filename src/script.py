@@ -931,8 +931,37 @@ def main(argv=None):
     if config.get("topic_memory", True):
         history = load_topic_history()
         days = int(config.get("topic_memory_days", 30) or 30)
-        fresh = [c for c in candidates
-                 if not is_recent_topic(topic_from_candidate(c), history, days)]
+        threshold = float(config.get("topic_similarity_threshold", 0.6) or 0.6)
+        try:
+            from src.similarity import is_similar_topic
+        except ImportError:
+            from similarity import is_similar_topic
+        from datetime import datetime, timezone
+        now = datetime.now(timezone.utc)
+        recent_topics = []
+        for entry in history:
+            try:
+                dt = datetime.fromisoformat(str(entry.get("date", "")).replace("Z", "+00:00"))
+                if dt.tzinfo is None:
+                    dt = dt.replace(tzinfo=timezone.utc)
+                if (now - dt).days >= days:
+                    continue
+            except ValueError:
+                pass
+            recent_topics.append(entry.get("topic", ""))
+        fresh = []
+        for cand in candidates:
+            topic = topic_from_candidate(cand)
+            if is_recent_topic(topic, history, days):
+                continue
+            # Semantic dedupe: skip paraphrases of recently-covered topics
+            # ("Lost city of X" vs "X's forgotten ruins"), not just exact hits.
+            similar, matched, score = is_similar_topic(topic, recent_topics, threshold)
+            if similar:
+                print(f"Topic memory: skipping '{topic}' — {score} similar to "
+                      f"recent '{matched}'.")
+                continue
+            fresh.append(cand)
         skipped = len(candidates) - len(fresh)
         if skipped:
             print(f"Topic memory: skipped {skipped} recently-covered topic(s).")

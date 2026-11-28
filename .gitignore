@@ -33,6 +33,7 @@ htmlcov/
 # Runtime pipeline state (regenerated each run; examples stay tracked)
 data/run_log.json
 data/run_manifest.json
+data/upload_feedback.json
 data/cache.json
 data/topic_history.json
 data/niche_lock.json
@@ -50,3 +51,10 @@ data/niche_ranking.json
 data/*.timings.json
 data/*.srt
 !data/video_stats.example.json
+data/publish_hours.json
+data/api_usage.json
+data/backups/
+data/engagement_drafts.json
+data/engagement_drafts.md
+data/videos*/*.cover.jpg
+*.cover.jpg

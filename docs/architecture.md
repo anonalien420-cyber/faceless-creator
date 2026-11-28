@@ -25,6 +25,12 @@ aborts the run — a broken video never uploads.
 | `scheduler.py` | Per-format peak windows; staggered publish times |
 | `upload.py` | YouTube upload (dry-run default); private + publishAt |
 | `review.py` | Weekly self-review; safe-bounded config corrections |
+| `analytics.py` | YouTube Analytics API retention (watch time) for the review loop |
+| `similarity.py` | Smooth TF-IDF cosine topic dedupe (stdlib, offline) |
+| `localize.py` | Language→voice map + optional metadata translation |
+| `doctor.py` | `faceless doctor` readiness report (env/config/keys/data) |
+| `ops.py` | State backup/restore + daily API quota tracking |
+| `engage.py` | End-screen + community/pinned drafts (human-reviewed, never auto-posts) |
 | `models.py` | Typed dataclasses (Script/Scene/VideoReport/Brand/Source) |
 | `brand.py` | Colour conversion + ASS/drawtext styling helpers |
 | `cache.py` | Content-hash skip cache + ffprobe memoization |
@@ -39,6 +45,11 @@ aborts the run — a broken video never uploads.
 - `thumbnails.json`, `seo.json`, `review_queue.md` — packaging + human review
 - `run_log.json`, `run_manifest.json` — step log + production metrics
 - `cache.json`, `topic_history.json`, `niche_lock.json`, `series_state.json` — state
+- `publish_hours.json` — learned best publish hour per niche (Tier 2, opt-in)
+- `api_usage.json` — daily API quota counters (Tier 3)
+- `backups/*.tar.gz` — pre-run state snapshots (Tier 3, `backup_keep` retained)
+- `engagement_drafts.json` + `.md` — end-screen/community/pinned drafts (Tier 3)
+- `videos_<fmt>/*.cover.jpg` — clean cover frames for the Shorts shelf (Tier 3)
 
 ## Engine features
 - **In-process vs subprocess.** `run.py --in-process` calls each stage's

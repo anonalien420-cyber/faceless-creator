@@ -300,7 +300,7 @@ def upload_outputs(log, outputs, niche, config, args, seo_entries=None, long_tit
             description += f"\n\nWatch the full deep dive today: {long_title}"
         cmd = [sys.executable, "-m", "src.upload", "--video", video,
                "--title", title, "--description", description,
-               "--niche", niche, "--format", fmt]
+               "--niche", niche, "--topic", script["topic"], "--format", fmt]
         if seo and seo.get("tags"):
             cmd += ["--tags", ",".join(seo["tags"])]
         if args.public or args.auto_public:
@@ -436,6 +436,19 @@ def main(argv=None):
            "niche": niche, "long_videos": long_count,
            "shorts": short_count, "steps": []}
     os.makedirs("data", exist_ok=True)
+    # State safety net (Tier 3): snapshot the pipeline's memory before a
+    # run mutates it. Best-effort — a backup failure never blocks a run.
+    if config.get("auto_backup", True):
+        try:
+            try:
+                from src.ops import backup_state, prune_backups
+            except ImportError:
+                from ops import backup_state, prune_backups
+            archive = backup_state()
+            prune_backups(keep=int(config.get("backup_keep", 14) or 14))
+            log_step(log, "backup", "ok", archive)
+        except Exception as exc:
+            log_step(log, "backup", "WARNING", f"state backup failed ({exc})")
     # Reset the on-disk log now (plain overwrite, no merge) so subprocess
     # appends (narrate/music) during this run accumulate on THIS run's log,
     # not the previous run's. The final write_log() merges them back in.
@@ -561,6 +574,25 @@ def main(argv=None):
                        seo_entries=seo_entries, long_title=long_title)
         # Human review queue — always written, even for dry runs.
         write_review_queue(all_outputs, niche, config, args, seo_entries, thumb_map)
+        # Engagement drafts (Tier 3): end-screen plan + community/pinned
+        # drafts for Studio. DRAFTS ONLY — nothing is auto-posted.
+        if config.get("engagement_drafts", True):
+            try:
+                try:
+                    from src.engage import write_drafts
+                except ImportError:
+                    from engage import write_drafts
+                engage_items = []
+                for item in all_outputs:
+                    duration = _audio_duration(item["narration"]) if os.path.exists(item["narration"]) else 0
+                    engage_items.append({"script": item["script"],
+                                         "format": item["format"],
+                                         "duration": duration})
+                write_drafts(engage_items)
+                log_step(log, "engagement", "ok",
+                         "data/engagement_drafts.json (+ .md) — human review, paste in Studio")
+            except Exception as exc:
+                log_step(log, "engagement", "WARNING", f"engagement drafts failed ({exc})")
     except SystemExit:
         log["status"] = "FAILED"
         write_log(log)
@@ -593,10 +625,25 @@ def _write_manifest(log, outputs, niche, args):
     """Write data/run_manifest.json with per-run production metrics."""
     qa_pass = sum(1 for o in outputs if o.get("qa_report"))
     render_seconds = log.get("metrics", {}).get("render_seconds", {})
-    uploads = [{"video": o["video"], "format": o["format"],
-                "title": o.get("upload_title", ""),
-                "scheduled_peak": o.get("scheduled_peak", ""),
-                "uploaded": bool(args.upload)} for o in outputs]
+    # Merge verified-upload feedback (video_id + processing status) so the
+    # manifest links each output to its published video for the review loop.
+    feedback_by_topic = {}
+    if os.path.exists("data/upload_feedback.json"):
+        try:
+            with open("data/upload_feedback.json", encoding="utf-8") as fh:
+                for entry in json.load(fh):
+                    feedback_by_topic[entry.get("topic", "")] = entry
+        except (OSError, ValueError):
+            pass
+    uploads = []
+    for o in outputs:
+        fb = feedback_by_topic.get(o["script"]["topic"], {})
+        uploads.append({"video": o["video"], "format": o["format"],
+                        "title": o.get("upload_title", ""),
+                        "scheduled_peak": o.get("scheduled_peak", ""),
+                        "uploaded": bool(args.upload),
+                        "video_id": fb.get("video_id", ""),
+                        "upload_status": fb.get("upload_status", "")})
     manifest = {
         "started_at": log.get("started_at"),
         "finished_at": log.get("finished_at"),

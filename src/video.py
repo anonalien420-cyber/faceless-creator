@@ -128,8 +128,25 @@ def fetch_stock_videos(config, keywords, per_keyword=2):
     pexels_key = os.environ.get("PEXELS_API_KEY", "")
     pixabay_key = os.environ.get("PIXABAY_API_KEY", "")
     queries = keywords or [config.get("niche", "")]
+    try:
+        try:
+            from src.ops import quota_status, track_api_call
+        except ImportError:
+            from ops import quota_status, track_api_call
+    except Exception:
+        quota_status = track_api_call = None
     if pexels_key:
         for query in queries[:3]:
+            if track_api_call is not None:
+                try:
+                    if quota_status("pexels")["warn"]:
+                        print("WARNING: Pexels daily call budget nearly used; "
+                              "skipping further searches (fallback visuals apply).",
+                              file=sys.stderr)
+                        break
+                    track_api_call("pexels", 1)
+                except Exception:
+                    pass
             try:
                 req = urllib.request.Request(
                     f"https://api.pexels.com/videos/search?query={urllib.parse.quote(query)}&per_page={per_keyword}&size=large",
@@ -146,6 +163,16 @@ def fetch_stock_videos(config, keywords, per_keyword=2):
                 print(f"WARNING: Pexels video search failed ({exc}).", file=sys.stderr)
     if not links and pixabay_key:
         for query in queries[:3]:
+            if track_api_call is not None:
+                try:
+                    if quota_status("pixabay")["warn"]:
+                        print("WARNING: Pixabay daily call budget nearly used; "
+                              "skipping further searches (fallback visuals apply).",
+                              file=sys.stderr)
+                        break
+                    track_api_call("pixabay", 1)
+                except Exception:
+                    pass
             try:
                 url = ("https://pixabay.com/api/videos/?key=" + pixabay_key +
                        f"&q={urllib.parse.quote(query)}&per_page={max(3, per_keyword)}")
@@ -503,6 +530,73 @@ def _chapter_lower_thirds(script, duration, drawtext_dir, width, height,
     return filters
 
 
+def _real_source_title(source):
+    """A real, non-placeholder source title, or '' (never invent one)."""
+    if isinstance(source, dict):
+        title = source.get("title", "") or source.get("url", "")
+    else:
+        title = str(source or "")
+    title = title.strip()
+    if not title or any(m in title.lower() for m in ("placeholder", "do not publish")):
+        return ""
+    return title
+
+
+def _citation_lower_thirds(script, duration, drawtext_dir, width, height,
+                           bfont, btext, boutline, baccent, fontsize):
+    """On-screen source citations for history-mystery videos — a trust
+    signal that visibly separates accurate content from misinformation.
+
+    Shows the shock hook's source at the opening, and the primary verified
+    source at each KNOWN section (timed by word-count share of runtime).
+    Only real, non-placeholder source titles are shown; nothing invented.
+    Returns [] for non-history scripts or when no real source exists.
+    """
+    if script.get("style") != "history_mystery":
+        return []
+    primary = ""
+    for source in script.get("sources") or []:
+        primary = _real_source_title(source)
+        if primary:
+            break
+    shock_src = _real_source_title((script.get("shock_hook") or {}).get("source") or {})
+    if not primary and not shock_src:
+        return []
+    filters = []
+    cite_font = max(18, fontsize - 28)
+    vertical = height > width
+    # Top badge on Shorts (above the caption safe zone); lower-third on long.
+    y = 110 if vertical else height - 90
+    counter = [0]
+
+    def badge(label, start, end):
+        text = "Source: " + label[:50]
+        path = _drawtext_path(_write_drawtext_file(
+            drawtext_dir, f"cite_{counter[0]}", text))
+        counter[0] += 1
+        enable = f"between(t,{start:.2f},{end:.2f})"
+        filters.append(
+            f"drawbox=x=30:y={y - 6}:w=8:h={cite_font + 12}:color={baccent}@0.95:t=fill:enable='{enable}'")
+        filters.append(
+            f"drawtext=textfile={path}:expansion=none:font={bfont}:fontsize={cite_font}:"
+            f"fontcolor={btext}:borderw=2:bordercolor={boutline}:x=48:y={y}:enable='{enable}'")
+
+    if shock_src:
+        badge(shock_src, 0.5, 5.0)
+    sections = script.get("sections") or []
+    total_words = max(1, len(script.get("text", "").split()))
+    intro_words = max(1, total_words - sum(len(s.get("text", "").split()) for s in sections)
+                      - len(script.get("cta", "").split()))
+    elapsed = duration * intro_words / total_words
+    for section in sections:
+        words = len(section.get("text", "").split())
+        start = elapsed
+        elapsed += duration * words / total_words
+        if section.get("tier") == "KNOWN" and primary:
+            badge(primary, start, start + 4.0)
+    return filters
+
+
 def _watermark_filter(brand, width, in_label, out_label):
     """Semi-transparent brand watermark overlay (own asset), top-right.
 
@@ -519,10 +613,77 @@ def _watermark_filter(brand, width, in_label, out_label):
             f"{in_label}[wm]overlay=W-w-30:30{out_label}"]
 
 
+def _apply_loop_ending(output, duration, width, height, bitrate="10M"):
+    """Shorts auto-loop on YouTube. Fade the ACTUAL first frame back in
+    over the last 0.4s so the replay reads as one intentional loop instead
+    of a hard cut from end card to title card. Duration and audio are
+    untouched (audio stream copied), so narration sync and the QA
+    duration gate are unaffected. Shorts only; no-op on failure."""
+    if height <= width or duration < 2.0:
+        return False
+    tmp_dir = tempfile.mkdtemp(prefix="loop_end_")
+    first = os.path.join(tmp_dir, "first.png")
+    tmp_out = output + ".loop.mp4"
+    try:
+        grab = subprocess.run(
+            ["ffmpeg", "-y", "-i", output, "-frames:v", "1", first],
+            capture_output=True, timeout=120)
+        if grab.returncode != 0 or not os.path.exists(first):
+            return False
+        fade_start = max(0.0, duration - 0.4)
+        graph = (f"[1:v]format=yuva420p,fade=t=in:st={fade_start:.2f}:d=0.4:alpha=1[ov];"
+                 f"[0:v][ov]overlay=enable='gte(t,{fade_start:.2f})':shortest=1[v]")
+        result = subprocess.run(
+            ["ffmpeg", "-y", "-i", output, "-loop", "1", "-i", first,
+             "-filter_complex", graph, "-map", "[v]", "-map", "0:a",
+             "-t", f"{duration:.3f}", "-c:v", "libx264", "-pix_fmt", "yuv420p",
+             "-b:v", bitrate, "-c:a", "copy", tmp_out],
+            capture_output=True, timeout=600)
+        if result.returncode != 0 or not os.path.exists(tmp_out) or os.path.getsize(tmp_out) == 0:
+            return False
+        os.replace(tmp_out, output)
+        return True
+    except (OSError, subprocess.TimeoutExpired):
+        return False
+    finally:
+        if os.path.exists(tmp_out):
+            os.remove(tmp_out)
+        shutil.rmtree(tmp_dir, ignore_errors=True)
+
+
+def _finish_render(output, duration, width, height, loop_ending, cover_frame,
+                   bitrate="10M"):
+    """Post-render polish, best-effort: a failed loop/cover step never
+    fails the render itself (the video is already valid)."""
+    if loop_ending and _apply_loop_ending(output, duration, width, height, bitrate):
+        print("Loop ending: first frame fades back in over the last 0.4s (Shorts replay).")
+    if cover_frame:
+        cover = _extract_cover_frame(output)
+        if cover:
+            print(f"Cover frame -> {cover}")
+
+
+def _extract_cover_frame(output, at=0.5):
+    """Write <video>.cover.jpg — a clean early frame (title + hook on
+    screen) for the Shorts shelf / custom-thumbnail use. Best-effort."""
+    cover = os.path.splitext(output)[0] + ".cover.jpg"
+    try:
+        result = subprocess.run(
+            ["ffmpeg", "-y", "-ss", str(at), "-i", output,
+             "-frames:v", "1", "-q:v", "2", cover],
+            capture_output=True, timeout=120)
+        if result.returncode == 0 and os.path.exists(cover) and os.path.getsize(cover) > 0:
+            return cover
+    except (OSError, subprocess.TimeoutExpired):
+        pass
+    return None
+
+
 def build_video(script, audio_path, output, visuals=None, duration=None,
                 bitrate="10M", min_resolution=1080, width=1080, height=1920,
                 end_card_text="Subscribe for the next one", brand=None,
-                transitions="varied", safe_zone=0.25, karaoke=True):
+                transitions="varied", safe_zone=0.25, karaoke=True,
+                show_citations=True, loop_ending=False, cover_frame=False):
     """Render one video. Shorts default 1080x1920; long-form 1920x1080.
 
     `script` is a dict with text/topic/hook (see script.py). Captions are
@@ -612,6 +773,12 @@ def build_video(script, audio_path, output, visuals=None, duration=None,
         overlay.extend(_chapter_lower_thirds(
             script, duration, drawtext_dir, width, height, bfont, btext,
             boutline, baccent, fontsize))
+    # On-screen source citations (history-mystery trust signal): show the
+    # verified source when a KNOWN fact / the shock hook is on screen.
+    if show_citations:
+        overlay.extend(_citation_lower_thirds(
+            script, duration, drawtext_dir, width, height, bfont, btext,
+            boutline, baccent, fontsize))
     end_card = _drawtext_path(
         _write_drawtext_file(drawtext_dir, "end_card", end_card_text))
     overlay.append(
@@ -642,6 +809,7 @@ def build_video(script, audio_path, output, visuals=None, duration=None,
             subprocess.run(cmd, check=True)
         finally:
             shutil.rmtree(drawtext_dir, ignore_errors=True)
+        _finish_render(output, duration, width, height, loop_ending, cover_frame)
         print(f"Video -> {output} ({duration:.1f}s, {width}x{height}, gradient fallback)")
         return output
 
@@ -721,6 +889,7 @@ def build_video(script, audio_path, output, visuals=None, duration=None,
         subprocess.run(cmd, check=True)
     finally:
         shutil.rmtree(drawtext_dir, ignore_errors=True)
+    _finish_render(output, duration, width, height, loop_ending, cover_frame, bitrate)
     kinds = ",".join(v["type"] for v in accepted)
     print(f"Video -> {output} ({duration:.1f}s, {width}x{height}, "
           f"{len(accepted)} visual(s) in {n} chunk(s): {kinds}, {bitrate})")
@@ -753,6 +922,9 @@ def main(argv=None):
     transitions = config.get("transitions", "varied") or "varied"
     safe_zone = float(config.get("captions_safe_zone", 0.25) or 0.25)
     karaoke = bool(config.get("captions_karaoke", True))
+    show_citations = bool(config.get("show_citations", True))
+    loop_ending = bool(config.get("loop_ending", True))
+    cover_frame = bool(config.get("cover_frame", True))
     if args.format == "long":
         width, height = 1920, 1080
         bitrate = args.bitrate or config.get("long_video_bitrate", "12M")
@@ -797,15 +969,20 @@ def main(argv=None):
                 visuals = scene + base_visuals
         # Cache: skip re-render when script + audio + visuals are unchanged.
         key = cache.make_key(script.get("text", ""), audio, tuple(visuals or []),
-                             width, height, bitrate, transitions)
+                             width, height, bitrate, transitions,
+                             loop_ending, cover_frame)
         if cache_enabled and cache.is_cached("video", key, output):
             print(f"Video -> {output} (cached, unchanged script/audio/visuals)")
+            if cover_frame and not os.path.exists(os.path.splitext(output)[0] + ".cover.jpg"):
+                _extract_cover_frame(output)
             return output
         build_video(script, audio, output, visuals=visuals or None,
                     bitrate=bitrate, min_resolution=min_resolution,
                     width=width, height=height,
                     end_card_text=args.end_card_text, brand=brand,
-                    transitions=transitions, safe_zone=safe_zone, karaoke=karaoke)
+                    transitions=transitions, safe_zone=safe_zone, karaoke=karaoke,
+                    show_citations=show_citations, loop_ending=loop_ending,
+                    cover_frame=cover_frame)
         if cache_enabled:
             cache.mark_cached("video", key, output)
         return output
